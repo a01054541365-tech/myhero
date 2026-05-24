@@ -13,7 +13,7 @@ public record AwakeningS2CPacket(boolean active) implements CustomPayload {
             new CustomPayload.Id<>(Identifier.of(JJKMod.MOD_ID, "awakening"));
 
     public static final PacketCodec<RegistryByteBuf, AwakeningS2CPacket> CODEC =
-            PacketCodec.tuple(PacketCodecs.BOOL, AwakeningS2CPacket::active, AwakeningS2CPacket::new);
+            PacketCodec.tuple(PacketCodecs.BOOLEAN, AwakeningS2CPacket::active, AwakeningS2CPacket::new);
 
     @Override
     public CustomPayload.Id<? extends CustomPayload> getId() { return ID; }

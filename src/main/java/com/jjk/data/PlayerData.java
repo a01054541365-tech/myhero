@@ -23,7 +23,8 @@ public class PlayerData {
     public int speedStat;
     public int fingerCount;
     public List<String> unlockedSkills = new ArrayList<>();
-    public Map<String, Long> cooldowns = new HashMap<>();   // 吏?3-3: JSON TEXT ?뚎됱쓥??곗쨮 筌욊낮???    public long bindingVowDeclaredTick;
+    public Map<String, Long> cooldowns = new HashMap<>();   // 吏?3-3: JSON TEXT ?뚎됱쓥??곗쨮 筌욊낮???
+    public long bindingVowDeclaredTick;
     public long domainCooldownUntil;
     public long jackpotCooldownUntil;
     public long curtainCooldownUntil;

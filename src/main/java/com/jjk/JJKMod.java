@@ -88,7 +88,8 @@ public class JJKMod implements ModInitializer {
 
         Packets.register();
 
-        // ???삼쭕?딄텕 筌?쑵????쎄텢 ?귐딅뮞?? fail-open, ???삼쭕?딄텕 筌?Ŧ??怨뺤춸 筌ｌ꼶??        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) -> {
+        // register inumaki chat handler (fail-open)
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) -> {
             try {
                 String text = message.getContent().getString();
                 com.jjk.data.PlayerData senderData = playerRepository.load(sender.getUuid());

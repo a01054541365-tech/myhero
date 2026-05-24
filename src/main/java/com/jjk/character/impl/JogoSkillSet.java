@@ -73,7 +73,8 @@ public class JogoSkillSet implements ISkillSet {
         };
     }
 
-    // F ??volcanic_bullet: ??而?獄쏆꼵瑗?4?됰뗀以? ?遺용옘 ?怨밴묶 80??    private SkillResult useVolcanicBullet(ServerPlayerEntity player) {
+    // skill method
+    private SkillResult useVolcanicBullet(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         String cdKey = "cd_jogo_0";
@@ -96,7 +97,8 @@ public class JogoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // SF ??coffin_of_iron_mountain: 筌욊낯苑??遺용옘疫꿸퀡維??袁④컩 10?됰뗀以? ??2?됰뗀以?    private SkillResult useCoffinOfIronMountain(ServerPlayerEntity player) {
+    // skill method
+    private SkillResult useCoffinOfIronMountain(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         String cdKey = "cd_jogo_1";
@@ -132,7 +134,8 @@ public class JogoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_R)) return SkillResult.CE_INSUFFICIENT;
 
-        // ??뉙??袁⑺뒄: ??뽰읈??yaw/pitch 疫꿸퀣? 10?됰뗀以??袁④컩 筌왖??        Vec3d direction = player.getRotationVec(1.0f);
+        // compute strike position 10 blocks ahead of player facing
+        Vec3d direction = player.getRotationVec(1.0f);
         Vec3d strikePos = player.getPos().add(direction.multiply(10.0));
         JJKMod.getEffectDeferQueue().schedule(
                 net.minecraft.util.math.BlockPos.ofFloored(strikePos),
@@ -145,7 +148,8 @@ public class JogoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // SR ??ring_of_flames: ??뽰읈??雅뚯눖? 6?됰뗀以??癒곗굨 甕곕뗄??    private SkillResult useRingOfFlames(ServerPlayerEntity player) {
+    // skill method
+    private SkillResult useRingOfFlames(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         String cdKey = "cd_jogo_3";

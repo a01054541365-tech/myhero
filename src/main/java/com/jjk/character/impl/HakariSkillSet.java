@@ -27,7 +27,8 @@ public class HakariSkillSet implements ISkillSet {
     private static final int CE_SR = 450,  CD_SR = 20,  ANIM_SR = 49;
     private static final int CE_V  = 2500, CD_V  = 360, ANIM_V  = 37;
 
-    // 吏쟊OCK: ?????類ｌぇ 1/239 ?⑥쥙??    private static final int JACKPOT_ODDS = 239;
+    // §LOCK: jackpot probability 1/239
+    private static final int JACKPOT_ODDS = 239;
     // ???????묅뫀???(??λ뻻??30??= 600??
     private static final int POST_JACKPOT_CD = 600;
 
@@ -132,7 +133,8 @@ public class HakariSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // R ??reroll: jackpotActive=false??욱?筌띾뜆?筌?F????20????沅∽쭕?揶쎛?? 1/239 ???쏉㎗?    private SkillResult useReroll(ServerPlayerEntity player) {
+    // R: reroll
+    private SkillResult useReroll(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         String cdKey = "cd_hakari_2";
@@ -188,7 +190,8 @@ public class HakariSkillSet implements ISkillSet {
                     .skillName("uncertain_domain")
                     .build();
             JJKMod.getCombatPipeline().process(ctx);
-            // ??곌컶 2?됰뗀以? 獄쎻뫚堉??④쑴沅?            net.minecraft.util.math.Vec3d dir = target.getPos().subtract(player.getPos()).normalize();
+            // knockback direction
+            net.minecraft.util.math.Vec3d dir = target.getPos().subtract(player.getPos()).normalize();
             target.setVelocity(dir.multiply(2.0));
             target.velocityModified = true;
         }

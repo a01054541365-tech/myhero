@@ -152,7 +152,7 @@ public class PlayerRepository {
         try (PreparedStatement ps = conn.prepareStatement(UPSERT_PLAYER)) {
             ps.setString(1,  d.uuid.toString());
             ps.setString(2,  d.characterId);
-            ps.setString(3,  d.grade != null ? d.grade : "4疫?);
+            ps.setString(3,  d.grade != null ? d.grade : "4疫?");
             ps.setLong(4,    d.xp);
             ps.setInt(5,     d.mastery);
             ps.setFloat(6,   d.ceCurrent);
@@ -194,7 +194,7 @@ public class PlayerRepository {
             CREATE TABLE IF NOT EXISTS player_data (
                 uuid                        TEXT    PRIMARY KEY,
                 character_id                TEXT,
-                grade                       TEXT    NOT NULL DEFAULT '4疫?,
+                grade                       TEXT    NOT NULL DEFAULT '4疫?',
                 xp                          INTEGER NOT NULL DEFAULT 0,
                 mastery                     INTEGER NOT NULL DEFAULT 0,
                 ce_current                  REAL    NOT NULL DEFAULT 1000.0,

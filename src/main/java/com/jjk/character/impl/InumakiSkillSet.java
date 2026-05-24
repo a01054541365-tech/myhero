@@ -28,7 +28,8 @@ public class InumakiSkillSet implements ISkillSet {
     private static final int CE_SR = 240, CD_SR = 30, ANIM_SR = 52;
     private static final int CE_V  = 150, CD_V  = 18, ANIM_V  = 53;
 
-    // 筌?쑵????쎄텢 ??됱뵠???귐됱퍩: 40??2????1??    private static final int CHAT_RATELIMIT_TICKS = 40;
+    // chat rate limit: 40 ticks (2 seconds per command)
+    private static final int CHAT_RATELIMIT_TICKS = 40;
     private static final String RATELIMIT_KEY = "inumaki_chat_ratelimit";
 
     // ?봔??筌앹빓???(?봔??野껊슣?좑쭪?)
@@ -38,7 +39,8 @@ public class InumakiSkillSet implements ISkillSet {
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
-        // keyId 筌욊낯???紐꾪뀱 ??揶쎛??揶쎛繹먮슣???怨몄뱽 ???怨몄몵嚥?        List<ServerPlayerEntity> enemies = HitValidator.getNearby(player, 10.0).stream()
+        // resolve nearest enemy target
+        List<ServerPlayerEntity> enemies = HitValidator.getNearby(player, 10.0).stream()
                 .filter(t -> JJKMod.getTeamManager().isEnemy(player, t))
                 .collect(Collectors.toList());
         ServerPlayerEntity target = enemies.isEmpty() ? null : enemies.get(0);
@@ -79,15 +81,16 @@ public class InumakiSkillSet implements ISkillSet {
     // 筌?쑵??筌롫뗄?놅쭪? ???뼓 ????쎄텢 ??깆뒭?? JJKMod 筌?쑵???귐딅뮞??됰퓠???紐꾪뀱.
     public boolean handleChat(ServerPlayerEntity player, String text) {
         return switch (text.trim()) {
-            case "!筌롫뜆??  -> { use(player, 0); yield true; }
+            case "!筌롫뜆??"  -> { use(player, 0); yield true; }
             case "!?怨쀬죬"  -> { use(player, 1); yield true; }
-            case "!?醫딅굶?? -> { use(player, 2); yield true; }
-            case "!????  -> { use(player, 3); yield true; }
+            case "!?醫딅굶??" -> { use(player, 2); yield true; }
+            case "!????"  -> { use(player, 3); yield true; }
             default -> false;
         };
     }
 
-    // F/keyId=0 ??stop_curse (!筌롫뜆??: STUN 40??    private SkillResult useStopCurse(ServerPlayerEntity player, ServerPlayerEntity target) {
+    // F/keyId=0: stop_curse - STUN 40 ticks
+    private SkillResult useStopCurse(ServerPlayerEntity player, ServerPlayerEntity target) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
 
@@ -157,7 +160,8 @@ public class InumakiSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // V/keyId=3 ??run_curse (!????: 獄쏆꼵瑗?8?됰뗀以??袁㏓럵 ??猷??얜즲 +40%, 80??    private SkillResult useRunCurse(ServerPlayerEntity player) {
+    // V/keyId=3: run_curse - speed boost +40%, 80 ticks
+    private SkillResult useRunCurse(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
 
@@ -169,11 +173,12 @@ public class InumakiSkillSet implements ISkillSet {
                 .collect(Collectors.toList());
 
         for (ServerPlayerEntity ally : allies) {
-            var attr = ally.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+            var attr = ally.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED);
             if (attr != null) {
                 double boosted = attr.getBaseValue() * 1.4;
                 attr.setBaseValue(boosted);
-                // 80?????癒?궗?? EffectManager ?怨밴묶 ?곕뗄???곗쨮 筌ｌ꼶??                PlayerData allyData = JJKMod.getPlayerRepository().load(ally.getUuid());
+                // track speed buff duration
+                PlayerData allyData = JJKMod.getPlayerRepository().load(ally.getUuid());
                 allyData.cooldowns.put("status_speed_up_until", tick + 80);
                 allyData.cooldowns.put("status_speed_up_base", (long)(attr.getBaseValue() / 1.4 * 1000));
                 JJKMod.getPlayerRepository().save(allyData);
@@ -197,7 +202,8 @@ public class InumakiSkillSet implements ISkillSet {
         data.cooldowns.put(RATELIMIT_KEY, tick + CHAT_RATELIMIT_TICKS);
     }
 
-    // ?봔??野껊슣?좑쭪? 筌앹빓? + 100 ??곴맒 ??100???딅맩??    private static void applyBurden(ServerPlayerEntity player, PlayerData data, int amount, long tick) {
+    // applies burden; if burden >= 100, seals the technique
+    private static void applyBurden(ServerPlayerEntity player, PlayerData data, int amount, long tick) {
         JJKMod.getBurdenManager().addBurden(player, amount);
     }
 

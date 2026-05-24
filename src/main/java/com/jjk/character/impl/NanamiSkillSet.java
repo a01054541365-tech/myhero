@@ -28,7 +28,8 @@ public class NanamiSkillSet implements ISkillSet {
     private static final int CE_R  = 0,   CD_R  = 0,  ANIM_R  = 27;
     private static final int CE_V  = 70,  CD_V  = 8,  ANIM_V  = 28;
 
-    // ??⑥퍢 疫꿸퀣?: 13000~23999??    private static final long NIGHT_START = 13000L;
+    // §LOCK: technique base damage
+    private static final long NIGHT_START = 13000L;
 
     // ??λ뻻?? ratio_attack ?곕떽? 燁살꼶梨?? ?類ｌぇ 30%
     private static final float CRIT_BONUS_CHANCE = 0.30f;
@@ -185,7 +186,8 @@ public class NanamiSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         if (!"nanami".equals(data.characterId) || !data.healingActive) return;
 
-        float cePerInterval = CE_V / 10f; // 70/10 = 7 CE per 10??        if (!JJKMod.getCEManager().canAfford(player, cePerInterval)) {
+        float cePerInterval = CE_V / 10f; // 70/10 = 7 CE per 10??
+        if (!JJKMod.getCEManager().canAfford(player, cePerInterval)) {
             data.healingActive = false;
             JJKMod.getPlayerRepository().save(data);
             return;
