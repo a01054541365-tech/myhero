@@ -7,7 +7,6 @@ import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.util.Identifier;
 import software.bernie.geckolib.model.GeoModel;
 import software.bernie.geckolib.renderer.GeoEntityRenderer;
-import software.bernie.geckolib.renderer.GeoRenderer;
 
 @Environment(EnvType.CLIENT)
 public class RikaEntityRenderer extends GeoEntityRenderer<RikaEntity> {
@@ -21,8 +20,8 @@ public class RikaEntityRenderer extends GeoEntityRenderer<RikaEntity> {
         private static final Identifier TEXTURE    = Identifier.of("jjk", "textures/entity/rika.png");
         private static final Identifier ANIMATIONS = Identifier.of("jjk", "animations/rika.animation.json");
 
-        @Override public Identifier getModelResource(RikaEntity e, GeoRenderer<RikaEntity> renderer)    { return MODEL; }
-        @Override public Identifier getTextureResource(RikaEntity e, GeoRenderer<RikaEntity> renderer) { return TEXTURE; }
+        @Override public Identifier getModelResource(RikaEntity e)    { return MODEL; }
+        @Override public Identifier getTextureResource(RikaEntity e) { return TEXTURE; }
         @Override public Identifier getAnimationResource(RikaEntity e) { return ANIMATIONS; }
     }
 }

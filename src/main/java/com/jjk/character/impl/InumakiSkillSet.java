@@ -173,7 +173,7 @@ public class InumakiSkillSet implements ISkillSet {
                 .collect(Collectors.toList());
 
         for (ServerPlayerEntity ally : allies) {
-            var attr = ally.getAttributeInstance(EntityAttributes.MOVEMENT_SPEED);
+            var attr = ally.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
             if (attr != null) {
                 double boosted = attr.getBaseValue() * 1.4;
                 attr.setBaseValue(boosted);
