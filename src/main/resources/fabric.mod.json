@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"id": "jjk",
+	"version": "${version}",
+	"name": "JujutsuKaisen Mod",
+	"description": "Jujutsu Kaisen abilities and systems for Minecraft.",
+	"authors": [],
+	"license": "All Rights Reserved",
+	"icon": "assets/jjk/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.jjk.JJKMod"
+		],
+		"client": [
+			"com.jjk.client.JJKModClient"
+		]
+	},
+	"mixins": [
+		"jjk.mixins.json",
+		{
+			"config": "jjk.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.16.5",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

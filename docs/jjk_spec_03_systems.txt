@@ -1,0 +1,531 @@
+# JJK 서버 명세 — 03. 영역·저장·게임 플로우·테스트
+
+> 참조 전제: `jjk\_spec\_01\_core.md`를 먼저 숙지한다.
+
+\---
+
+## §8. 영역 전개
+
+### 8-1. DomainInstance
+
+```java
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+public class DomainInstance {
+    public final UUID ownerId;
+    public final String domainId;
+    public final boolean isOpen;
+    public final int maxRadius;
+    public int currentRadius;
+    public int wallHp;           // 개방형 = 0, 결계형 = domains.json wallHp 값
+    public final long deployedAtTick;
+    public final Set<UUID> playersInside = new HashSet<>();
+    public boolean sureHitActive; // 결계형 영역에서 내부 확정타 활성화 여부
+
+    public DomainInstance(UUID ownerId, String domainId, boolean isOpen,
+                          int maxRadius, int wallHpFromConfig, long deployedAtTick) {
+        this.ownerId = ownerId;
+        this.domainId = domainId;
+        this.isOpen = isOpen;
+        this.maxRadius = maxRadius;
+        this.currentRadius = maxRadius;
+        this.wallHp = isOpen ? 0 : wallHpFromConfig; // 하드코딩 금지 — domains.json에서 읽어온 값 사용
+        this.deployedAtTick = deployedAtTick;
+        this.sureHitActive = false;
+    }
+
+    /\*\*
+     \* 팀 동시 영역 2개 제한 적용 시 radius 축소.
+     \* 축소 후 팀 영역이 1개로 줄면 restoreRadius()로 복원해야 한다.
+     \*/
+    public void applyTeamLimit(int teamDomainCount) {
+        if (teamDomainCount >= 2) {
+            this.currentRadius = this.maxRadius / 2;
+        }
+    }
+
+    public void restoreRadius() {
+        this.currentRadius = this.maxRadius;
+    }
+}
+```
+
+### 8-2. 영역 충돌
+
+`DomainPriorityCalculator`는 등급, CE 투입량, 시전 숙련도, 결계 외피, 개방형 여부를 계산한다. 팀별 동시 영역은 2개 제한.
+
+우선순위 공식 (가중치 합산):
+
+&#x20;   priority = (grade × 0.30) + (ceInvested × 0.25) + (mastery × 0.30) + (wallHpRatio × 0.15)
+    isOpen=true 이면 wallHpRatio 가중치 = 0
+
+
+### 8-3. 결계형 영역
+
+결계형 기본 `wallHp`는 `domains.json`의 `wallHp` 필드에서 읽는다 (기본 1500). 내부 확정타는 `sureHitActive=true`일 때만 적용한다. `sureHitActive`는 영역 완전 전개(startup 애니 완료) 후 `DomainManager`가 `true`로 설정한다.
+
+### 8-4. 개방형(OPEN) 영역 특수 처리
+
+`DomainManager.deployDomain()` 내 분기 처리:
+
+1. `wallHp = isOpen ? 0 : config에서 읽은 값`
+2. 개방형 시전자는 다른 결계형 영역의 `wallHp`에 데미지 가능
+3. 반경 최대 200블록 (`domains.json` `openMaxRadius: 200`), 자박 시 radius = openMaxRadius, CE 소모 2배
+4. 영역 충돌 priority 계산: `isOpen=true`이면 결계외피 가중치(0.15) = 0
+5. `DomainBoundaryRenderer`(client 전용): `isOpen=true`이면 particle dome 미생성
+
+\---
+
+## §10. 커맨드와 운영
+
+### 10-1. 운영자 명령
+
+|명령|목적|
+|-|-|
+|`/jj reload`|config.json, techniques.json, domains.json 핫리로드. 이미 전개 중인 영역의 wallHp에는 영향을 주지 않는다.|
+|`/jj selectchar <player> <characterId>`|운영자 캐릭터 강제 지정|
+|`/jj data save <player>`|즉시 저장|
+|`/jj domain clear`|영역 강제 종료|
+|`/jj debug <player>`|PlayerData 실시간 조회 (운영자 전용)|
+
+### 10-2. 감사 로그
+
+사망, 손가락 획득, 처형검, 캐릭터 변경, 운영자 명령은 `audit\_log`에 기록한다.
+
+`audit\_log.db` 테이블 스키마:
+
+```sql
+CREATE TABLE IF NOT EXISTS audit\_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp   INTEGER NOT NULL,   -- 서버 tick
+    event\_type  TEXT    NOT NULL,   -- 'death'|'finger\_drop'|'execution\_sword'|'char\_change'|'admin\_cmd'|'domain\_start'|'domain\_end'
+    player\_uuid TEXT    NOT NULL,
+    detail      TEXT                -- JSON 문자열 (부가 정보)
+);
+```
+
+\---
+
+## §13. 데이터 저장
+
+### 13-1. PlayerData — 전체 필드
+
+```java
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public class PlayerData {
+    // === 기본 정보 ===
+    public UUID uuid;
+    public String characterId;
+    public String grade;
+    public long xp;
+    public int mastery;
+
+    // === 전투 스탯 ===
+    public float ceCurrent;
+    public float ceMax;
+    public float hpCurrent;
+    public float hpMax;
+    public int attackStat;
+    public int defenseStat;
+    public int speedStat;
+
+    // === 진행 데이터 ===
+    public int fingerCount;
+    public List<String> unlockedSkills = new ArrayList<>();
+    public Map<String, Long> cooldowns = new HashMap<>(); // key: keyId 또는 cooldown\_type, value: 만료 틱
+
+    // === 쿨타임 영속 필드 ===
+    public long bindingVowDeclaredTick; // 미선언 = -1L
+    public long domainCooldownUntil;
+    public long jackpotCooldownUntil;
+    public long curtainCooldownUntil;
+
+    // === 상태 ===
+    public String trialState;   // "IDLE"|"ACCUSED"|"DELIBERATION"|"VERDICT"|"END"
+    public int burden;          // 이누마키 전용
+    public boolean zoneActive;
+    public long zoneEndTick;
+    public long lastCombatTick;
+    public String lastKnownIp;  // 운영 목적 기록. 외부 노출 금지.
+
+    // === 각성 ===
+    public boolean awakeningActive;
+    public long awakeningEndTick;
+    public long awakeningCooldownUntil;
+
+    // === 옷코츠 주력해방 ===
+    public boolean burstActive;
+    public long burstEndTick;
+
+    // === 메구미 식신 ===
+    public List<String> deadShikigamiIds = new ArrayList<>();
+
+    // === 회복 ===
+    public boolean healingActive;
+
+    // === Zone 페널티 ===
+    public long zonePenaltyUntilTick;
+
+    // === 히구루마 처형검 ===
+    public boolean hasExecutionSword;
+
+    // === 하카리 잭팟 ===
+    public boolean jackpotActive;
+    public long jackpotEndTick;
+
+    // === 스키마 버전 ===
+    public int schemaVersion; // 현재 버전: 1
+
+    public PlayerData snapshot() {
+        PlayerData copy = new PlayerData();
+        copy.uuid = this.uuid;
+        copy.characterId = this.characterId;
+        copy.grade = this.grade;
+        copy.xp = this.xp;
+        copy.mastery = this.mastery;
+        copy.ceCurrent = this.ceCurrent;
+        copy.ceMax = this.ceMax;
+        copy.hpCurrent = this.hpCurrent;
+        copy.hpMax = this.hpMax;
+        copy.attackStat = this.attackStat;
+        copy.defenseStat = this.defenseStat;
+        copy.speedStat = this.speedStat;
+        copy.fingerCount = this.fingerCount;
+        copy.unlockedSkills = new ArrayList<>(this.unlockedSkills);
+        copy.cooldowns = new HashMap<>(this.cooldowns);
+        copy.bindingVowDeclaredTick = this.bindingVowDeclaredTick;
+        copy.domainCooldownUntil = this.domainCooldownUntil;
+        copy.jackpotCooldownUntil = this.jackpotCooldownUntil;
+        copy.curtainCooldownUntil = this.curtainCooldownUntil;
+        copy.trialState = this.trialState;
+        copy.burden = this.burden;
+        copy.zoneActive = this.zoneActive;
+        copy.zoneEndTick = this.zoneEndTick;
+        copy.lastCombatTick = this.lastCombatTick;
+        copy.lastKnownIp = this.lastKnownIp;
+        copy.awakeningActive = this.awakeningActive;
+        copy.awakeningEndTick = this.awakeningEndTick;
+        copy.awakeningCooldownUntil = this.awakeningCooldownUntil;
+        copy.burstActive = this.burstActive;
+        copy.burstEndTick = this.burstEndTick;
+        copy.deadShikigamiIds = new ArrayList<>(this.deadShikigamiIds);
+        copy.healingActive = this.healingActive;
+        copy.zonePenaltyUntilTick = this.zonePenaltyUntilTick;
+        copy.hasExecutionSword = this.hasExecutionSword;
+        copy.jackpotActive = this.jackpotActive;
+        copy.jackpotEndTick = this.jackpotEndTick;
+        copy.schemaVersion = this.schemaVersion;
+        return copy;
+    }
+}
+```
+
+> ⚠️ `snapshot()` 테스트는 필드 수를 하드코딩하지 말고 Java Reflection으로 자동 카운트한다.
+
+### 13-2. 저장 타이밍
+
+로그아웃, 사망, 캐릭터 선택, 손가락 획득, 쿨타임 영속 대상 변경 시 즉시 저장한다. `PlayerRepository.saveImmediate(data)`가 저장 주체이며 `onDeath`에서 직접 호출한다.
+
+### 13-3. cooldown\_persist
+
+`cooldown\_type` 허용값:
+
+&#x20;   'domain'       영역 전개 쿨타임
+    'binding\_vow'  속박 쿨타임
+    'jackpot'      하카리 잭팟 쿨타임
+    'awakening'    각성 쿨타임 (2400틱)
+    'burst'        옷코츠 주력해방 쿨타임
+    'curtain'      장막 쿨타임
+    'zone\_penalty' 존 종료 페널티 만료 틱
+    'skill\_seal'   히구루마 술식 봉인 만료
+    'soul\_resist'  마히토 영혼 방어 만료
+
+
+### 13-4. player\_data.db SQL 스키마
+
+```sql
+CREATE TABLE IF NOT EXISTS player\_data (
+    uuid            TEXT PRIMARY KEY,
+    character\_id    TEXT,
+    grade           TEXT NOT NULL DEFAULT '4급',
+    xp              INTEGER NOT NULL DEFAULT 0,
+    mastery         INTEGER NOT NULL DEFAULT 0,
+    ce\_current      REAL NOT NULL DEFAULT 100.0,
+    ce\_max          REAL NOT NULL DEFAULT 100.0,
+    hp\_current      REAL NOT NULL DEFAULT 20.0,
+    hp\_max          REAL NOT NULL DEFAULT 20.0,
+    attack\_stat     INTEGER NOT NULL DEFAULT 10,
+    defense\_stat    INTEGER NOT NULL DEFAULT 10,
+    speed\_stat      INTEGER NOT NULL DEFAULT 10,
+    finger\_count    INTEGER NOT NULL DEFAULT 0,
+    unlocked\_skills TEXT NOT NULL DEFAULT '\[]',   -- JSON 배열
+    cooldowns       TEXT NOT NULL DEFAULT '{}',   -- JSON 객체
+    binding\_vow\_declared\_tick INTEGER NOT NULL DEFAULT -1,
+    domain\_cooldown\_until     INTEGER NOT NULL DEFAULT 0,
+    jackpot\_cooldown\_until    INTEGER NOT NULL DEFAULT 0,
+    curtain\_cooldown\_until    INTEGER NOT NULL DEFAULT 0,
+    trial\_state     TEXT NOT NULL DEFAULT 'IDLE',
+    burden          INTEGER NOT NULL DEFAULT 0,
+    zone\_active     INTEGER NOT NULL DEFAULT 0,
+    zone\_end\_tick   INTEGER NOT NULL DEFAULT 0,
+    last\_combat\_tick INTEGER NOT NULL DEFAULT 0,
+    last\_known\_ip   TEXT,
+    awakening\_active INTEGER NOT NULL DEFAULT 0,
+    awakening\_end\_tick INTEGER NOT NULL DEFAULT 0,
+    awakening\_cooldown\_until INTEGER NOT NULL DEFAULT 0,
+    burst\_active    INTEGER NOT NULL DEFAULT 0,
+    burst\_end\_tick  INTEGER NOT NULL DEFAULT 0,
+    dead\_shikigami\_ids TEXT NOT NULL DEFAULT '\[]', -- JSON 배열
+    healing\_active  INTEGER NOT NULL DEFAULT 0,
+    zone\_penalty\_until\_tick INTEGER NOT NULL DEFAULT 0,
+    has\_execution\_sword INTEGER NOT NULL DEFAULT 0,
+    jackpot\_active  INTEGER NOT NULL DEFAULT 0,
+    jackpot\_end\_tick INTEGER NOT NULL DEFAULT 0,
+    schema\_version  INTEGER NOT NULL DEFAULT 1
+);
+```
+
+### 13-5. Migrator
+
+현재 schemaVersion = **1**. 초기 생성 시 `createDefault(uuid)`에서 `schemaVersion=1`로 세팅. 향후 필드 추가 시:
+
+&#x20;   MigratorV1toV2: ALTER TABLE player\_data ADD COLUMN ...
+    schemaVersion 2로 업데이트
+
+
+mismatch 발생 시 (`schemaVersion < currentVersion`) Migrator 실행. Migrator 실패 시 서버 기동 중단.
+
+\---
+
+## §15. 식신과 소환수
+
+### 15-1. 식신 생명주기
+
+소환, 명령, 사망, 영구 사망 기록을 서버에서 관리한다. `deadShikigamiIds`에 포함된 식신은 재소환 불가. 식신 엔티티 ID는 `"{characterId}\_{shikigamiType}\_{uuid}"` 형식으로 생성.
+
+### 15-2. RikaEntity
+
+`RikaEntity`는 GeckoLib 기반 엔티티. 패키지: `com.jjk.entity`. 서버 로직(AI, 공격)은 서버 소스셋에서 처리. 렌더링은 client 소스셋에서 `EnvType.CLIENT` 분기로 격리. 수명: `burstActive` 상태와 무관하게 소환 후 `config.rikaLifetimeTicks`(기본 200틱) 경과 시 자동 소멸.
+
+### 15-3. 렌더링
+
+GeckoLib 식신 렌더는 client 전용으로 격리한다. `DomainBoundaryRenderer`도 동일하게 client 소스셋 격리.
+
+\---
+
+## §16. 장막과 금지 구역
+
+### 16-1. 장막(Curtain)
+
+장막은 시야, 이동, 스킬 사용 제한을 적용하는 월드 영역이다. 장막 발동 주체와 스킬은 추후 운영자 결정으로 확정 (현재 `curtainCooldownUntil` 필드 예약됨).
+
+장막 내부 효과:
+
+* 시야 제한: 외부에서 내부 플레이어 미표시
+* 이동 제한: 장막 경계 통과 불가 (서버 측 위치 검증)
+* 스킬 사용: 장막 내부에서만 유효
+
+### 16-2. 영역 금지 청크
+
+`config.json domainBannedChunks`에 로비·훈련장 좌표를 추가한다. 금지 청크에서는 영역 전개 실패 처리.
+
+\---
+
+## §17. QA 시나리오
+
+### 17-1. 통합 스모크
+
+캐릭터 선택→스킬 사용→Zone→각성→사망→부활→저장/재접속 플로우를 1회 이상 검증한다.
+
+### 17-2. 성능 스모크
+
+20명 동시 접속, 영역 4개, 식신 20기, 광역 스킬 반복 조건에서 TPS 18 이상 유지.
+
+\---
+
+## §18. 테스트 계획
+
+|테스트 클래스|검증 항목|
+|-|-|
+|`DamageCalculatorTest`|배율 clamp, PvP cap max\_hp × 0.40, soul direct 방어 무시|
+|`DomainManagerTest`|결계형 wallHp domains.json 값, 개방형 wallHp 0, 팀당 2개 제한, applyTeamLimit/restoreRadius|
+|`PlayerDataSnapshotTest`|전체 필드 snapshot 복사 (Reflection 기반 자동 카운트)|
+|`PacketCodecTest`|ZoneEnter/ZoneExit/Awakening codec 직렬화·역직렬화|
+|`AwakeningManagerTest`|HP 30% 임계 발동, 160틱 자동해제, CD 2400틱, 중복 발동 방지|
+|`ComboTrackerTest`|Just Frame 8\~12틱 윈도우, 30틱 리셋, 흐름끊기 카운터|
+|`BurdenManagerTest`|스킬별 부담 증가, 전투외 5/s·전투중 2/s 분기, 100 초과 봉인|
+|`TrialManagerTest`|기소→선택→판결→처형검 StateMachine 전체 플로우|
+|`FingerSystemTest`|드롭 원자성, droppedMobs 중복 방지, fingerCount 상한 20|
+|`TeamManagerTest`|같은 진영 공격 불가, 진영별 영역 2개 제한|
+|`CombatPipelineIntegrationTest`|9단계 순서 전체, TickDamageCap 적용, 각성 발동 연동|
+|`MigratorTest`|V1 스키마 정상 로딩, 미래 버전 mismatch 감지|
+
+\---
+
+## §19. 구현 Phase
+
+### Phase 1 (서버 핵심) — 대상 캐릭터: 고죠·이타도리·메구미·옷코츠
+
+1. Fabric 초기화, config 로더, PlayerData 저장 (SQLite)
+2. CombatPipeline, CEManager, CooldownManager
+3. CharacterRegistry + ISkillSet + 4개 SkillSet (고죠·이타도리·메구미·옷코츠)
+4. DomainManager, TickDamageCap, audit\_log
+
+### Phase 2 (애니메이션·렌더)
+
+1. AnimationRegistry (animId 0\~59) + SkillAnimController (PlayerAnimator 2.0.4 API)
+2. GeckoLib 4.8.3 식신 엔티티 렌더 (client 전용)
+3. AzureLib 영역 비주얼 오버레이 기초
+4. ZoneEnterS2CPacket / AwakeningS2CPacket 클라이언트 처리
+
+### Phase 3 (캐릭터 확장)
+
+1. 나머지 7개 캐릭터 SkillSet (마히토·죠고·하카리·이누마키·나나미·히구루마·스쿠나)
+2. TrialManager, BurdenManager, JackpotManager
+3. 신규 캐릭터 추가 절차 `jjk\_spec\_02\_characters.md §27` 반영
+
+\---
+
+## §20. 릴리스 게이트
+
+### 20-1. Phase 1 게이트
+
+서버 dedicated 기동, 1시간 soak, 저장/재접속, PvP cap, 캐릭터 선택 중복, 영역 충돌 통과.
+
+### 20-2. Phase 2 게이트
+
+클라이언트 없는 서버에서 classloading 오류 없음. 클라이언트에서는 animId 0\~59 누락 없음.
+
+\---
+
+## §21. 로깅
+
+### 21-1. 서버 로그
+
+전투 로그는 debug flag에서만 상세 출력한다. 운영 이벤트는 항상 audit\_log에 저장한다.
+
+### 21-2. 에러 처리
+
+config 누락은 기본값 적용 후 경고. schema mismatch는 migrator 실패 시 서버 기동 중단.
+
+\---
+
+## §26. 플레이어 입장 플로우 \& 게임 루프
+
+### 26-1. 최초 접속 플로우
+
+이벤트: `ServerPlayConnectionEvents.JOIN`
+
+처리 순서:
+
+1. `repository.load(uuid)` 시도
+2. null이면 최초 접속:
+
+   * `PlayerData.createDefault(uuid)` 생성 (`schemaVersion=1`, `bindingVowDeclaredTick=-1L`)
+   * `characterId = null` (미선택 상태)
+   * `repository.saveImmediate(data)`
+   * `CharacterSelectS2CPacket` 전송 → 클라이언트 캐릭터 선택 화면
+3. null이 아니면 재접속:
+
+   * 기존 데이터 로드
+   * `CharacterInfoS2CPacket` 전송
+
+### 26-2. 캐릭터 선택 시스템
+
+C2S: `CharacterSelectC2SPacket(String characterId)`
+
+서버 수신 처리:
+
+1. `CharacterRegistry`에 등록된 유효한 `characterId`인지 검증
+2. `config.allowDuplicateCharacter=false`이면 동일 캐릭터 중복 체크
+3. `data.characterId = selectedCharacterId`
+4. 기존 플레이어: 등급·숙련도 유지. 신규: `grade="4급"`
+5. `unlockedSkills` 초기화 (등급 기반)
+6. `saveImmediate(data)`
+7. `CharacterConfirmS2CPacket` → 클라이언트 인게임 전환
+
+검증 실패 시: `CharacterSelectFailS2CPacket(reason=...)` 전송.
+
+캐릭터 재선택: `config.allowCharacterReselect=true`일 때만 허용 (기본 false).
+
+### 26-3. 부활 시스템
+
+사망 시 처리 (`ServerPlayerEntityMixin.onDeath`):
+
+1. `PlayerRepository.saveImmediate(data)`
+2. `audit\_log` 기록
+3. 스쿠나 플레이어 → 손가락 드롭 판정 (§26-4)
+4. `RespawnManager.scheduleRespawn(player, config.respawnDelayTicks)`
+
+부활 처리:
+
+* 부활 지점 (`config.respawnLocation`) 텔레포트
+* CE = `ceMax × config.respawnCePercent`
+* HP = `hpMax × config.respawnHpPercent`
+* 각성·존·속박 상태 초기화 (`awakeningActive=false`, `zoneActive=false`, `bindingVowDeclaredTick=-1L`)
+* `RespawnS2CPacket` → 클라이언트 부활 연출
+
+### 26-4. 손가락 드롭 경쟁 처리 (원자적)
+
+특급 주령 처치 시 레이스컨디션 방지:
+
+```java
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.Random;
+
+public final class FingerSystem {
+    private final Object fingerLock = new Object();
+    private final Set<UUID> droppedMobs = Collections.synchronizedSet(new HashSet<>());
+    private final PlayerRepository repository;
+    private final JjkConfig config;
+    private final Random random = new Random();
+
+    public FingerSystem(PlayerRepository repository, JjkConfig config) {
+        this.repository = repository;
+        this.config = config;
+    }
+
+    public void tryDrop(UUID mobId, UUID killerUuid) {
+        synchronized (fingerLock) {
+            if (droppedMobs.contains(mobId)) return;
+            // config.fingerDropRate()는 0.0\~1.0 범위의 float
+            // random.nextFloat() < dropRate 이면 드롭 성공
+            if (random.nextFloat() >= config.fingerDropRate()) return;
+            droppedMobs.add(mobId);
+            // DB I/O는 synchronized 블록 밖으로 이동 권장 — 현재는 단순 구현
+            PlayerData data = repository.load(killerUuid);
+            data.fingerCount = Math.min(data.fingerCount + 1, config.fingerMaxCount());
+            repository.saveImmediate(data);
+            if (data.fingerCount >= config.fingerMaxCount()) {
+                FullRevivalEvents.trigger(killerUuid);
+            }
+        }
+    }
+}
+```
+
+### 26-5. 진영 분류 (캐릭터 선택 시 자동 배정)
+
+&#x20;   JUJUTSU\_SORCERER: 고죠·이타도리·메구미·옷코츠·나나미·히구루마·하카리·이누마키
+    CURSED\_SPIRIT:    스쿠나·마히토·죠고 (운영자 설정으로 선택 가능)
+    NON\_SORCERER:     비술사 타입
+
+
+`TeamManager` (패키지: `com.jjk.team`):
+
+* 같은 진영 공격 불가 → CombatPipeline 1단계에서 체크
+* 영역 진영별 2개 제한 체크
+* 등급 차이 2 이상 전투 시 XP × `config.xpMultiplierGradeDiff` 적용
+
+
+

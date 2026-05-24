@@ -1,0 +1,231 @@
+# JJK 서버 명세 — 02. 캐릭터 SkillSet
+
+> 참조 전제: `jjk\_spec\_01\_core.md` §3·§4·§5를 먼저 숙지한다.
+> \*\*CD 단위: 틱(ticks). 1초 = 20틱.\*\*
+> 모든 캐릭터는 `F`, `Shift+F`, `R`, `Shift+R`, `V` \*\*5개 메서드를 전부 구현\*\*한다. 미사용 키도 명시적으로 `SkillResult.NOT\_IMPLEMENTED`를 반환한다.
+
+\---
+
+## §6. 캐릭터별 SkillSet
+
+### 6-1. ISkillSet 인터페이스
+
+```java
+package com.jjk.character;
+
+public interface ISkillSet {
+    SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick);
+    SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick);
+    SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick);
+    SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick);
+    SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick);
+}
+```
+
+### 6-2. 고죠 사토루 (`characterId = "gojo"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|창(Blue)|42|80|4|`AttractionFieldSkill`: 전방 12블록 끌어당김 후 데미지.|
+|Shift+F|혁(Red)|64|160|8|`RepulsionBlastSkill`: 폭발 반경 5블록, 넉백 3블록.|
+|R|허식 자(Purple)|140|650|60|`ExistenceEraseProjectile`: 관통, RCT 회복 3초(60틱) 차단.|
+|Shift+R|무량공처|0|3000|360|`DomainManager.deployDomain("gojo\_unlimited\_void")`.|
+|V|무하한 토글|0|30/s|1|`InfinityHandler`: 조건 불충족 공격 취소.|
+
+**무하한 무력화 조건** (InfinityHandler에서 체크):
+
+* 상대방의 영역 전개 중
+* 영역 전연(Curtain) 내부
+* 메구미 마허라가 의식 적응 카운터 달성
+* `isSoulDirect=true` 공격
+
+### 6-3. 이타도리 유지 (`characterId = "itadori"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|경정권|34|72|4|1타: `baseDamage=34` 즉시. 2타: 5틱 후 동일 위치 `baseDamage=17`(`EffectDeferQueue` 예약). 흑섬 사용 후 60틱 이내: 2타에 흑섬 확률 +20%.|
+|Shift+F|맨지 킥|44|90|7|전방 짧은 돌진, hit 시 `ComboTracker` 흐름끊기 카운터 +1.|
+|R|흑섬 집중|0|120|20|다음 60틱 Just Frame 보정(흑섬 확률 보너스 적용).|
+|Shift+R|영역 startup|0|2200|300|`DomainManager.deployDomain("itadori\_unnamed")`, animId 59.|
+|V|RCT|0|40/s|5|`data.healingActive=true` 동안 초당 HP 회복. CE 소모 지속.|
+
+`EffectDeferQueue`: tick 기반 큐. `schedule(targetPos, baseDamage, delayTicks, attackerUuid)`. 대상 사망 시 자동 취소.
+
+### 6-4. 후시구로 메구미 (`characterId = "megumi"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|누에|38|110|8|식신 엔티티 소환. 사망 시 `data.deadShikigamiIds`에 기록 → 영구 재소환 불가.|
+|Shift+F|옥견|32|90|6|추적형 식신 2기. 소환 전 `deadShikigamiIds` 검사 필수.|
+|R|마허라가 의식|0|900|180|적응 카운터 시작. 카운터는 피격 횟수 기반. 임계 달성 시 무하한 무력화. 실패(타임아웃 또는 CE 고갈) 시 CE 전량 소진 + 600틱 스킬 봉인.|
+|Shift+R|감합암예정|0|2600|360|미완성 영역. `wallHp = 750`(일반 결계 절반). `sureHitActive = false`.|
+|V|그림자 이동|0|140|12|플레이어가 바닥에 투영한 그림자 마커(별도 서버 객체) 위치로 순간이동. 10블록 이내 마커가 없으면 실패.|
+
+### 6-5. 옷코츠 유타 (`characterId = "okkotsu"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|리카 소환|58|260|30|`RikaEntity` 소환(GeckoLib 엔티티). `burstActive` 중 데미지 ×1.30.|
+|Shift+F|검격|72|180|10|animId 40. 전방 arc 판정.|
+|R|복사 술식|0|300|45|최근 피격 스킬의 약화 복사본 1회 사용 (baseDamage × 0.7).|
+|Shift+R|주력해방|0|1100|60|`data.burstActive=true`, `data.burstEndTick=tick+200`. 전능치+30%·10초(200틱).|
+|V|반전술식|0|70/s|8|조준 대상(아군) HP 회복. 자신에게도 사용 가능.|
+
+주력해방 구현:
+
+&#x20;   data.burstActive = true;
+    data.burstEndTick = tick + 200;
+
+    // DamageCalculator에서:
+    float burst = data.burstActive ? 1.30f : 1.0f;
+    attackMultiplier = 1 + Math.min(attackStat \* burst, 120) / 100;
+
+    // burstEndTick 만료 처리 (tick Mixin에서):
+    if (data.burstActive \&\& tick >= data.burstEndTick) {
+        data.burstActive = false;
+    }
+
+    // burstActive 중 리카 소환(F) 데미지도 × 1.30 적용
+
+
+### 6-6. 마히토 (`characterId = "mahito"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|무위전변|26|140|8|접촉 시 `isSoulDirect=true`, 방어 무시.|
+|Shift+F|다중혼|48|220|18|animId 43. 3체 분열 투사체.|
+|R|영혼 방어|0|120|15|80틱 동안 soul damage 저항. `data.cooldowns.put("soul\_resist", tick+80)`.|
+|Shift+R|칼날 변형|52|190|12|animId 44. 팔 변형 근접 공격.|
+|V|자폐원돈과|0|3150|360|`DomainManager.deployDomain("mahito\_self\_embodiment")`. 결계 반경 15블록 내 모든 엔티티 매 틱 영혼 데미지 10. `isSoulDirect=true`, `bypassRCT=true`. ★양날성: 마히토 본인 감쇠 50% → 매 틱 데미지 5. 마히토 HP 50% 이하 또는 200틱 경과 시 자동 해제.|
+
+### 6-7. 죠고 (`characterId = "jogo"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|화산탄|46|130|6|폭발 반경 4블록, 화염 80틱.|
+|Shift+F|개관|80|280|20|animId 46. 직선 화염기둥.|
+|R|운석|120|600|75|낙하 예고 40틱 후 광역 피해(`EffectDeferQueue` 활용).|
+|Shift+R|불꽃의 고리|54|230|16|animId 47. 주변 6블록 ring damage.|
+|V|개관철위산|0|2700|360|`DomainManager.deployDomain("jogo\_volcano\_domain")`.|
+
+### 6-8. 하카리 킨지 (`characterId = "hakari"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|잭팟 발동|0|600|20|1/239 확률. 지속시간: `config.jackpotDurationTicks`(기본값 251틱). PvP 균형을 위해 운영자가 60\~251 범위에서 조정 가능. 잭팟 중: CE CAP 체크 우회(`jackpotActive=true`면 ceMax 검사 스킵). 매 틱 자동 heal 1HP. `\[MANGA-EXP]`|
+|Shift+F|주력방출|66|0|8|animId 48. 잭팟 중 강화(baseDamage ×1.5).|
+|R|확률 재굴림|0|180|30|잭팟 실패 후 1회 재시도.|
+|Shift+R|불확정 영역|0|450|20|무작위 3종 `\[SERVER-ORIGINAL]`. `Random.nextInt(3)`으로 선택: \[0] 충격파: 반경 8블록 데미지 45 + 넉백 2블록. \[1] CE 흡수: 반경 6블록 엔티티 CE max의 15% 흡수 → 하카리 충전. \[2] 속도 장판: 반경 5블록 60틱간 이동속도 -60%(하카리 제외). 결과를 `SkillResultS2CPacket`으로 전송 → 클라이언트 이펙트 분기.|
+|V|영역 전개|0|2500|360|`DomainManager.deployDomain("hakari\_jackpot\_domain")`.|
+
+`PlayerData` 잭팟 전용 필드 (추가 필요):
+
+&#x20;   boolean jackpotActive
+    long jackpotEndTick
+
+
+잭팟 종료 시 `jackpotActive=false`로 복원. `ceMax` 필드 자체는 변경하지 않는다.
+
+### 6-9. 이누마키 토게 (`characterId = "inumaki"`)
+
+채팅 인터셉트 이벤트: `ServerMessageEvents.ALLOW\_CHAT\_MESSAGE`와 `ServerMessageEvents.ALLOW\_COMMAND\_MESSAGE`를 동시에 등록한다.
+
+|키/명령|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|!멈춰|0|120|10|animId 50. 대상 40틱 정지. 부담 +15.|
+|Shift+F|!터져|70|280|24|animId 51. 반경 4블록 폭발. 부담 +30.|
+|R|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환. 향후 주언 추가 예정.|
+|Shift+R|!잠들어|0|240|30|animId 52. 100틱 수면. 부담 +25.|
+|V|!달려|0|150|18|animId 53. 아군 이동속도 +40%, 80틱. 부담 +10.|
+
+부담 감소: 전투 외 5/s(= 틱당 0.25), 전투 중 2/s(= 틱당 0.1). `lastCombatTick` 기준으로 분기. 부담 100 초과 시 술식 봉인 → `data.cooldowns.put("skill\_seal", tick + sealDurationTicks)`.
+
+### 6-10. 나나미 켄토 (`characterId = "nanami"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|십획주법|50|110|6|7:3 약점 위치 명중 시 ×1.5. 약점은 히트박스를 7:3으로 분할한 후방 30% 영역.|
+|Shift+F|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환.|
+|R|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환.|
+|Shift+R|경계선|86|240|20|animId 54. 선분 판정, 방어 관통 30%.|
+|V|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환.|
+
+### 6-11. 히구루마 히로미 (`characterId = "higuruma"`)
+
+|키|스킬|baseDamage|CE|CD(틱)|구현핵심|
+|-|-|-|-|-|-|
+|F|증거 제출|0|120|15|`TrialManager.addEvidence(attacker, target)`.|
+|Shift+F|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환.|
+|R|(미사용)|—|—|—|`SkillResult.NOT\_IMPLEMENTED` 반환.|
+|Shift+R|배심원|0|600|90|animId 55. `TrialManager.startTrial(attacker, target)`. 기소→선택→판결 StateMachine.|
+|V|처형검|999|0|판결 후|유죄 판결 후 1회성. `data.hasExecutionSword=true`일 때만 사용 가능. 사용 후 `false` 복원.|
+
+`PlayerData` 처형검 전용 필드 (추가 필요):
+
+&#x20;   boolean hasExecutionSword
+
+
+히구루마 재판 성공 기준: 60%.
+재판 StateMachine: `IDLE → ACCUSED(대상 지정) → DELIBERATION(60틱 타임아웃) → VERDICT(유죄/무죄) → END`.
+
+### 6-12. 스쿠나 (미완성 — Phase 3 구현 예정)
+
+스쿠나 SkillSet은 Phase 3에서 추가한다. AnimationRegistry에 animId 21\~24(sukuna\_f/shift\_f/r/shift\_r)가 예약되어 있다. 현재 `SukunaSkillSet`은 5개 키 모두 `SkillResult.NOT\_IMPLEMENTED`를 반환하는 스텁으로 등록한다.
+
+\---
+
+## §22. 캐릭터별 운영 주의
+
+### 22-1. 고죠
+
+무하한은 영역 전개, 영역 전연, 마허라가 의식 적응, 특정 영혼 직접 공격에 의해 무력화될 수 있다.
+
+### 22-2. 하카리
+
+잭팟 지속시간은 `config.jackpotDurationTicks`로 조정한다. 기본값 251틱. 잭팟 만료 시 `jackpotActive=false`, `jackpotEndTick=0` 복원.
+
+### 22-3. 이누마키 부담
+
+부담은 스킬별로 증가한다. 전투 외 5/s, 전투 중 2/s 감소. 100 초과 시 술식 봉인. 봉인 해제: `cooldowns.get("skill\_seal") < currentTick`.
+
+\---
+
+## §25. 원작 구현 체크리스트
+
+|항목|상태|
+|-|-|
+|흑섬 base × 2.5 게임화 결정 명시|완료|
+|고죠 무하한 예외 조건|완료|
+|스쿠나 개방형 영역|완료 (스텁 등록, Phase 3 구현)|
+|이타도리 경정권 2타|완료|
+|메구미 식신 영구 사망|완료|
+|옷코츠 주력해방 burstActive|완료|
+|마히토 자폐원돈과 양날성|완료|
+|하카리 잭팟 1/239 및 config 지속시간|완료|
+|이누마키 채팅 이벤트명|완료|
+|히구루마 재판 성공 기준 60%|완료|
+|이누마키 R 키 미사용 명시|완료|
+|나나미 미사용 키 명시|완료|
+|히구루마 처형검 PlayerData 필드|완료|
+|하카리 jackpotActive 필드|완료|
+
+\---
+
+## §27. 신규 캐릭터 추가 절차 (확장성 가이드)
+
+12번째 이후 캐릭터 추가 시 아래 순서로 실행:
+
+1. `techniques.json`에 스킬 항목 추가 (`character`·`keyId`·`baseDamage`·`ceCost`·`cooldownTicks`·`animId`·`unlockGrade` 필수)
+2. `domains.json`에 영역 파라미터 추가 (영역 있는 캐릭터만)
+3. `AnimationRegistry.java`에 animId 등록 (60번부터 순서대로)
+4. `impl/` 패키지에 `{CharName}SkillSet.java` 생성 — `ISkillSet` 5개 메서드 전부 구현. 미사용 키는 `SkillResult.NOT\_IMPLEMENTED` 반환.
+5. `SkillRegistry.register("{charId}", new {CharName}SkillSet())` 등록
+6. `PlayerData`에 캐릭터 전용 필드 필요 시 추가 + `snapshot()` 반영
+7. `schema\_version` 증가 + `MigratorV{N}toV{N+1}` 작성
+8. `ISkillSetTest`에 신규 캐릭터 케이스 추가
+9. §25 원작 구현 체크리스트에 신규 항목 추가
+10. Phase 1 릴리스 게이트 재통과 확인
+
+keyId 범위: byte 0\~127 (현재 0\~10 사용, 여유 충분)
+animId 범위: byte 0\~127 (현재 0\~59 사용, 60\~127 여유)
+

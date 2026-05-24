@@ -1,0 +1,210 @@
+# JJK 서버 명세 — 04. 패킷·애니메이션
+
+> 참조 전제: `jjk\_spec\_01\_core.md` §1(패키지 구조)을 먼저 숙지한다.
+> S2C 패킷은 표시 전용이며 서버 상태를 변경하지 않는다.
+
+\---
+
+## §11. 클라이언트 패킷과 애니메이션
+
+### 11-1. 패킷 등록 원칙
+
+`CustomPayload` ID는 `jjk:<snake\_case>` 형식. S2C는 표시 전용이며 서버 상태를 변경하지 않는다.
+
+### 11-2. C2S 패킷
+
+|패킷|필드|용도|
+|-|-|-|
+|`SkillUseC2SPacket`|playerUuid, keyId(byte), targetUuid(nullable)|스킬 입력 전달|
+|`CharacterSelectC2SPacket`|characterId(String)|캐릭터 선택|
+
+### 11-3. S2C 패킷 전체 목록
+
+|패킷|필드|용도|
+|-|-|-|
+|`SkillResultS2CPacket`|playerUuid, skillId, result, reason(nullable)|스킬 연출 및 실패 사유|
+|`ZoneEnterS2CPacket`|playerUuid, durationTicks|Zone 진입|
+|`ZoneExitS2CPacket`|playerUuid|Zone 종료|
+|`AwakeningS2CPacket`|playerUuid, active|각성 표시|
+|`CharacterInfoS2CPacket`|playerUuid, characterId, grade|재접속 시 캐릭터 정보|
+|`CharacterSelectS2CPacket`|(필드 없음)|최초 접속 시 캐릭터 선택 화면 열기|
+|`CharacterConfirmS2CPacket`|playerUuid, characterId|선택 완료 후 인게임 전환|
+|`CharacterSelectFailS2CPacket`|reason(String)|선택 실패 사유|
+|`RespawnS2CPacket`|playerUuid, spawnPos|부활 연출|
+
+### 11-4. Zone/Awakening 패킷 정의
+
+```java
+import java.util.UUID;
+
+public record ZoneEnterS2CPacket(UUID playerUuid, int durationTicks) implements CustomPayload {
+    public static final Id<ZoneEnterS2CPacket> ID = new Id<>(Identifier.of("jjk", "zone\_enter"));
+    public static final PacketCodec<RegistryByteBuf, ZoneEnterS2CPacket> CODEC = PacketCodec.of(
+        (buf, pkt) -> {
+            buf.writeString(pkt.playerUuid().toString());   // PacketCodecs.STRING 대신 buf.writeString 사용
+            buf.writeInt(pkt.durationTicks());
+        },
+        buf -> new ZoneEnterS2CPacket(UUID.fromString(buf.readString()), buf.readInt())
+    );
+
+    @Override
+    public Id<? extends CustomPayload> getId() { return ID; }
+}
+```
+
+`ZoneExitS2CPacket`: `playerUuid` 단일 필드 (`PacketCodec.tuple` 사용).
+`AwakeningS2CPacket`: `playerUuid + boolean active` (`PacketCodec.tuple` 사용).
+
+### 11-5. AnimationRegistry
+
+animId 범위: byte 0\~127 (현재 0\~59 사용, 60\~127 신규 캐릭터 예약).
+
+|animId|애니메이션|animId|애니메이션|
+|-|-|-|-|
+|0|공통 idle|20|고죠 V|
+|1|공통 cast|21|스쿠나 F|
+|2|공통 hit|22|스쿠나 Shift+F|
+|3|공통 dash|23|스쿠나 R|
+|4|공통 guard|24|스쿠나 Shift+R|
+|5|공통 death|25|메구미 F|
+|6|공통 respawn|26|메구미 Shift+F|
+|7|공통 domain\_start|27|메구미 R|
+|8|공통 domain\_loop|28|메구미 Shift+R|
+|9|공통 black\_flash|29|메구미 V|
+|10|이타도리 F|30|죠고 F|
+|11|이타도리 Shift+F|31|죠고 R|
+|12|이타도리 R|32|죠고 V|
+|13|이타도리 Shift+R|33|마히토 F|
+|14|이타도리 V|34|마히토 R|
+|15|고죠 F|35|마히토 domain|
+|16|고죠 Shift+F|36|하카리 F|
+|17|고죠 R|37|하카리 V|
+|18|고죠 Shift+R|38|히구루마 F|
+|19|고죠 domain|39|히구루마 V|
+|40|옷코츠 Shift+F|50|이누마키 F (!멈춰)|
+|41|옷코츠 Shift+R (주력해방)|51|이누마키 Shift+F (!터져)|
+|42|옷코츠 V|52|이누마키 Shift+R (!잠들어)|
+|43|마히토 Shift+F (다중혼)|53|이누마키 V (!달려)|
+|44|마히토 Shift+R (칼날)|54|나나미 Shift+R (경계선)|
+|45|마히토 V|55|히구루마 Shift+R (배심원)|
+|46|죠고 Shift+F (개관)|56|흑섬 Great|
+|47|죠고 Shift+R (불꽃의 고리)|57|각성 진입|
+|48|하카리 Shift+F (주력방출)|58|존 진입|
+|49|하카리 Shift+R (불확정)|59|이타도리 영역 startup|
+
+> animId 번호 배치 설명: 0\~39는 공통+주요 캐릭터 기본 순서대로 배정. 40번대는 이후 추가된 스킬(옷코츠 일부, 마히토 나머지, 죠고 나머지, 하카리)로 채움. 신규 캐릭터는 60번부터 순서대로 배정.
+
+```java
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
+public final class AnimationRegistry {
+    private static final Map<Integer, String> ANIMATIONS;
+
+    static {
+        Map<Integer, String> map = new HashMap<>();
+        map.put(0, "common\_idle");
+        map.put(1, "common\_cast");
+        map.put(2, "common\_hit");
+        map.put(3, "common\_dash");
+        map.put(4, "common\_guard");
+        map.put(5, "common\_death");
+        map.put(6, "common\_respawn");
+        map.put(7, "common\_domain\_start");
+        map.put(8, "common\_domain\_loop");
+        map.put(9, "common\_black\_flash");
+        map.put(10, "itadori\_f");
+        map.put(11, "itadori\_shift\_f");
+        map.put(12, "itadori\_r");
+        map.put(13, "itadori\_shift\_r");
+        map.put(14, "itadori\_v");
+        map.put(15, "gojo\_f");
+        map.put(16, "gojo\_shift\_f");
+        map.put(17, "gojo\_r");
+        map.put(18, "gojo\_shift\_r");
+        map.put(19, "gojo\_domain");
+        map.put(20, "gojo\_v");
+        map.put(21, "sukuna\_f");
+        map.put(22, "sukuna\_shift\_f");
+        map.put(23, "sukuna\_r");
+        map.put(24, "sukuna\_shift\_r");
+        map.put(25, "megumi\_f");
+        map.put(26, "megumi\_shift\_f");
+        map.put(27, "megumi\_r");
+        map.put(28, "megumi\_shift\_r");
+        map.put(29, "megumi\_v");
+        map.put(30, "jogo\_f");
+        map.put(31, "jogo\_r");
+        map.put(32, "jogo\_v");
+        map.put(33, "mahito\_f");
+        map.put(34, "mahito\_r");
+        map.put(35, "mahito\_domain");
+        map.put(36, "hakari\_f");
+        map.put(37, "hakari\_v");
+        map.put(38, "higuruma\_f");
+        map.put(39, "higuruma\_v");
+        map.put(40, "okkotsu\_shift\_f");
+        map.put(41, "okkotsu\_shift\_r\_burst");
+        map.put(42, "okkotsu\_v");
+        map.put(43, "mahito\_shift\_f");
+        map.put(44, "mahito\_shift\_r");
+        map.put(45, "mahito\_v");
+        map.put(46, "jogo\_shift\_f");
+        map.put(47, "jogo\_shift\_r");
+        map.put(48, "hakari\_shift\_f");
+        map.put(49, "hakari\_shift\_r");
+        map.put(50, "inumaki\_f\_stop");
+        map.put(51, "inumaki\_shift\_f\_burst");
+        map.put(52, "inumaki\_shift\_r\_sleep");
+        map.put(53, "inumaki\_v\_run");
+        map.put(54, "nanami\_shift\_r");
+        map.put(55, "higuruma\_shift\_r\_jury");
+        map.put(56, "black\_flash\_great");
+        map.put(57, "awakening\_enter");
+        map.put(58, "zone\_enter");
+        map.put(59, "itadori\_domain\_startup");
+        ANIMATIONS = Collections.unmodifiableMap(map); // 외부 덮어쓰기 방지
+    }
+
+    private AnimationRegistry() {}
+
+    public static String get(int id) {
+        String name = ANIMATIONS.get(id);
+        if (name == null) {
+            throw new IllegalArgumentException("AnimationRegistry: unknown animId=" + id);
+        }
+        return name;
+    }
+
+    public static boolean has(int id) {
+        return ANIMATIONS.containsKey(id);
+    }
+}
+```
+
+### 11-6. PlayerAnimator 2.0.4 API
+
+```java
+public final class PlayerAnimationDispatcher {
+    private PlayerAnimationDispatcher() {}
+
+    /\*\*
+     \* @param animName AnimationRegistry.get(animId)로 얻은 이름
+     \* @param loopType PLAY\_ONCE 또는 LOOP
+     \*/
+    public static void play(ServerPlayerEntity player, String animName,
+                            dev.kosmx.playerAnim.api.layered.IAnimation.LoopType loopType) {
+        var layerContainer = dev.kosmx.playerAnim.api.PlayerAnimationAccess
+                .getPlayerAssociatedData(player);
+        if (layerContainer == null) return;
+        // PlayerAnimator 2.0.4 실제 API 확인 후 시그니처 보정 필요
+        // layerContainer.activate(animName, loopType) 형태로 추정
+    }
+}
+```
+
+GeckoLib 4.8.3에서는 `thenPlay(animName)` 대신 `then(animName, Animation.LoopType.PLAY\_ONCE)`를 사용한다.
+
+> ⚠️ `PlayerAnimationDispatcher.play()`의 정확한 시그니처는 PlayerAnimator 2.0.4 javadoc을 직접 참조하여 확정한다. 위 코드는 추정이며 컴파일 전 검증 필수.
+
