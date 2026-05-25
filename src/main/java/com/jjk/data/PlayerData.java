@@ -42,6 +42,16 @@ public class PlayerData {
     public List<String> deadShikigamiIds = new ArrayList<>();
     public boolean healingActive;
     public long zonePenaltyUntilTick;
+    public boolean jackpotActive;
+    public long jackpotEndTick;
+    public long lastJackpotAttemptTick;
+    public boolean hasExecutionSword;
+    public boolean infinityActive;
+    public boolean curtainActive;
+    public boolean overtimeWork;
+    public boolean fallingBlossomActive;
+    public long fallingBlossomUntil;
+    public boolean simpleBarrierActive;
     public int schemaVersion = 1;
 
     public PlayerData snapshot() {
@@ -79,6 +89,16 @@ public class PlayerData {
         copy.deadShikigamiIds = new ArrayList<>(this.deadShikigamiIds);
         copy.healingActive = this.healingActive;
         copy.zonePenaltyUntilTick = this.zonePenaltyUntilTick;
+        copy.jackpotActive = this.jackpotActive;
+        copy.jackpotEndTick = this.jackpotEndTick;
+        copy.lastJackpotAttemptTick = this.lastJackpotAttemptTick;
+        copy.hasExecutionSword = this.hasExecutionSword;
+        copy.infinityActive = this.infinityActive;
+        copy.curtainActive = this.curtainActive;
+        copy.overtimeWork = this.overtimeWork;
+        copy.fallingBlossomActive = this.fallingBlossomActive;
+        copy.fallingBlossomUntil = this.fallingBlossomUntil;
+        copy.simpleBarrierActive = this.simpleBarrierActive;
         copy.schemaVersion = this.schemaVersion;
         return copy;
     }

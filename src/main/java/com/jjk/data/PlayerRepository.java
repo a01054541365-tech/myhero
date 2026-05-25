@@ -141,6 +141,16 @@ public class PlayerRepository {
         d.deadShikigamiIds       = GSON.fromJson(rs.getString("dead_shikigami_ids"), LIST_TYPE);
         d.healingActive          = rs.getInt("healing_active") != 0;
         d.zonePenaltyUntilTick   = rs.getLong("zone_penalty_until_tick");
+        d.jackpotActive          = rs.getInt("jackpot_active") != 0;
+        d.jackpotEndTick         = rs.getLong("jackpot_end_tick");
+        d.lastJackpotAttemptTick = rs.getLong("last_jackpot_attempt_tick");
+        d.hasExecutionSword      = rs.getInt("has_execution_sword") != 0;
+        d.infinityActive         = rs.getInt("infinity_active") != 0;
+        d.curtainActive          = rs.getInt("curtain_active") != 0;
+        d.overtimeWork           = rs.getInt("overtime_work") != 0;
+        d.fallingBlossomActive   = rs.getInt("falling_blossom_active") != 0;
+        d.fallingBlossomUntil    = rs.getLong("falling_blossom_until");
+        d.simpleBarrierActive    = rs.getInt("simple_barrier_active") != 0;
         d.schemaVersion          = rs.getInt("schema_version");
         if (d.unlockedSkills == null) d.unlockedSkills = new ArrayList<>();
         if (d.cooldowns == null)      d.cooldowns = new HashMap<>();
@@ -152,7 +162,7 @@ public class PlayerRepository {
         try (PreparedStatement ps = conn.prepareStatement(UPSERT_PLAYER)) {
             ps.setString(1,  d.uuid.toString());
             ps.setString(2,  d.characterId);
-            ps.setString(3,  d.grade != null ? d.grade : "4疫?");
+            ps.setString(3,  d.grade != null ? d.grade : "4급");
             ps.setLong(4,    d.xp);
             ps.setInt(5,     d.mastery);
             ps.setFloat(6,   d.ceCurrent);
@@ -183,7 +193,17 @@ public class PlayerRepository {
             ps.setString(31, GSON.toJson(d.deadShikigamiIds));
             ps.setInt(32,    d.healingActive ? 1 : 0);
             ps.setLong(33,   d.zonePenaltyUntilTick);
-            ps.setInt(34,    d.schemaVersion);
+            ps.setInt(34,    d.jackpotActive ? 1 : 0);
+            ps.setLong(35,   d.jackpotEndTick);
+            ps.setLong(36,   d.lastJackpotAttemptTick);
+            ps.setInt(37,    d.hasExecutionSword ? 1 : 0);
+            ps.setInt(38,    d.infinityActive ? 1 : 0);
+            ps.setInt(39,    d.curtainActive ? 1 : 0);
+            ps.setInt(40,    d.overtimeWork ? 1 : 0);
+            ps.setInt(41,    d.fallingBlossomActive ? 1 : 0);
+            ps.setLong(42,   d.fallingBlossomUntil);
+            ps.setInt(43,    d.simpleBarrierActive ? 1 : 0);
+            ps.setInt(44,    d.schemaVersion);
             ps.executeUpdate();
         }
     }
@@ -194,7 +214,7 @@ public class PlayerRepository {
             CREATE TABLE IF NOT EXISTS player_data (
                 uuid                        TEXT    PRIMARY KEY,
                 character_id                TEXT,
-                grade                       TEXT    NOT NULL DEFAULT '4疫?',
+                grade                       TEXT    NOT NULL DEFAULT '4급',
                 xp                          INTEGER NOT NULL DEFAULT 0,
                 mastery                     INTEGER NOT NULL DEFAULT 0,
                 ce_current                  REAL    NOT NULL DEFAULT 1000.0,
@@ -225,6 +245,16 @@ public class PlayerRepository {
                 dead_shikigami_ids          TEXT    NOT NULL DEFAULT '[]',
                 healing_active              INTEGER NOT NULL DEFAULT 0,
                 zone_penalty_until_tick     INTEGER NOT NULL DEFAULT 0,
+                jackpot_active              INTEGER NOT NULL DEFAULT 0,
+                jackpot_end_tick            INTEGER NOT NULL DEFAULT 0,
+                last_jackpot_attempt_tick   INTEGER NOT NULL DEFAULT 0,
+                has_execution_sword         INTEGER NOT NULL DEFAULT 0,
+                infinity_active             INTEGER NOT NULL DEFAULT 0,
+                curtain_active              INTEGER NOT NULL DEFAULT 0,
+                overtime_work               INTEGER NOT NULL DEFAULT 0,
+                falling_blossom_active      INTEGER NOT NULL DEFAULT 0,
+                falling_blossom_until       INTEGER NOT NULL DEFAULT 0,
+                simple_barrier_active       INTEGER NOT NULL DEFAULT 0,
                 schema_version              INTEGER NOT NULL DEFAULT 1
             )""";
 
@@ -243,10 +273,15 @@ public class PlayerRepository {
                 last_combat_tick, last_known_ip,
                 awakening_active, awakening_end_tick, awakening_cooldown_until,
                 burst_active, burst_end_tick, dead_shikigami_ids,
-                healing_active, zone_penalty_until_tick, schema_version
+                healing_active, zone_penalty_until_tick,
+                jackpot_active, jackpot_end_tick, last_jackpot_attempt_tick,
+                has_execution_sword, infinity_active, curtain_active,
+                overtime_work, falling_blossom_active, falling_blossom_until,
+                simple_barrier_active, schema_version
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
-                ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?, ?,?,?
+                ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?, ?,?,?,
+                ?,?,?,?,?,?,?,?,?,?,?
             )
             ON CONFLICT(uuid) DO UPDATE SET
                 character_id              = excluded.character_id,
@@ -281,6 +316,16 @@ public class PlayerRepository {
                 dead_shikigami_ids        = excluded.dead_shikigami_ids,
                 healing_active            = excluded.healing_active,
                 zone_penalty_until_tick   = excluded.zone_penalty_until_tick,
+                jackpot_active            = excluded.jackpot_active,
+                jackpot_end_tick          = excluded.jackpot_end_tick,
+                last_jackpot_attempt_tick = excluded.last_jackpot_attempt_tick,
+                has_execution_sword       = excluded.has_execution_sword,
+                infinity_active           = excluded.infinity_active,
+                curtain_active            = excluded.curtain_active,
+                overtime_work             = excluded.overtime_work,
+                falling_blossom_active    = excluded.falling_blossom_active,
+                falling_blossom_until     = excluded.falling_blossom_until,
+                simple_barrier_active     = excluded.simple_barrier_active,
                 schema_version            = excluded.schema_version
             """;
 }

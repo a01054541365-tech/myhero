@@ -11,6 +11,7 @@ import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import com.jjk.network.s2c.SkillResultS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.List;
@@ -86,17 +87,18 @@ public class HakariSkillSet implements ISkillSet {
         long tick = player.getWorld().getTime();
 
         // ??λ뻻?? ?????ル굝利???600??CD (jackpotCooldownUntil ?袁⑤굡 ??뽰뒠)
-        if (tick < data.jackpotCooldownUntil) return SkillResult.ON_COOLDOWN;
         if (!CooldownManager.isReady(data, "cd_hakari_0", tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
 
         data.cooldowns.put(KEY_LAST_ATTEMPT, tick);
 
-        boolean jackpot = RANDOM.nextInt(JACKPOT_ODDS) == 0;
+        boolean canJackpot = (tick - data.lastJackpotAttemptTick) >= POST_JACKPOT_CD;
+        boolean jackpot = canJackpot && RANDOM.nextInt(JACKPOT_ODDS) == 0;
         if (jackpot) {
             // 吏쟊OCK: jackpotDurationTicks??config?癒?퐣筌???뚯벉, ?꾨뗀諭???롫굡?꾨뗀逾?疫뀀뜆?
             int duration = JJKMod.getConfig().jackpotDurationTicks;
-            data.cooldowns.put(KEY_JACKPOT_UNTIL, tick + duration);
+            data.jackpotActive = true;
+            data.jackpotEndTick = tick + duration;
         }
 
         JJKMod.getCEManager().consume(player, CE_F);
@@ -117,10 +119,10 @@ public class HakariSkillSet implements ISkillSet {
         boolean jackpotActive = isJackpotActive(data, tick);
         float mult = jackpotActive ? 1.5f : 1.0f;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 3.0);
+        List<LivingEntity> targets = HitValidator.getNearby(player, 3.0);
         if (targets.isEmpty()) return SkillResult.FAIL;
 
-        ServerPlayerEntity target = targets.get(0);
+        LivingEntity target = targets.get(0);
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
                 .externalBuffMult(mult)
                 .skillName("power_output")
@@ -148,7 +150,8 @@ public class HakariSkillSet implements ISkillSet {
         boolean jackpot = RANDOM.nextInt(JACKPOT_ODDS) == 0;
         if (jackpot) {
             int duration = JJKMod.getConfig().jackpotDurationTicks;
-            data.cooldowns.put(KEY_JACKPOT_UNTIL, tick + duration);
+            data.jackpotActive = true;
+            data.jackpotEndTick = tick + duration;
         }
 
         JJKMod.getCEManager().consume(player, CE_R);
@@ -174,7 +177,7 @@ public class HakariSkillSet implements ISkillSet {
         }
 
         // ?????곷섧?紐꾨퓠 ?醫뤾문????ｋ궢 ?紐껊쑔???袁⑸꽊
-        ServerPlayNetworking.send(player, new SkillResultS2CPacket(3, "uncertain_domain:" + effect));
+        ServerPlayNetworking.send(player, new SkillResultS2CPacket(3, "uncertain_domain:" + effect, 0f));
 
         JJKMod.getCEManager().consume(player, CE_SR);
         CooldownManager.set(data, cdKey, tick, CD_SR);
@@ -184,13 +187,12 @@ public class HakariSkillSet implements ISkillSet {
     }
 
     private void applyUncertainShockwave(ServerPlayerEntity player) {
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 8.0);
-        for (ServerPlayerEntity target : targets) {
+        List<LivingEntity> targets = HitValidator.getNearby(player, 8.0);
+        for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, 45f)
                     .skillName("uncertain_domain")
                     .build();
             JJKMod.getCombatPipeline().process(ctx);
-            // knockback direction
             net.minecraft.util.math.Vec3d dir = target.getPos().subtract(player.getPos()).normalize();
             target.setVelocity(dir.multiply(2.0));
             target.velocityModified = true;
@@ -198,9 +200,10 @@ public class HakariSkillSet implements ISkillSet {
     }
 
     private void applyUncertainCEAbsorb(ServerPlayerEntity player, PlayerData playerData) {
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 6.0);
+        List<LivingEntity> targets = HitValidator.getNearby(player, 6.0);
         float totalAbsorbed = 0f;
-        for (ServerPlayerEntity target : targets) {
+        for (LivingEntity target : targets) {
+            if (!(target instanceof ServerPlayerEntity)) continue; // CE only from player targets
             PlayerData targetData = JJKMod.getPlayerRepository().load(target.getUuid());
             float absorb = targetData.ceMax * 0.15f;
             targetData.ceCurrent = Math.max(0, targetData.ceCurrent - absorb);
@@ -211,10 +214,9 @@ public class HakariSkillSet implements ISkillSet {
     }
 
     private void applyUncertainSlowZone(ServerPlayerEntity player) {
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 5.0).stream()
-                .filter(t -> !t.equals(player))
-                .collect(java.util.stream.Collectors.toList());
-        for (ServerPlayerEntity target : targets) {
+        List<LivingEntity> targets = HitValidator.getNearby(player, 5.0);
+        for (LivingEntity target : targets) {
+            if (!(target instanceof ServerPlayerEntity)) continue; // slow status only for player targets
             PlayerData targetData = JJKMod.getPlayerRepository().load(target.getUuid());
             targetData.cooldowns.put("status_speed_down_until", player.getWorld().getTime() + 60);
             JJKMod.getPlayerRepository().save(targetData);
@@ -242,33 +244,20 @@ public class HakariSkillSet implements ISkillSet {
     public static void tickJackpot(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         if (!"hakari".equals(data.characterId)) return;
+        if (!data.jackpotActive) return;
 
-        Long jackpotUntil = data.cooldowns.get(KEY_JACKPOT_UNTIL);
-        if (jackpotUntil == null) return;
-
-        long tick = player.getWorld().getTime();
-        if (tick >= jackpotUntil) {
+        long currentTick = player.getWorld().getTime();
+        if (currentTick >= data.jackpotEndTick) {
             // ?????ル굝利? 600??CD ?怨몄뒠, ?怨몃열 CD??椰꾨?諭띄뵳?? ??놁벉
-            data.cooldowns.remove(KEY_JACKPOT_UNTIL);
-            data.jackpotCooldownUntil = tick + POST_JACKPOT_CD;
+            data.jackpotActive = false;
+            data.jackpotEndTick = 0L;
+            data.lastJackpotAttemptTick = currentTick;
             JJKMod.getPlayerRepository().save(data);
-            return;
         }
-
-        // 吏쟊OCK: jackpotDurationTicks config ???? CE regen?? max ??20%/s ?怨밸립
-        float ceBonus = data.ceMax * 0.20f / 20f; // 1?源낅뼣 max_ce??1%
-        data.ceCurrent = Math.min(data.ceCurrent + ceBonus, data.ceMax);
-
-        // HP +1 per tick
-        if (player.getHealth() < player.getMaxHealth()) {
-            player.heal(1.0f);
-        }
-        JJKMod.getPlayerRepository().save(data);
     }
 
     private static boolean isJackpotActive(PlayerData data, long currentTick) {
-        Long jackpotUntil = data.cooldowns.get(KEY_JACKPOT_UNTIL);
-        return jackpotUntil != null && currentTick < jackpotUntil;
+        return data.jackpotActive && currentTick < data.jackpotEndTick;
     }
 
     private static void broadcastAnim(ServerPlayerEntity player, int animId) {

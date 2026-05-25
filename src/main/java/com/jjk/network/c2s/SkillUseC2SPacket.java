@@ -5,6 +5,7 @@ import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.character.SkillRegistry;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.SkillResultS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.RegistryByteBuf;
 import net.minecraft.network.codec.PacketCodec;
@@ -30,7 +31,11 @@ public record SkillUseC2SPacket(int keyId) implements CustomPayload {
             ISkillSet skillSet = SkillRegistry.get(data.characterId);
             if (skillSet == null) return;
             SkillResult result = skillSet.use(ctx.player(), packet.keyId());
-            // TODO: send SkillResultS2CPacket back
+            // Combat SUCCESS is notified by CombatPipeline Stage 9; send error results here.
+            if (result != SkillResult.SUCCESS) {
+                ServerPlayNetworking.send(ctx.player(),
+                        new SkillResultS2CPacket(packet.keyId(), result.name(), 0f));
+            }
         });
     }
 }

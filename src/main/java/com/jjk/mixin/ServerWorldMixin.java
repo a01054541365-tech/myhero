@@ -16,4 +16,11 @@ public class ServerWorldMixin {
         JJKMod.getRespawnManager().tick();
         JJKMod.getTrialManager().tick();
     }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void jjk$onWorldTickTail(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
+        ServerWorld world = (ServerWorld) (Object) this;
+        JJKMod.getDomainManager().tickDomains(world);
+        JJKMod.getEffectDeferQueue().tickWorld(world.getTime());
+    }
 }

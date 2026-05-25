@@ -1,6 +1,12 @@
 package com.jjk.trial;
 
+import com.jjk.JJKMod;
+import com.jjk.data.PlayerData;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
+
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class TrialStateMachine {
 
@@ -12,18 +18,51 @@ public class TrialStateMachine {
     private UUID accusedUuid;
     private UUID prosecutorUuid;
     private int stateTicks = 0;
+    private boolean guilty;
+    private final MinecraftServer server;
+
+    public TrialStateMachine(MinecraftServer server) {
+        this.server = server;
+    }
 
     public void tick() {
         stateTicks++;
         switch (state) {
             case ACCUSED -> {
-                // TODO: transition to DELIBERATION after delay
+                if (stateTicks >= 20) {
+                    state = State.DELIBERATION;
+                    stateTicks = 0;
+                }
             }
             case DELIBERATION -> {
-                // TODO: run success rate roll, transition to VERDICT
+                if (stateTicks >= 60) {
+                    guilty = ThreadLocalRandom.current().nextFloat() < JJKMod.getConfig().trialSuccessRate;
+                    state = State.VERDICT;
+                    stateTicks = 0;
+                }
             }
             case VERDICT -> {
-                // TODO: apply verdict effect (strip technique, executioner sword), transition to END
+                if (stateTicks >= 1) {
+                    if (guilty) {
+                        long currentTick = server.getOverworld().getTime();
+                        int sealDuration = JJKMod.getConfig().sealDurationTicks;
+
+                        ServerPlayerEntity accusedPlayer = server.getPlayerManager().getPlayer(accusedUuid);
+                        if (accusedPlayer != null) {
+                            PlayerData accusedData = JJKMod.getPlayerRepository().load(accusedUuid);
+                            accusedData.cooldowns.put("skill_seal", currentTick + sealDuration);
+                            JJKMod.getPlayerRepository().saveImmediate(accusedData);
+                        }
+
+                        ServerPlayerEntity prosecutorPlayer = server.getPlayerManager().getPlayer(prosecutorUuid);
+                        if (prosecutorPlayer != null) {
+                            PlayerData prosecutorData = JJKMod.getPlayerRepository().load(prosecutorUuid);
+                            prosecutorData.hasExecutionSword = true;
+                            JJKMod.getPlayerRepository().saveImmediate(prosecutorData);
+                        }
+                    }
+                    state = State.END;
+                }
             }
             default -> {}
         }

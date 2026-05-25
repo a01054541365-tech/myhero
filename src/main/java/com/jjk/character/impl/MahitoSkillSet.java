@@ -12,6 +12,7 @@ import com.jjk.effect.EffectManager;
 import com.jjk.effect.EffectType;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.Comparator;
@@ -81,10 +82,10 @@ public class MahitoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 1.5);
+        List<LivingEntity> targets = HitValidator.getNearby(player, 1.5);
         if (targets.isEmpty()) return SkillResult.FAIL;
 
-        ServerPlayerEntity target = targets.get(0);
+        LivingEntity target = targets.get(0);
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_F)
                 .soulDirect()
                 .skillName("idle_transfiguration")
@@ -106,9 +107,12 @@ public class MahitoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SF)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 10.0).stream()
-                .filter(t -> JJKMod.getTeamManager().isEnemy(player, t))
-                .sorted(Comparator.comparingDouble(t -> t.squaredDistanceTo(player)))
+        List<LivingEntity> targets = HitValidator.getNearby(player, 10.0).stream()
+                .filter(t -> {
+                    if (t instanceof ServerPlayerEntity p) return JJKMod.getTeamManager().isEnemy(player, p);
+                    return true; // mobs are always valid targets
+                })
+                .sorted(Comparator.comparingDouble(e -> e.squaredDistanceTo(player)))
                 .limit(3)
                 .collect(Collectors.toList());
 
@@ -153,8 +157,8 @@ public class MahitoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearbyArc(player, 2.0, 90f);
-        for (ServerPlayerEntity target : targets) {
+        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 2.0, 90f);
+        for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_SR)
                     .soulDirect()
                     .skillName("blade_transfiguration")
@@ -169,7 +173,7 @@ public class MahitoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // V ???癒곕짃?癒?즷?? DomainManager ?袁⑹뿫. ?臾먭텊??tick 筌ｌ꼶???DomainManager?癒?퐣.
+    // V: 자기 체현 완성 — 영역 전개 + 양날성(자기 피해) + bypassRCT + isSoulDirect
     private SkillResult useSelfEmbodiment(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
@@ -178,6 +182,14 @@ public class MahitoSkillSet implements ISkillSet {
         if (!JJKMod.getCEManager().canAfford(player, CE_V)) return SkillResult.CE_INSUFFICIENT;
 
         JJKMod.getDomainManager().deployDomain("mahito_domain", player);
+
+        // 양날성: 영역 전개 반동으로 사용자 자신에게도 soul-direct 피해
+        DamageContext selfCtx = DamageContext.builder(null, player, com.jjk.api.combat.IDamageSource.SOUL_DIRECT, BD_SF)
+                .soulDirect()
+                .bypassRCT()
+                .skillName("self_embodiment_recoil")
+                .build();
+        JJKMod.getCombatPipeline().process(selfCtx);
 
         JJKMod.getCEManager().consume(player, CE_V);
         CooldownManager.set(data, cdKey, tick, CD_V);

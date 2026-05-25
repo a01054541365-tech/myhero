@@ -72,6 +72,7 @@ public final class AnimationRegistry {
         m.put(57, "awakening_enter");
         m.put(58, "zone_enter");
         m.put(59, "itadori_domain_startup");
+        m.put(60, "sukuna_v");
         return m;
     }
 

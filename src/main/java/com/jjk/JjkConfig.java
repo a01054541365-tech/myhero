@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class JjkConfig {
 
@@ -34,6 +36,7 @@ public class JjkConfig {
     public int zoneDurationTicks = 200;
     public double ceRegenOutOfCombat = 1.0;
     public double ceRegenInCombat = 0.2;
+    public List<String> domainBannedChunks = new ArrayList<>();
 
     private static final Gson GSON = new Gson();
 

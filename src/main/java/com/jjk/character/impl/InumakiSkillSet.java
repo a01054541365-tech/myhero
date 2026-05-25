@@ -8,10 +8,10 @@ import com.jjk.combat.CooldownManager;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
-import com.jjk.effect.EffectManager;
-import com.jjk.effect.EffectType;
+import com.jjk.combat.CCManager;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.server.network.ServerPlayerEntity;
 
@@ -33,17 +33,26 @@ public class InumakiSkillSet implements ISkillSet {
     private static final String RATELIMIT_KEY = "inumaki_chat_ratelimit";
 
     // ?봔??筌앹빓???(?봔??野껊슣?좑쭪?)
-    private static final int BURDEN_STOP    = 30;
-    private static final int BURDEN_EXPLODE = 50;
-    private static final int BURDEN_SLEEP   = 40;
+    private static final int BURDEN_STOP    = 15;
+    private static final int BURDEN_EXPLODE = 30;
+    private static final int BURDEN_SLEEP   = 25;
+    private static final int BURDEN_V       = 10;
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
+        PlayerData sealData = JJKMod.getPlayerRepository().load(player.getUuid());
+        long sealTick = player.getWorld().getTime();
+        if (sealData.cooldowns.getOrDefault("skill_seal", 0L) > sealTick) {
+            return SkillResult.FAIL;
+        }
         // resolve nearest enemy target
-        List<ServerPlayerEntity> enemies = HitValidator.getNearby(player, 10.0).stream()
-                .filter(t -> JJKMod.getTeamManager().isEnemy(player, t))
+        List<LivingEntity> enemies = HitValidator.getNearby(player, 10.0).stream()
+                .filter(t -> {
+                    if (t instanceof ServerPlayerEntity p) return JJKMod.getTeamManager().isEnemy(player, p);
+                    return true; // mobs are valid curse targets
+                })
                 .collect(Collectors.toList());
-        ServerPlayerEntity target = enemies.isEmpty() ? null : enemies.get(0);
+        LivingEntity target = enemies.isEmpty() ? null : enemies.get(0);
 
         return switch (keyId) {
             case 0 -> useStopCurse(player, target);
@@ -90,7 +99,7 @@ public class InumakiSkillSet implements ISkillSet {
     }
 
     // F/keyId=0: stop_curse - STUN 40 ticks
-    private SkillResult useStopCurse(ServerPlayerEntity player, ServerPlayerEntity target) {
+    private SkillResult useStopCurse(ServerPlayerEntity player, LivingEntity target) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
 
@@ -98,9 +107,11 @@ public class InumakiSkillSet implements ISkillSet {
         if (data.burden + BURDEN_STOP > 100) return SkillResult.SEALED;
         if (!CooldownManager.isReady(data, "cd_inumaki_0", tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
-        if (target == null) return SkillResult.FAIL;
+        if (!(target instanceof ServerPlayerEntity p)) return SkillResult.FAIL;
 
-        EffectManager.apply(target, EffectType.STUN, 40);
+        PlayerData targetData = JJKMod.getPlayerRepository().load(p.getUuid());
+        CCManager.tryApplyCC(targetData, "stun", 40, tick);
+        JJKMod.getPlayerRepository().save(targetData);
 
         JJKMod.getCEManager().consume(player, CE_F);
         CooldownManager.set(data, "cd_inumaki_0", tick, CD_F);
@@ -121,8 +132,8 @@ public class InumakiSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, "cd_inumaki_1", tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SF)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 4.0);
-        for (ServerPlayerEntity target : targets) {
+        List<LivingEntity> targets = HitValidator.getNearby(player, 4.0);
+        for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
                     .skillName("explode_curse")
                     .build();
@@ -139,7 +150,7 @@ public class InumakiSkillSet implements ISkillSet {
     }
 
     // SR/keyId=2 ??sleep_curse (!?醫딅굶??: SLEEP 100?? ??④봄 ????곸젫
-    private SkillResult useSleepCurse(ServerPlayerEntity player, ServerPlayerEntity target) {
+    private SkillResult useSleepCurse(ServerPlayerEntity player, LivingEntity target) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
 
@@ -147,9 +158,11 @@ public class InumakiSkillSet implements ISkillSet {
         if (data.burden + BURDEN_SLEEP > 100) return SkillResult.SEALED;
         if (!CooldownManager.isReady(data, "cd_inumaki_2", tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
-        if (target == null) return SkillResult.FAIL;
+        if (!(target instanceof ServerPlayerEntity p)) return SkillResult.FAIL;
 
-        EffectManager.apply(target, EffectType.SLEEP, 100);
+        PlayerData targetData = JJKMod.getPlayerRepository().load(p.getUuid());
+        CCManager.tryApplyCC(targetData, "sleep", 100, tick);
+        JJKMod.getPlayerRepository().save(targetData);
 
         JJKMod.getCEManager().consume(player, CE_SR);
         CooldownManager.set(data, "cd_inumaki_2", tick, CD_SR);
@@ -169,7 +182,11 @@ public class InumakiSkillSet implements ISkillSet {
         if (!JJKMod.getCEManager().canAfford(player, CE_V)) return SkillResult.CE_INSUFFICIENT;
 
         List<ServerPlayerEntity> allies = HitValidator.getNearby(player, 8.0).stream()
-                .filter(t -> !JJKMod.getTeamManager().isEnemy(player, t))
+                .filter(t -> {
+                    if (!(t instanceof ServerPlayerEntity p)) return false;
+                    return !JJKMod.getTeamManager().isEnemy(player, p);
+                })
+                .map(t -> (ServerPlayerEntity) t)
                 .collect(Collectors.toList());
 
         for (ServerPlayerEntity ally : allies) {
@@ -187,6 +204,7 @@ public class InumakiSkillSet implements ISkillSet {
 
         JJKMod.getCEManager().consume(player, CE_V);
         CooldownManager.set(data, "cd_inumaki_3", tick, CD_V);
+        applyBurden(player, data, BURDEN_V, tick);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_V);
         return SkillResult.SUCCESS;

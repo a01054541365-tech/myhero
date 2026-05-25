@@ -10,6 +10,7 @@ public class DomainInstance {
     public final String domainId;
     public final BlockPos center;
     public final boolean isOpen;
+    public final boolean isIncomplete;
     public final float maxRadius;
     public final boolean sureHitActive;
     public final boolean autoTargetAll;
@@ -17,9 +18,10 @@ public class DomainInstance {
     public float wallHp;
     public float currentRadius;
     public int ticksAlive;
+    public long expireAtTick;
 
     public DomainInstance(UUID ownerUuid, String domainId, BlockPos center,
-                          float wallHp, float radius, boolean isOpen,
+                          float wallHp, float radius, boolean isOpen, boolean isIncomplete,
                           boolean sureHitActive, boolean autoTargetAll) {
         this.instanceId = UUID.randomUUID();
         this.ownerUuid = ownerUuid;
@@ -29,12 +31,15 @@ public class DomainInstance {
         this.maxRadius = radius;
         this.currentRadius = radius;
         this.isOpen = isOpen;
+        this.isIncomplete = isIncomplete;
         this.sureHitActive = sureHitActive;
         this.autoTargetAll = autoTargetAll;
         this.ticksAlive = 0;
     }
 
-    public boolean isExpired(int zoneDurationTicks) {
-        return ticksAlive >= zoneDurationTicks || (wallHp <= 0 && !isOpen);
+    public boolean isExpired(long currentTick) {
+        if (expireAtTick > 0 && currentTick >= expireAtTick) return true;
+        if (wallHp <= 0 && !isOpen) return true;
+        return false;
     }
 }

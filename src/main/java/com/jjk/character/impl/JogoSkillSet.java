@@ -12,6 +12,7 @@ import com.jjk.effect.EffectManager;
 import com.jjk.effect.EffectType;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.Vec3d;
 
@@ -81,11 +82,13 @@ public class JogoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 4.0);
-        for (ServerPlayerEntity target : targets) {
-            EffectManager.apply(target, EffectType.BURN, 80);
+        float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
+        List<LivingEntity> targets = HitValidator.getNearby(player, 4.0);
+        for (LivingEntity target : targets) {
+            if (target instanceof ServerPlayerEntity p) EffectManager.apply(p, EffectType.BURN, 80);
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_F)
                     .skillName("volcanic_bullet")
+                    .externalBuffMult(rainMult)
                     .build();
             JJKMod.getCombatPipeline().process(ctx);
         }
@@ -105,9 +108,10 @@ public class JogoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SF)) return SkillResult.CE_INSUFFICIENT;
 
+        float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
         Vec3d facing = player.getRotationVec(1.0f);
-        List<ServerPlayerEntity> nearby = HitValidator.getNearby(player, 10.0);
-        for (ServerPlayerEntity target : nearby) {
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 10.0);
+        for (LivingEntity target : nearby) {
             Vec3d toTarget = target.getPos().subtract(player.getPos());
             double forward = toTarget.dotProduct(facing);
             if (forward < 0 || forward > 10.0) continue;
@@ -115,6 +119,7 @@ public class JogoSkillSet implements ISkillSet {
             if (lateral.length() > 2.0) continue;
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
                     .skillName("coffin_of_iron_mountain")
+                    .externalBuffMult(rainMult)
                     .build();
             JJKMod.getCombatPipeline().process(ctx);
         }
@@ -139,7 +144,7 @@ public class JogoSkillSet implements ISkillSet {
         Vec3d strikePos = player.getPos().add(direction.multiply(10.0));
         JJKMod.getEffectDeferQueue().schedule(
                 net.minecraft.util.math.BlockPos.ofFloored(strikePos),
-                BD_R, 40, player.getUuid());
+                BD_R, 40, player.getUuid(), tick);
 
         JJKMod.getCEManager().consume(player, CE_R);
         CooldownManager.set(data, cdKey, tick, CD_R);
@@ -156,10 +161,12 @@ public class JogoSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 6.0);
-        for (ServerPlayerEntity target : targets) {
+        float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
+        List<LivingEntity> targets = HitValidator.getNearby(player, 6.0);
+        for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SR)
                     .skillName("ring_of_flames")
+                    .externalBuffMult(rainMult)
                     .build();
             JJKMod.getCombatPipeline().process(ctx);
         }

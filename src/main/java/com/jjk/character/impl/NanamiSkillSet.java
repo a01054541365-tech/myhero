@@ -10,11 +10,11 @@ import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.List;
-import java.util.Random;
 
 public class NanamiSkillSet implements ISkillSet {
 
@@ -32,10 +32,6 @@ public class NanamiSkillSet implements ISkillSet {
     private static final long NIGHT_START = 13000L;
 
     // ??λ뻻?? ratio_attack ?곕떽? 燁살꼶梨?? ?類ｌぇ 30%
-    private static final float CRIT_BONUS_CHANCE = 0.30f;
-    private static final float CRIT_MULTIPLIER = 1.5f;
-
-    private static final Random RANDOM = new Random();
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -84,29 +80,29 @@ public class NanamiSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
 
-        List<ServerPlayerEntity> targets = HitValidator.getNearby(player, 3.0);
+        List<LivingEntity> targets = HitValidator.getNearby(player, 3.0);
         if (targets.isEmpty()) return SkillResult.FAIL;
 
-        ServerPlayerEntity target = targets.get(0);
+        LivingEntity target = targets.get(0);
 
         // 7:3 ??뚯젎 ?癒?젟: ?????怨룸뼊 30% (Y??域뱀눘沅?
-        double attackerUpperY = player.getPos().y + player.getHeight() * 0.7;
-        double targetCenterY  = target.getPos().y + target.getHeight() * 0.5;
-        boolean weakPoint = targetCenterY > attackerUpperY;
+        double targetFeetY = target.getY();
+        double targetHeight = target.getHeight();
+        double weakZoneBottom = targetFeetY + targetHeight * 0.70;
+        double attackY = player.getEyeY() - player.getRotationVec(1.0f).y * 2.0;
+        boolean isWeakSpot = attackY >= weakZoneBottom;
         // ??λ뻻?? +30% ?곕떽? ?類ｌぇ嚥?燁살꼶梨??
-        boolean crit = weakPoint || RANDOM.nextFloat() < CRIT_BONUS_CHANCE;
-
-        float buffMult = getOvertimeMult(data, tick);
-        float critMult = crit ? CRIT_MULTIPLIER : 1.0f;
+        float buffMult = getOvertimeMult(data, tick, player.getWorld().getTimeOfDay());
 
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_F)
-                .externalBuffMult(buffMult * critMult)
+                .externalBuffMult(buffMult * (isWeakSpot ? 1.5f : 1.0f))
                 .skillName("ratio_attack")
                 .build();
         JJKMod.getCombatPipeline().process(ctx);
 
         JJKMod.getCEManager().consume(player, CE_F);
         CooldownManager.set(data, cdKey, tick, CD_F);
+        applyNightFlag(data, player);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_F);
         return SkillResult.SUCCESS;
@@ -124,6 +120,7 @@ public class NanamiSkillSet implements ISkillSet {
 
         JJKMod.getCEManager().consume(player, CE_SF);
         CooldownManager.set(data, cdKey, tick, CD_SF);
+        applyNightFlag(data, player);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_SF);
         return SkillResult.SUCCESS;
@@ -138,8 +135,8 @@ public class NanamiSkillSet implements ISkillSet {
         if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
 
         Vec3d facing = player.getRotationVec(1.0f);
-        List<ServerPlayerEntity> nearby = HitValidator.getNearby(player, 6.0);
-        for (ServerPlayerEntity target : nearby) {
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 6.0);
+        for (LivingEntity target : nearby) {
             Vec3d toTarget = target.getPos().subtract(player.getPos());
             double forward = toTarget.dotProduct(facing);
             if (forward <= 0 || forward > 5.0) continue;
@@ -153,14 +150,26 @@ public class NanamiSkillSet implements ISkillSet {
 
         JJKMod.getCEManager().consume(player, CE_SR);
         CooldownManager.set(data, cdKey, tick, CD_SR);
+        applyNightFlag(data, player);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_SR);
         return SkillResult.SUCCESS;
     }
 
-    // R ??domain_deploy: ceCost=0, CD=0, DomainManager ?袁⑹뿫
+    // R: domain_deploy — CE check + cooldown guard
     private SkillResult useDomainDeploy(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        String cdKey = "cd_nanami_3";
+        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
+        if (!JJKMod.getCEManager().canAfford(player, CE_R)) return SkillResult.CE_INSUFFICIENT;
+
         JJKMod.getDomainManager().deployDomain("nanami_domain", player);
+
+        JJKMod.getCEManager().consume(player, CE_R);
+        CooldownManager.set(data, cdKey, tick, CD_R);
+        applyNightFlag(data, player);
+        JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_R);
         return SkillResult.SUCCESS;
     }
@@ -176,6 +185,7 @@ public class NanamiSkillSet implements ISkillSet {
         JJKMod.getCEManager().consume(player, CE_V);
         data.healingActive = true;
         CooldownManager.set(data, cdKey, tick, CD_V);
+        applyNightFlag(data, player);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_V);
         return SkillResult.SUCCESS;
@@ -200,12 +210,16 @@ public class NanamiSkillSet implements ISkillSet {
     }
 
     // overtime_work 甕곌쑵遊?獄쏄퀣???④쑴沅?(DamageCalculator ??????쎄텢????곷퓠??externalBuffMult嚥??袁⑤뼎)
-    private float getOvertimeMult(PlayerData data, long tick) {
+    private float getOvertimeMult(PlayerData data, long currentTick, long timeOfDay) {
         Long overtimeUntil = data.cooldowns.get("buff_overtime");
-        if (overtimeUntil == null || tick >= overtimeUntil) return 1.0f;
-        // ??⑥퍢 筌ｋ똾寃?(13000~23999???닌덉퍢)
-        boolean isNight = (tick % 24000L) >= NIGHT_START;
+        if (overtimeUntil == null || currentTick >= overtimeUntil) return 1.0f;
+        boolean isNight = timeOfDay >= NIGHT_START;
         return isNight ? 1.35f : 1.25f;
+    }
+
+    private static void applyNightFlag(PlayerData data, ServerPlayerEntity player) {
+        long timeOfDay = player.getWorld().getTimeOfDay() % 24000;
+        data.overtimeWork = timeOfDay >= 13000 && timeOfDay <= 23000;
     }
 
     private static void broadcastAnim(ServerPlayerEntity player, int animId) {

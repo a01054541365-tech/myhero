@@ -6,6 +6,7 @@ import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.codec.PacketCodecs;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Uuids;
 
 import java.util.UUID;
 
@@ -16,9 +17,9 @@ public record AnimationTriggerS2CPacket(UUID targetUuid, byte animId) implements
 
     public static final PacketCodec<RegistryByteBuf, AnimationTriggerS2CPacket> CODEC =
             PacketCodec.tuple(
-                    PacketCodecs.STRING,  pkt -> pkt.targetUuid().toString(),
-                    PacketCodecs.INTEGER, pkt -> (int) pkt.animId(),
-                    (str, i) -> new AnimationTriggerS2CPacket(UUID.fromString(str), (byte) i.intValue())
+                    Uuids.PACKET_CODEC, AnimationTriggerS2CPacket::targetUuid,
+                    PacketCodecs.BYTE,   AnimationTriggerS2CPacket::animId,
+                    AnimationTriggerS2CPacket::new
             );
 
     @Override
