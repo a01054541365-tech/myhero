@@ -2,15 +2,13 @@ package com.jjk.ce;
 
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
-import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 public class CEManager {
 
-    private static final int COMBAT_WINDOW_TICKS = 100;
-
     private final JjkConfig config;
+    private final CEPool pool = new CEPool();
 
     public CEManager(JjkConfig config) {
         this.config = config;
@@ -20,30 +18,21 @@ public class CEManager {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         if (data.characterId == null) return;
 
-        if ("sukuna".equals(data.characterId)) {
-            float baseMax = CharacterRegistry.get("sukuna").ceMax();
-            float bonus = JJKMod.getFingerSystem()
-                .getFingerCeBonus(data.fingerCount);
-            data.ceMax = baseMax + bonus;
-        }
-
         long currentTick = player.getWorld().getTime();
-        boolean inCombat = (currentTick - data.lastCombatTick) < COMBAT_WINDOW_TICKS;
-        float rate = inCombat ? (float) config.ceRegenInCombat : (float) config.ceRegenOutOfCombat;
-
-        if ("nanami".equals(data.characterId) && data.overtimeWork) {
-            rate *= 1.5f;
-        }
-
-        if ("hakari".equals(data.characterId) && data.jackpotActive) {
-            // §LOCK: CE regen 상한 max_ce × 20%/s = max_ce × 0.01/틱
-            float jackpotCap = data.ceMax * 0.01f;
-            rate = Math.min(rate, jackpotCap);
-            // §LOCK: 자동 치유 1HP/틱
-            data.hpCurrent = Math.min(data.hpCurrent + 1f, data.hpMax);
-        }
+        CERegenRule rule = pool.getRule(data.characterId);
+        float rate = rule.regenPerTick(data, currentTick, config);
 
         data.ceCurrent = Math.min(data.ceCurrent + rate, data.ceMax);
+
+        // §6-2 고죠 무한 유지비: 30/s = 1.5/틱, CE 부족 시 자동 해제
+        if (data.infinityActive) {
+            if (data.ceCurrent < 1.5f) {
+                data.infinityActive = false;
+            } else {
+                data.ceCurrent -= 1.5f;
+            }
+        }
+
         JJKMod.getPlayerRepository().save(data);
     }
 
@@ -58,5 +47,17 @@ public class CEManager {
         data.ceCurrent -= amount;
         JJKMod.getPlayerRepository().save(data);
         return true;
+    }
+
+    // Pure-data overloads (CombatPipeline.processData 및 테스트용)
+    public boolean consumeCE(PlayerData data, float amount) {
+        // 잭팟 중 CE CAP 체크 우회 — 차감은 항상 진행, 음수 보호만 유지
+        if (!data.jackpotActive && data.ceCurrent < amount) return false;
+        data.ceCurrent = Math.max(0f, data.ceCurrent - amount);
+        return true;
+    }
+
+    public void refundCE(PlayerData data, float amount) {
+        data.ceCurrent = Math.min(data.ceCurrent + amount, data.ceMax);
     }
 }

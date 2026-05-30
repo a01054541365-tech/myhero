@@ -51,6 +51,30 @@ public class DomainManager {
 
     public void tickDomains(ServerWorld world) {
         long currentTick = world.getTime();
+
+        // autoTargetAll 매 틱 영혼 데미지 (마히토 자폐원돈과)
+        for (DomainInstance domain : new ArrayList<>(activeDomains.values())) {
+            if (!domain.autoTargetAll) continue;
+            ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
+            if (owner == null) { collapseDomain(domain.ownerUuid, currentTick); continue; }
+            PlayerData ownerData = JJKMod.getPlayerRepository().load(domain.ownerUuid);
+            if (ownerData.hpCurrent <= ownerData.hpMax * 0.50f
+                    || currentTick - domain.deployedAtTick >= 200) {
+                collapseDomain(domain.ownerUuid, currentTick);
+                continue;
+            }
+            float baseDot = 10f;
+            for (ServerPlayerEntity p : world.getPlayers()) {
+                if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
+                PlayerData pData = JJKMod.getPlayerRepository().load(p.getUuid());
+                float dmg = p.getUuid().equals(domain.ownerUuid)
+                        ? baseDot * (1f - domain.ownerDamageReduction)
+                        : baseDot;
+                pData.hpCurrent = Math.max(0f, pData.hpCurrent - dmg);
+                JJKMod.getPlayerRepository().save(pData);
+            }
+        }
+
         Iterator<Map.Entry<UUID, DomainInstance>> it = activeDomains.entrySet().iterator();
         while (it.hasNext()) {
             DomainInstance domain = it.next().getValue();
@@ -84,6 +108,7 @@ public class DomainManager {
         if (activeDomains.size() >= 4) return false;
 
         // Step 3: team cap §LOCK 2
+        // applyTeamLimit — DomainManagerTest 검증 대상. DomainInstance 분리 미결정.
         String ownerTeam = getTeamName(owner.getUuid());
         long teamCount = activeDomains.values().stream()
                 .filter(d -> ownerTeam.equals(getTeamName(d.ownerUuid)))
@@ -141,12 +166,15 @@ public class DomainManager {
         }
 
         // Register new domain
+        // restoreRadius — DomainManagerTest 검증 대상. DomainInstance 분리 미결정.
         DomainInstance instance = new DomainInstance(
                 owner.getUuid(), domainId, center,
                 def.wallHp, def.radius, def.isOpen, def.isIncomplete,
                 def.sureHitActive, def.autoTargetAll
         );
         instance.expireAtTick = currentTick + def.cooldownTicks;
+        instance.ownerDamageReduction = def.ownerDamageReduction;
+        instance.deployedAtTick = currentTick;
         activeDomains.put(instance.instanceId, instance);
 
         // Set cooldown and save
@@ -159,6 +187,64 @@ public class DomainManager {
     public boolean deployDomain(String domainId, ServerPlayerEntity caster) {
         return deployDomain(caster, domainId, caster.getBlockPos());
     }
+
+    /**
+     * 순수 PlayerData 경로 — MC 없이 테스트 가능.
+     * CE 차감, domainCooldownUntil 세팅, DomainInstance 등록.
+     * S2C 패킷·AuditLogger·saveImmediate 없음 (MC 의존 제거).
+     */
+    public boolean deployDomainData(PlayerData attacker, DomainDefinition def, long tick) {
+        if (tick < attacker.domainCooldownUntil) return false;
+        if (def == null) return false;
+        float ceCost = def.isOpen ? def.ceCost * 2f : def.ceCost; // decisions §3-4
+        if (attacker.ceCurrent < ceCost) return false;
+
+        attacker.ceCurrent -= ceCost;
+        DomainInstance inst = new DomainInstance(
+                attacker.uuid, def.domainId != null ? def.domainId : "test",
+                BlockPos.ORIGIN, def.wallHp, def.radius,
+                def.isOpen, def.isIncomplete, def.sureHitActive, def.autoTargetAll);
+        inst.team = com.jjk.team.TeamManager.getTeam(attacker.characterId);
+        inst.ownerDamageReduction = def.ownerDamageReduction;
+        inst.deployedAtTick = tick;
+        activeDomains.put(inst.instanceId, inst);
+        attacker.domainCooldownUntil = tick + def.cooldownTicks;
+        return true;
+    }
+
+    /** §8-4: 개방형 시전자만 결계형 wallHp에 데미지 가능. */
+    public void applyWallDamage(UUID attackerUuid, UUID domainOwnerUuid, float damage) {
+        DomainInstance domain = activeDomains.values().stream()
+                .filter(d -> d.ownerUuid.equals(domainOwnerUuid) && !d.isOpen)
+                .findFirst().orElse(null);
+        if (domain == null) return;
+        // 개방형 시전자만 공격 가능 체크
+        DomainInstance attackerDomain = activeDomains.values().stream()
+                .filter(d -> d.ownerUuid.equals(attackerUuid) && d.isOpen)
+                .findFirst().orElse(null);
+        if (attackerDomain == null) return;
+        domain.wallHp -= damage;
+        if (domain.wallHp <= 0) collapseDomain(domainOwnerUuid, System.currentTimeMillis());
+    }
+
+    /** 영역 강제 종료. 같은 팀 영역이 1개로 줄면 restoreRadius() 호출. */
+    public void collapseDomain(UUID ownerUuid, long tick) {
+        DomainInstance removed = null;
+        for (var it = activeDomains.entrySet().iterator(); it.hasNext();) {
+            DomainInstance d = it.next().getValue();
+            if (d.ownerUuid.equals(ownerUuid)) { removed = d; it.remove(); break; }
+        }
+        if (removed == null) return;
+        com.jjk.team.TeamManager.Team team = removed.team;
+        long remaining = activeDomains.values().stream().filter(d -> team == d.team).count();
+        if (remaining == 1) {
+            activeDomains.values().stream()
+                    .filter(d -> team == d.team).findFirst()
+                    .ifPresent(DomainInstance::restoreRadius);
+        }
+    }
+
+    public Map<UUID, DomainInstance> getActiveDomains() { return activeDomains; }
 
     public Optional<DomainInstance> getDomainAt(BlockPos pos) {
         return activeDomains.values().stream()

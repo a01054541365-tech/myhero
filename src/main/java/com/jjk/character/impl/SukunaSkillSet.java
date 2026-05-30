@@ -7,200 +7,179 @@ import com.jjk.api.skill.SkillResult;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
+import com.jjk.effect.FireEffectManager;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
 
-import java.util.HashSet;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 
 public class SukunaSkillSet implements ISkillSet {
 
-    private static final float BD_0 = 55f;
-    private static final float BD_1 = 18f;
-    private static final float BD_2 = 62f;
-    private static final float BD_4 = 40f;
+    // §LOCK: 운영자 확정 2026-05-28 — 변경 금지
+    private static final float BD_F  = 8f;
+    private static final float BD_SF = 18f;
+    private static final float BD_R  = 30f;
+    private static final float BD_SR = 50f;
 
-    private static final int CE_0 = 180,  CD_0 = 6,   ANIM_0 = 21;
-    private static final int CE_1 = 320,  CD_1 = 14,  ANIM_1 = 22;
-    private static final int CE_2 = 250,  CD_2 = 18,  ANIM_2 = 23;
-    private static final int CE_3 = 6000, CD_3 = 360, ANIM_3 = 24;
-    private static final int CE_4 = 200,  CD_4 = 10,  ANIM_4 = 60;
+    private static final int CE_F  = 10,  CD_F  = 10,  ANIM_F  = 21;
+    private static final int CE_SF = 25,  CD_SF = 40,  ANIM_SF = 22;
+    private static final int CE_R  = 50,  CD_R  = 120, ANIM_R  = 23;
+    private static final int CE_SR = 100, CD_SR = 240, ANIM_SR = 24;
+    private static final int CE_V  = 200, CD_V  = 360, ANIM_V  = 7;
+
+    // §LOCK: 필살참 HP 비례 추가 피해 — 변경 금지
+    private static final float HP_BONUS_RATIO = 0.20f;
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
-        return switch (keyId) {
-            case 0 -> useDismantle(player);
-            case 1 -> useCleave(player);
-            case 2 -> useFireArrow(player);
-            case 3 -> useMalevolentShrine(player);
-            case 4 -> useReverseCursedTerritory(player);
-            default -> SkillResult.FAIL;
-        };
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        return dispatch(keyId, data, player, tick);
     }
 
     @Override
     public boolean canUse(ServerPlayerEntity player, int keyId) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
-        return data.cooldowns.getOrDefault("skill_" + keyId, 0L) <= tick
-                && JJKMod.getCEManager().canAfford(player, getCeCost(keyId));
+        return data.cooldowns.getOrDefault(String.valueOf(keyId), 0L) <= tick
+                && data.ceCurrent >= getCeCost(keyId);
     }
 
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; default -> 0;
+            case 0 -> CD_F; case 1 -> CD_SF; case 2 -> CD_R;
+            case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> CE_4; default -> 0;
+            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R;
+            case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
         };
     }
 
     @Override
     public String getSkillName(int keyId) {
         return switch (keyId) {
-            case 0 -> "dismantle";
-            case 1 -> "cleave";
-            case 2 -> "fire_arrow";
-            case 3 -> "malevolent_shrine";
-            case 4 -> "reverse_cursed_territory";
-            default -> "unknown";
+            case 0 -> "해체(解體)"; case 1 -> "필살참(捌)"; case 2 -> "개(開)·화염";
+            case 3 -> "세계절단참"; case 4 -> "복마어주자"; default -> "unknown";
         };
     }
 
-    // F — 해(解): single melee, front 3 blocks
-    private SkillResult useDismantle(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_0", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_0)) return SkillResult.CE_INSUFFICIENT;
+    // ── onX PlayerData 경로 ──────────────────────────────────────────────────────
 
-        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 3.0, 120f);
-        for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_0)
-                    .skillName("dismantle")
-                    .build();
-            JJKMod.getCombatPipeline().process(ctx);
-        }
+    /** F — 해체(解體): 직선 참격 투사체 (EffectDeferQueue 4틱 지연) */
+    @Override
+    public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        data.cooldowns.put("skill_0", tick + CD_0);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_0);
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 15.0);
+        LivingEntity target = nearby.stream()
+                .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
+        if (target == null) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_F;
+        JJKMod.getEffectDeferQueue().schedule(
+                target.getBlockPos(), BD_F, 4, player.getUuid(), tick);
+        data.cooldowns.put("0", tick + CD_F);
+        broadcastAnim(player, ANIM_F);
         return SkillResult.SUCCESS;
     }
 
-    // G/Shift+F — 팔(捌): 4-direction multi-hit, dampening per hit index
-    private SkillResult useCleave(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_1", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+    /** Shift+F — 필살참(捌): baseDamage + target.hpCurrent × 0.20f */
+    @Override
+    public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_SF) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        // NORTH(-Z), SOUTH(+Z), EAST(+X), WEST(-X)
-        Vec3d[] dirs = {
-            new Vec3d(0, 0, -1),
-            new Vec3d(0, 0,  1),
-            new Vec3d( 1, 0, 0),
-            new Vec3d(-1, 0, 0)
-        };
-        float[] dampening = { 1.0f, 0.85f, 0.70f, 0.70f };
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 10.0);
+        LivingEntity target = nearby.stream()
+                .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
+        if (target == null) return SkillResult.FAIL_NO_TARGET;
 
-        Set<UUID> hitTargets = new HashSet<>();
-        List<LivingEntity> nearby = HitValidator.getNearby(player, 5.0);
+        float bonusDamage = target.getHealth() * HP_BONUS_RATIO; // §LOCK: 0.20f
+        float totalDamage = BD_SF + bonusDamage;
 
-        for (int i = 0; i < dirs.length; i++) {
-            Vec3d dirVec = dirs[i];
-            float damp = dampening[i];
-            for (LivingEntity target : nearby) {
-                if (hitTargets.contains(target.getUuid())) continue;
-                Vec3d toTarget = target.getPos().subtract(player.getPos());
-                if (toTarget.lengthSquared() < 0.001) continue;
-                double dot = dirVec.dotProduct(toTarget.normalize());
-                if (dot < 0.5) continue;
-                hitTargets.add(target.getUuid());
-                DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_1 * damp)
-                        .skillName("cleave")
-                        .hitIndex(i)
-                        .build();
-                JJKMod.getCombatPipeline().process(ctx);
+        data.ceCurrent -= CE_SF;
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, totalDamage)
+                .skillName("cleave").keyId(1).build();
+        JJKMod.getCombatPipeline().process(ctx);
+        data.cooldowns.put("1", tick + CD_SF);
+        broadcastAnim(player, ANIM_SF);
+        return SkillResult.SUCCESS;
+    }
+
+    /** R — 개(開)·화염: 반경 4블록 범위 폭발 + 화상 80틱 */
+    @Override
+    public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        List<LivingEntity> targets = HitValidator.getNearby(player, 4.0);
+        if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_R;
+        for (LivingEntity target : targets) {
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_R)
+                    .skillName("fire_arrow").keyId(2).build();
+            JJKMod.getCombatPipeline().process(ctx);
+            if (target instanceof ServerPlayerEntity targetPlayer) {
+                PlayerData targetData = JJKMod.getPlayerRepository().load(targetPlayer.getUuid());
+                FireEffectManager.apply(targetData, 80, tick);
+                JJKMod.getPlayerRepository().save(targetData);
             }
         }
-
-        JJKMod.getCEManager().consume(player, CE_1);
-        data.cooldowns.put("skill_1", tick + CD_1);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_1);
+        data.cooldowns.put("2", tick + CD_R);
+        broadcastAnim(player, ANIM_R);
         return SkillResult.SUCCESS;
     }
 
-    // R — 화염화살: deferred hit 10 ticks, 15 blocks ahead
-    private SkillResult useFireArrow(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_2", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
+    /** Shift+R — 세계절단참: isSoulDirect=true, bypassRCT=true (방어·RCT 무시) */
+    @Override
+    public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        Vec3d dir = player.getRotationVec(1.0f);
-        Vec3d targetPos = player.getPos().add(dir.multiply(15.0));
-        JJKMod.getEffectDeferQueue().schedule(BlockPos.ofFloored(targetPos), BD_2, 10, player.getUuid(), tick);
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 12.0);
+        LivingEntity target = nearby.stream()
+                .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
+        if (target == null) return SkillResult.FAIL_NO_TARGET;
 
-        JJKMod.getCEManager().consume(player, CE_2);
-        data.cooldowns.put("skill_2", tick + CD_2);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_2);
+        data.ceCurrent -= CE_SR;
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_SR)
+                .soulDirect().bypassRCT().skillName("dismantle").keyId(3).build();
+        JJKMod.getCombatPipeline().process(ctx);
+        data.cooldowns.put("3", tick + CD_SR);
+        broadcastAnim(player, ANIM_SR);
         return SkillResult.SUCCESS;
     }
 
-    // H/Shift+R — 복마어주자 (영역 전개), isOpen=true so CE cost is 6000
-    private SkillResult useMalevolentShrine(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_3", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_3)) return SkillResult.CE_INSUFFICIENT;
+    /** V — 복마어주자(伏魔御廚子): 개방형 영역 전개 */
+    @Override
+    public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_CONDITION;
 
         boolean deployed = JJKMod.getDomainManager().deployDomain("sukuna_malevolent_shrine", player);
-        if (!deployed) return SkillResult.FAIL;
-
-        JJKMod.getCEManager().consume(player, CE_3);
-        data.domainCooldownUntil = tick + CD_3;
-        data.cooldowns.put("skill_3", tick + CD_3);
-        JJKMod.getPlayerRepository().saveImmediate(data);
-        broadcastAnim(player, ANIM_3);
-        return SkillResult.SUCCESS;
-    }
-
-    // V — 역천지변: front cone ±45°, 5 blocks
-    private SkillResult useReverseCursedTerritory(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_4", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_4)) return SkillResult.CE_INSUFFICIENT;
-
-        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 5.0, 90f);
-        for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_4)
-                    .skillName("reverse_cursed_territory")
-                    .build();
-            JJKMod.getCombatPipeline().process(ctx);
-        }
-
-        JJKMod.getCEManager().consume(player, CE_4);
-        data.cooldowns.put("skill_4", tick + CD_4);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_4);
+        if (!deployed) return SkillResult.FAIL_CONDITION;
+        broadcastAnim(player, ANIM_V);
         return SkillResult.SUCCESS;
     }
 

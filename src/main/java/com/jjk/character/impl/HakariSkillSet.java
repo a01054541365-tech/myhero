@@ -14,8 +14,10 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class HakariSkillSet implements ISkillSet {
 
@@ -79,6 +81,95 @@ public class HakariSkillSet implements ISkillSet {
             case 4 -> "domain_deploy";
             default -> "unknown";
         };
+    }
+
+    // ── onX PlayerData 경로 ──────────────────────────────────────────────────────
+
+    @Override
+    public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_CONDITION;
+
+        data.ceCurrent -= CE_F;
+        boolean jackpot = JackpotStateMachine.tryJackpot(data, tick, JJKMod.getConfig());
+        if (!jackpot) data.ceCurrent += CE_F;
+        data.cooldowns.put("0", tick + 20);
+        ServerPlayNetworking.send(player,
+                new SkillResultS2CPacket(0, jackpot ? "jackpot_success" : "jackpot_fail", 0f));
+        broadcastAnim(player, ANIM_F);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        List<LivingEntity> nearby = HitValidator.getNearby(player, 10.0);
+        LivingEntity target = nearby.stream()
+                .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
+        if (target == null) return SkillResult.FAIL_NO_TARGET;
+
+        float damage = JackpotStateMachine.isJackpotActive(data, tick) ? BD_SF * 1.5f : BD_SF;
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, damage)
+                .skillName("power_output").keyId(1).build();
+        JJKMod.getCombatPipeline().process(ctx);
+        data.cooldowns.put("1", tick + CD_SF);
+        broadcastAnim(player, ANIM_SF);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.cooldowns.getOrDefault("jackpot_retry_used", 0L) > 0L) return SkillResult.FAIL_CONDITION;
+        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_CONDITION;
+
+        data.ceCurrent -= CE_R;
+        JackpotStateMachine.tryJackpot(data, tick, JJKMod.getConfig());
+        data.cooldowns.put("jackpot_retry_used", tick + 1);
+        data.cooldowns.put("2", tick + CD_R);
+        broadcastAnim(player, ANIM_R);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_SR;
+        int roll = ThreadLocalRandom.current().nextInt(3);
+        switch (roll) {
+            case 0 -> applyUncertainShockwave(player);
+            case 1 -> applyUncertainCEAbsorb(player, data);
+            case 2 -> applyUncertainSlowZone(player);
+        }
+        data.cooldowns.put("3", tick + CD_SR);
+        ServerPlayNetworking.send(player,
+                new SkillResultS2CPacket(3, "hakari_shift_r_" + roll, 0f));
+        broadcastAnim(player, ANIM_SR);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_CONDITION;
+
+        boolean deployed = JJKMod.getDomainManager().deployDomain("hakari_jackpot_domain", player);
+        if (!deployed) return SkillResult.FAIL_CONDITION;
+        broadcastAnim(player, ANIM_V);
+        return SkillResult.SUCCESS;
     }
 
     // F ??jackpot_activate: 1/239 ?곕뗄爰? 吏쟊OCK jackpotDurationTicks??config?癒?퐣筌???뚯벉.

@@ -12,9 +12,6 @@ import net.minecraft.world.World;
 import software.bernie.geckolib.animatable.GeoAnimatable;
 import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.animation.AnimatableManager;
-import software.bernie.geckolib.animation.Animation;
-import software.bernie.geckolib.animation.AnimationController;
-import software.bernie.geckolib.animation.RawAnimation;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.UUID;
@@ -41,18 +38,9 @@ public class RikaEntity extends PathAwareEntity implements GeoAnimatable {
         }
     }
 
-    // GeoAnimatable ??runs client-side during rendering only
+    // 애니메이션 제어는 클라이언트 렌더러에서 처리 — 서버 엔티티는 no-op
     @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {
-        registrar.add(new AnimationController<>(this, "rika_main", 5, state -> {
-            byte animId = getPendingAnimId();
-            if (animId == 0) {
-                return state.setAndContinue(RawAnimation.begin().thenLoop("animation.rika.idle"));
-            }
-            String animName = AnimationRegistry.get(animId);
-            return state.setAndContinue(RawAnimation.begin().then(animName, Animation.LoopType.PLAY_ONCE));
-        }));
-    }
+    public void registerControllers(AnimatableManager.ControllerRegistrar registrar) {}
 
     @Override
     public AnimatableInstanceCache getAnimatableInstanceCache() { return cache; }

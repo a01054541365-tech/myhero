@@ -70,6 +70,69 @@ public class HigurumaskillSet implements ISkillSet {
         };
     }
 
+    // ── onX PlayerData 경로 ──────────────────────────────────────────────────────
+
+    @Override
+    public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_0) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        LivingEntity found = findAimedTarget(player, 8.0);
+        if (!(found instanceof ServerPlayerEntity target)) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_0;
+        JJKMod.getTrialManager().addEvidence(player, target);
+        data.cooldowns.put("0", tick + CD_0);
+        broadcastAnim(player, ANIM_0);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
+        return SkillResult.NOT_IMPLEMENTED;
+    }
+
+    @Override
+    public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
+        return SkillResult.NOT_IMPLEMENTED;
+    }
+
+    @Override
+    public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_3) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        LivingEntity found = findAimedTarget(player, 8.0);
+        if (!(found instanceof ServerPlayerEntity target)) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_3;
+        JJKMod.getTrialManager().startTrial(player, target);
+        data.cooldowns.put("3", tick + CD_3);
+        broadcastAnim(player, ANIM_3);
+        return SkillResult.SUCCESS;
+    }
+
+    @Override
+    public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
+        if (!data.hasExecutionSword) return SkillResult.FAIL_CONDITION;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        LivingEntity target = findAimedTarget(player, 5.0);
+        if (target == null) return SkillResult.FAIL_NO_TARGET;
+
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.EXECUTIONER_SWORD, 999f)
+                .skillName("executioner_sword").keyId(4).build();
+        JJKMod.getCombatPipeline().process(ctx);
+        data.hasExecutionSword = false;
+        JJKMod.getPlayerRepository().saveImmediate(data);
+        broadcastAnim(player, ANIM_4);
+        return SkillResult.SUCCESS;
+    }
+
     // F — 증거 제출
     private SkillResult useSubmitEvidence(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());

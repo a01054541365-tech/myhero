@@ -19,6 +19,11 @@ public class DomainInstance {
     public float currentRadius;
     public int ticksAlive;
     public long expireAtTick;
+    public float ownerDamageReduction = 0f;
+    public long deployedAtTick = 0L;
+
+    // 소유자 진영 — deployDomain 시점에 TeamManager.getTeam()으로 세팅
+    public com.jjk.team.TeamManager.Team team;
 
     public DomainInstance(UUID ownerUuid, String domainId, BlockPos center,
                           float wallHp, float radius, boolean isOpen, boolean isIncomplete,
@@ -27,7 +32,8 @@ public class DomainInstance {
         this.ownerUuid = ownerUuid;
         this.domainId = domainId;
         this.center = center;
-        this.wallHp = wallHp;
+        // §8: 개방형은 wallHp = 0, 결계형은 domains.json 값 사용
+        this.wallHp = isOpen ? 0 : wallHp;
         this.maxRadius = radius;
         this.currentRadius = radius;
         this.isOpen = isOpen;
@@ -35,6 +41,16 @@ public class DomainInstance {
         this.sureHitActive = sureHitActive;
         this.autoTargetAll = autoTargetAll;
         this.ticksAlive = 0;
+    }
+
+    // §8-2: 같은 팀 영역 2개 이상 → 반경 절반으로 제한
+    public void applyTeamLimit(int teamDomainCount) {
+        if (teamDomainCount >= 2) this.currentRadius = this.maxRadius / 2;
+    }
+
+    // 팀 영역 수 감소 시 반경 복원
+    public void restoreRadius() {
+        this.currentRadius = this.maxRadius;
     }
 
     public boolean isExpired(long currentTick) {

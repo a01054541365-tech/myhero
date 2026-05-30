@@ -10,4 +10,5 @@ public class DomainDefinition {
     public boolean sureHitActive;
     public boolean autoTargetAll;
     public boolean isIncomplete;
+    public float ownerDamageReduction;
 }
