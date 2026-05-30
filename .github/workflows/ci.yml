@@ -1,0 +1,111 @@
+name: JJK Mod CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      - name: Run Tests
+        run: ./gradlew test --no-daemon
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: build/test-results/test/TEST-*.xml
+
+  lint-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*') }}
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Checkstyle
+        run: ./gradlew checkstyleMain --no-daemon
+
+      - name: Sourceset separation check
+        run: |
+          echo "=== Checking client-only imports in main sourceset ==="
+          VIOLATIONS=$(grep -rl "GeoEntityRenderer\|MinecraftClient\|WorldRenderer\|DomainBoundaryRenderer\|PlayerAnimationDispatcher" src/main/java 2>/dev/null || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "FAIL: client-only imports found in main sourceset:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "PASS: No violations found"
+
+      - name: Domain record check
+        run: |
+          if grep -r "record DomainInstance" src/main/java 2>/dev/null; then
+            echo "FAIL: DomainInstance declared as record"
+            exit 1
+          fi
+          echo "PASS: DomainInstance is class"
+
+      - name: Cooldown key check
+        run: |
+          FORBIDDEN=$(grep -rn '"domain"\|"awakening"' src/main/java | grep "cooldowns" | grep -v "//" || true)
+          if [ -n "$FORBIDDEN" ]; then
+            echo "FAIL: forbidden cooldown keys found:"
+            echo "$FORBIDDEN"
+            exit 1
+          fi
+          echo "PASS: No forbidden cooldown keys"
+
+      - name: GeckoLib version check
+        run: |
+          if grep -q "geckolib.*4\.8\.4\|4\.8\.4.*geckolib" build.gradle; then
+            echo "FAIL: GeckoLib 4.8.4 detected (must use 4.8.3)"
+            exit 1
+          fi
+          echo "PASS: GeckoLib 4.8.3 confirmed"

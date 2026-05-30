@@ -1,6 +1,7 @@
 package com.jjk;
 
 import com.jjk.character.CharacterCommandService;
+import com.jjk.command.JjkCommandRegistry;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -13,6 +14,7 @@ import net.minecraft.text.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import net.minecraft.server.MinecraftServer;
+import com.jjk.audit.AuditLogger;
 import com.jjk.awakening.AwakeningManager;
 import com.jjk.burden.BurdenManager;
 import com.jjk.ce.CEManager;
@@ -20,15 +22,19 @@ import com.jjk.character.CharacterRegistry;
 import com.jjk.character.SkillRegistry;
 import com.jjk.character.impl.*;
 import com.jjk.combat.CombatPipeline;
+import com.jjk.data.Migrator;
 import com.jjk.data.PlayerRepository;
 import com.jjk.domain.DomainManager;
+import com.jjk.entity.ShikigamiEntityTypes;
 import com.jjk.effect.EffectDeferQueue;
+import com.jjk.effect.FireEffectManager;
 import com.jjk.finger.FingerSystem;
 import com.jjk.network.Packets;
 import com.jjk.respawn.RespawnManager;
 import com.jjk.team.TeamManager;
 import com.jjk.tick.TickScheduler;
 import com.jjk.trial.TrialManager;
+import com.jjk.zone.ComboTracker;
 import com.jjk.zone.ZoneStateManager;
 
 import java.nio.file.Path;
@@ -42,6 +48,7 @@ public class JJKMod implements ModInitializer {
 
     private JjkConfig config;
     private PlayerRepository playerRepository;
+    private AuditLogger auditLogger;
     private CEManager ceManager;
     private AwakeningManager awakeningManager;
     private DomainManager domainManager;
@@ -53,6 +60,7 @@ public class JJKMod implements ModInitializer {
     private RespawnManager respawnManager;
     private EffectDeferQueue effectDeferQueue;
     private CombatPipeline combatPipeline;
+    private final ComboTracker comboTracker = new ComboTracker();
     private TickScheduler tickScheduler;
     private MinecraftServer server;
 
@@ -73,6 +81,8 @@ public class JJKMod implements ModInitializer {
         respawnManager = new RespawnManager(config);
         effectDeferQueue = new EffectDeferQueue();
         combatPipeline = new CombatPipeline();
+
+        ShikigamiEntityTypes.register();
 
         SkillRegistry.register("gojo",    new GojoSkillSet());
         SkillRegistry.register("itadori", new ItadoriSkillSet());
@@ -105,17 +115,20 @@ public class JJKMod implements ModInitializer {
         tickScheduler.register(burdenManager::tick, 1);
         tickScheduler.register(HakariSkillSet::tickJackpot, 1);
         tickScheduler.register(NanamiSkillSet::tickRCT, 10);
+        tickScheduler.register(FireEffectManager::tickFirePlayer, 1);
 
         Packets.register();
+        LOGGER.info("[JJK] 초기화 완료. schemaVersion={}", Migrator.CURRENT_VERSION);
 
-        // /jj — §10-1
+        // /jj — §10-1 (player commands via JjkCommandRegistry registered first, then OP subcommands)
+        JjkCommandRegistry.init();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
             dispatcher.register(
                 CommandManager.literal("jj")
-                    .requires(src -> src.hasPermissionLevel(2))
 
-                    // /jj reload
+                    // /jj reload (OP 2)
                     .then(CommandManager.literal("reload")
+                        .requires(src -> src.hasPermissionLevel(2))
                         .executes(ctx -> {
                             JJKMod.reloadConfig();
                             ctx.getSource().sendFeedback(() -> Text.literal("[JJK] Config reloaded."), true);
@@ -123,8 +136,9 @@ public class JJKMod implements ModInitializer {
                         })
                     )
 
-                    // /jj selectchar <player> <characterId>
+                    // /jj selectchar <player> <characterId> (OP 2)
                     .then(CommandManager.literal("selectchar")
+                        .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.argument("player", EntityArgumentType.player())
                             .then(CommandManager.argument("characterId", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
@@ -160,8 +174,9 @@ public class JJKMod implements ModInitializer {
                         )
                     )
 
-                    // /jj data save <player>
+                    // /jj data save <player> (OP 2)
                     .then(CommandManager.literal("data")
+                        .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.literal("save")
                             .then(CommandManager.argument("player", EntityArgumentType.player())
                                 .executes(ctx -> {
@@ -178,8 +193,9 @@ public class JJKMod implements ModInitializer {
                         )
                     )
 
-                    // /jj domain clear
+                    // /jj domain clear (OP 2)
                     .then(CommandManager.literal("domain")
+                        .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.literal("clear")
                             .executes(ctx -> {
                                 JJKMod.getDomainManager().clearAll();
@@ -192,24 +208,13 @@ public class JJKMod implements ModInitializer {
             )
         );
 
-        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) -> {
-            try {
-                String text = message.getContent().getString();
-                if (text.startsWith("/")) return true;
-                com.jjk.data.PlayerData senderData = playerRepository.load(sender.getUuid());
-                if (!"inumaki".equals(senderData.characterId)) return true;
-                Set<String> ALLOWED = Set.of(
-                    "연어", "참치", "명란", "계란", "다시마",
-                    "연어알", "참치마요", "매실"
-                );
-                if (!ALLOWED.contains(text)) {
-                    sender.sendMessage(Text.literal("[JJK] 이누마키는 이 단어를 말할 수 없습니다."), false);
-                    return false;
-                }
-            } catch (Exception e) {
-                LOGGER.warn("Inumaki chat filter error", e);
-            }
-            return true;
+        // 이누마키 채팅 스킬 인터셉트 — spec §6-9
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, params) ->
+                handleInumakiChat(sender, message.getContent().getString()));
+        ServerMessageEvents.ALLOW_COMMAND_MESSAGE.register((message, sender, params) -> {
+            net.minecraft.server.network.ServerPlayerEntity p = sender.getPlayer();
+            if (p == null) return true;
+            return handleInumakiChat(p, message.getContent().getString());
         });
 
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
@@ -224,10 +229,28 @@ public class JJKMod implements ModInitializer {
         Path dbPath = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT)
                 .resolve("jjk").resolve("player_data.db");
         playerRepository.init(dbPath);
+        Path auditDbPath = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT)
+                .resolve("jjk").resolve("audit_log.db");
+        auditLogger = AuditLogger.open(auditDbPath);
     }
 
     private void onServerStopping(MinecraftServer server) {
         playerRepository.close();
+    }
+
+    private static boolean handleInumakiChat(net.minecraft.server.network.ServerPlayerEntity sender, String content) {
+        com.jjk.data.PlayerData data = INSTANCE.playerRepository.load(sender.getUuid());
+        if (!"inumaki".equals(data.characterId)) return true;
+
+        long tick = sender.getServerWorld().getTime();
+        InumakiSkillSet skill = (InumakiSkillSet) SkillRegistry.get("inumaki");
+        if (skill == null) return true;
+
+        if (content.startsWith("!멈춰"))   { skill.onF(data, sender, tick);      return false; }
+        if (content.startsWith("!터져"))   { skill.onShiftF(data, sender, tick);  return false; }
+        if (content.startsWith("!잠들어")) { skill.onShiftR(data, sender, tick);  return false; }
+        if (content.startsWith("!달려"))   { skill.onV(data, sender, tick);       return false; }
+        return true;
     }
 
     public static void reloadConfig() {
@@ -242,6 +265,7 @@ public class JJKMod implements ModInitializer {
     public static JJKMod getInstance() { return INSTANCE; }
     public static JjkConfig getConfig() { return INSTANCE.config; }
     public static PlayerRepository getPlayerRepository() { return INSTANCE.playerRepository; }
+    public static AuditLogger getAuditLogger() { return INSTANCE.auditLogger; }
     public static CEManager getCEManager() { return INSTANCE.ceManager; }
     public static AwakeningManager getAwakeningManager() { return INSTANCE.awakeningManager; }
     public static DomainManager getDomainManager() { return INSTANCE.domainManager; }
@@ -253,6 +277,7 @@ public class JJKMod implements ModInitializer {
     public static RespawnManager getRespawnManager() { return INSTANCE.respawnManager; }
     public static EffectDeferQueue getEffectDeferQueue() { return INSTANCE.effectDeferQueue; }
     public static CombatPipeline getCombatPipeline() { return INSTANCE.combatPipeline; }
+    public static ComboTracker getComboTracker() { return INSTANCE.comboTracker; }
     public static TickScheduler getTickScheduler() { return INSTANCE.tickScheduler; }
     public static MinecraftServer getServer() { return INSTANCE.server; }
 }

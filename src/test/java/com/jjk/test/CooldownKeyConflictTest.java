@@ -57,4 +57,28 @@ class CooldownKeyConflictTest {
                 "skill_seal 키로 봉인 상태 확인 — 히구루마·마허라가 공용 키 (decisions §3-6)");
         assertEquals(tick + sealDuration, sealUntil);
     }
+
+    // 5. Phase 3 신규 허용 키 — 금지 키와 충돌 없음
+    @Test
+    void testAllowedCooldownKeysPhase3() {
+        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
+        long tick = 100L;
+        data.cooldowns.put("status_fire",        tick + 80);
+        data.cooldowns.put("status_freeze",      tick + 40);
+        data.cooldowns.put("status_sleep",       tick + 100);
+        data.cooldowns.put("status_slow",        tick + 60);
+        data.cooldowns.put("status_soul_resist", tick + 80);
+        data.cooldowns.put("jackpot_retry_used", tick + 1);
+        data.cooldowns.put("trial_state",        1L);
+        data.cooldowns.put("trial_timeout",      tick + 60);
+        data.cooldowns.put("trial_target",       12345L);
+        // 금지 키는 여전히 없어야 함
+        assertFalse(data.cooldowns.containsKey("domain"),    "금지 키 'domain' 없음");
+        assertFalse(data.cooldowns.containsKey("awakening"), "금지 키 'awakening' 없음");
+        // 허용 키는 정상 저장됨
+        assertTrue(data.cooldowns.containsKey("status_fire"),       "status_fire 허용");
+        assertTrue(data.cooldowns.containsKey("status_soul_resist"), "status_soul_resist 허용");
+        assertTrue(data.cooldowns.containsKey("jackpot_retry_used"), "jackpot_retry_used 허용");
+        assertTrue(data.cooldowns.containsKey("trial_state"),        "trial_state 허용");
+    }
 }
