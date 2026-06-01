@@ -12,13 +12,15 @@
     "main": ["com.jjk.JJKMod"],
     "client": ["com.jjk.client.JJKModClient"]
   },
-  "mixins": ["jjk.mixins.json"],
+  "mixins": ["jjk.mixins.json", "jjk.client.mixins.json"],
   "depends": {
     "fabricloader": ">=0.16.5",
     "fabric-api": "*",
     "minecraft": "~1.21.1",
     "java": ">=21",
-    "geckolib": "*",
+    "geckolib": "*"
+  },
+  "suggests": {
     "player-animation-lib": "*"
   },
   "breaks": {

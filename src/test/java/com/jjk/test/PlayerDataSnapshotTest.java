@@ -4,6 +4,9 @@ import com.jjk.data.PlayerData;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,5 +63,27 @@ class PlayerDataSnapshotTest {
 
         assertFalse(snap.unlockedSkills.contains("skill_b"),
                 "snapshot 후 원본 unlockedSkills 변경이 snapshot에 영향 없어야 함");
+    }
+
+    /** Reflection으로 Collection 필드가 독립 복사(deep copy)되었는지 검증. */
+    @Test
+    void testCollectionFieldsAreDeepCopied() throws Exception {
+        PlayerData original = PlayerData.createDefault(UUID.randomUUID());
+        original.cooldowns.put("test", 999L);
+        original.unlockedSkills.add("skill_x");
+        original.deadShikigamiIds.add("nue");
+
+        PlayerData snap = original.snapshot();
+
+        for (Field f : PlayerData.class.getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+            f.setAccessible(true);
+            Object orig = f.get(original);
+            Object copy = f.get(snap);
+            if (orig instanceof List || orig instanceof Map) {
+                assertNotSame(orig, copy,
+                    "Collection 필드 " + f.getName() + " 는 deep copy여야 함 (다른 레퍼런스)");
+            }
+        }
     }
 }

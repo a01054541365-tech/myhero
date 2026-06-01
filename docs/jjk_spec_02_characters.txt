@@ -168,9 +168,22 @@ public interface ISkillSet {
 히구루마 재판 성공 기준: 60%.
 재판 StateMachine: `IDLE → ACCUSED(대상 지정) → DELIBERATION(60틱 타임아웃) → VERDICT(유죄/무죄) → END`.
 
-### 6-12. 스쿠나 (미완성 — Phase 3 구현 예정)
+### 6-12. 스쿠나 료멘 (`characterId = "sukuna"`) — Phase 3 실구현 완료 (2026-05-28)
 
-스쿠나 SkillSet은 Phase 3에서 추가한다. AnimationRegistry에 animId 21\~24(sukuna\_f/shift\_f/r/shift\_r)가 예약되어 있다. 현재 `SukunaSkillSet`은 5개 키 모두 `SkillResult.NOT\_IMPLEMENTED`를 반환하는 스텁으로 등록한다.
+스쿠나 SkillSet은 Phase 3에서 실구현 완료됨 (decisions.md 2026-05-28).
+AnimationRegistry animId 21~24 사용.
+정확한 수치는 techniques.json sukuna 항목 기준. §LOCK 수치 변경 금지.
+
+| 키 | 스킬 | 구현핵심 |
+|-|-|-|
+| F | 해체 | 참격 판정 |
+| Shift+F | 필살참 | 강화 참격 |
+| R | 개·화염 | 화염 광역 |
+| Shift+R | 세계절단참 | 광역 참격 |
+| V | 복마어주자 | `DomainManager.deployDomain("sukuna_malevolent_shrine")` |
+
+> 수치(baseDamage·ceCost·cooldownTicks)는 techniques.json을 단일 소스로 사용.
+> 이 문서에 수치를 중복 기재하지 않는다.
 
 \---
 
@@ -196,7 +209,7 @@ public interface ISkillSet {
 |-|-|
 |흑섬 base × 2.5 게임화 결정 명시|완료|
 |고죠 무하한 예외 조건|완료|
-|스쿠나 개방형 영역|완료 (스텁 등록, Phase 3 구현)|
+|스쿠나 개방형 영역 (복마어주자)|완료 — Phase 3 실구현 (2026-05-28)|
 |이타도리 경정권 2타|완료|
 |메구미 식신 영구 사망|완료|
 |옷코츠 주력해방 burstActive|완료|

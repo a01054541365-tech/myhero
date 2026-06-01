@@ -61,6 +61,22 @@ class MigratorTest {
     }
 
     @Test
+    void testV3CopyTechniqueColumnsExist() throws Exception {
+        Connection conn = newMemoryDb();
+        new Migrator().migrate(conn);
+
+        DatabaseMetaData meta = conn.getMetaData();
+        for (String col : new String[]{
+                "last_received_skill_id", "last_received_base_damage",
+                "last_received_ce_cost", "last_received_cooldown_ticks",
+                "last_received_is_domain"}) {
+            try (ResultSet rs = meta.getColumns(null, null, "player_data", col)) {
+                assertTrue(rs.next(), col + " 컬럼이 player_data에 있어야 함");
+            }
+        }
+    }
+
+    @Test
     void testVersionMismatch() throws Exception {
         Connection conn = newMemoryDb();
         new Migrator().migrate(conn);

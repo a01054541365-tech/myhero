@@ -9,11 +9,11 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
-import java.util.ArrayList;
-import java.util.Collections;
+
+import java.util.Comparator;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public class EffectDeferQueue {
 
@@ -24,38 +24,31 @@ public class EffectDeferQueue {
         UUID attackerUuid
     ) {}
 
-    private final List<DeferredEffect> queue =
-        Collections.synchronizedList(new ArrayList<>());
+    // dueTick 오름차순. 서버 메인 스레드에서만 접근하므로 synchronized 불필요.
+    private final PriorityQueue<DeferredEffect> queue =
+            new PriorityQueue<>(Comparator.comparingLong(DeferredEffect::dueTick));
 
     public void schedule(BlockPos pos, float damage,
             int delayTicks, UUID attackerUuid, long currentTick) {
-        long dueTick = currentTick + delayTicks;
-        queue.add(new DeferredEffect(dueTick, pos, damage, attackerUuid));
+        queue.add(new DeferredEffect(currentTick + delayTicks, pos, damage, attackerUuid));
     }
 
     public void tickWorld(long currentTick) {
-        if (queue.isEmpty()) return;
-        List<DeferredEffect> ready = queue.stream()
-            .filter(e -> currentTick >= e.dueTick())
-            .collect(Collectors.toList());
-        queue.removeAll(ready);
-        for (DeferredEffect effect : ready) {
-            executeEffect(effect, currentTick);
+        while (!queue.isEmpty() && queue.peek().dueTick() <= currentTick) {
+            executeEffect(queue.poll(), currentTick);
         }
     }
 
     private void executeEffect(DeferredEffect effect, long currentTick) {
         MinecraftServer server = JJKMod.getServer();
         if (server == null) return;
-        ServerPlayerEntity attacker = server.getPlayerManager()
-            .getPlayer(effect.attackerUuid());
+        ServerPlayerEntity attacker = server.getPlayerManager().getPlayer(effect.attackerUuid());
         if (attacker == null) return;
         ServerWorld world = attacker.getServerWorld();
         Box box = new Box(effect.targetPos()).expand(3.0);
         List<LivingEntity> targets = world.getEntitiesByClass(
             LivingEntity.class, box,
-            e -> e.isAlive()
-                && !e.getUuid().equals(effect.attackerUuid()));
+            e -> e.isAlive() && !e.getUuid().equals(effect.attackerUuid()));
         for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(
                 attacker, target,

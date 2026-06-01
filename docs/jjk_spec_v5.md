@@ -475,9 +475,22 @@ if (data.burstActive && tick >= data.burstEndTick) {
 재판 StateMachine: `IDLE → ACCUSED(대상 지정) → DELIBERATION(60틱 타임아웃) → VERDICT(유죄/무죄) → END`.
 `skill_seal` 키: 히구루마 술식 봉인과 마허라가 의식 실패 봉인이 동일한 `"skill_seal"` 키를 공유한다 — decisions §3-6.
 
-### 6-12. 스쿠나 (`characterId = "sukuna"`) — Phase 3 스텁
+### 6-12. 스쿠나 료멘 (`characterId = "sukuna"`) — Phase 3 실구현 완료 (2026-05-28)
 
-스쿠나 SkillSet은 **Phase 3에서 추가**한다. AnimationRegistry에 animId **21~24** (sukuna_f/shift_f/r/shift_r)가 예약되어 있다. 현재 `SukunaSkillSet`은 5개 키 모두 `SkillResult.NOT_IMPLEMENTED`를 반환하는 스텁으로 등록한다. V 키 animId = 0(미예약).
+스쿠나 SkillSet은 Phase 3에서 실구현 완료됨 (decisions.md 2026-05-28).
+AnimationRegistry animId 21~24 사용.
+정확한 수치는 techniques.json sukuna 항목 기준. §LOCK 수치 변경 금지.
+
+| 키 | 스킬 | 구현핵심 |
+|-|-|-|
+| F | 해체 | 참격 판정 |
+| Shift+F | 필살참 | 강화 참격 |
+| R | 개·화염 | 화염 광역 |
+| Shift+R | 세계절단참 | 광역 참격 |
+| V | 복마어주자 | `DomainManager.deployDomain("sukuna_malevolent_shrine")` |
+
+> 수치(baseDamage·ceCost·cooldownTicks)는 techniques.json을 단일 소스로 사용.
+> 이 문서에 수치를 중복 기재하지 않는다.
 
 ---
 
@@ -823,8 +836,21 @@ public class PlayerData {
     public boolean jackpotActive;
     public long jackpotEndTick;
 
+    // === 옷코츠 복사 술식 ===
+    public String  lastReceivedSkillId;
+    public float   lastReceivedBaseDamage;
+    public float   lastReceivedCeCost;
+    public int     lastReceivedCooldownTicks;
+    public boolean lastReceivedIsDomain;
+
+    // === 메구미 마허라가 의식 ===
+    public int maharagaCounter; // 무하한 피격 횟수, maharagaThreshold 도달 시 Infinity 무력화
+
+    // === 이타도리 흑섬 집중 ===
+    public long blackFlashFocusEndTick; // 0 = 비활성, 양수 = 버프 만료 틱
+
     // === 스키마 버전 ===
-    public int schemaVersion; // 현재 버전: 1
+    public int schemaVersion; // 현재 버전: 4
 }
 ```
 
@@ -869,6 +895,13 @@ public PlayerData snapshot() {
     copy.hasExecutionSword = this.hasExecutionSword;
     copy.jackpotActive = this.jackpotActive;
     copy.jackpotEndTick = this.jackpotEndTick;
+    copy.lastReceivedSkillId       = this.lastReceivedSkillId;
+    copy.lastReceivedBaseDamage    = this.lastReceivedBaseDamage;
+    copy.lastReceivedCeCost        = this.lastReceivedCeCost;
+    copy.lastReceivedCooldownTicks = this.lastReceivedCooldownTicks;
+    copy.lastReceivedIsDomain      = this.lastReceivedIsDomain;
+    copy.maharagaCounter           = this.maharagaCounter;
+    copy.blackFlashFocusEndTick    = this.blackFlashFocusEndTick;
     copy.schemaVersion = this.schemaVersion;
     return copy;
 }
@@ -933,15 +966,25 @@ mismatch (`schemaVersion < currentVersion`) 시 Migrator 실행. Migrator 실패
 
 ### 13-5. cooldown_persist 허용 키 목록
 
-    'domain'       영역 전개 쿨타임
+    # domainCooldownUntil    → PlayerData 전용 필드 사용 (decisions.md §3-2)
+    # awakeningCooldownUntil → PlayerData 전용 필드 사용 (decisions.md §3-3)
     'binding_vow'  속박 쿨타임
     'jackpot'      하카리 잭팟 쿨타임
-    'awakening'    각성 쿨타임 (2400틱)
     'burst'        옷코츠 주력해방 쿨타임
     'curtain'      장막 쿨타임
     'zone_penalty' 존 종료 페널티 만료 틱
     'skill_seal'   히구루마 + 마허라가 봉인 공유 키 (decisions §3-6)
     'soul_resist'  마히토 영혼 방어 만료
+
+실제 사용 키 네임스페이스:
+  "cd_{characterId}_{keyId}"  일반 스킬 쿨타임 (예: "cd_gojo_0")
+  "skill_seal"                히구루마 + 마허라가 봉인 공유 키
+  "status_soul_resist"        마히토 영혼 방어 만료
+  "status_{type}"             기타 상태이상 만료
+
+사용 금지 키:
+  "domain"    → PlayerData.domainCooldownUntil 사용
+  "awakening" → PlayerData.awakeningCooldownUntil 사용
 
 ---
 

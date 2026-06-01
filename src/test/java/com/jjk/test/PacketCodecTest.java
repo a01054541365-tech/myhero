@@ -2,6 +2,7 @@ package com.jjk.test;
 
 import com.jjk.network.c2s.SkillUseC2SPacket;
 import com.jjk.network.s2c.*;
+import com.jjk.network.s2c.FingerDropS2CPacket;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.RegistryByteBuf;
@@ -106,5 +107,34 @@ class PacketCodecTest {
         RespawnS2CPacket original = new RespawnS2CPacket(100);
         RespawnS2CPacket decoded = roundTrip(RespawnS2CPacket.CODEC, original);
         assertEquals(100, decoded.delayTicks());
+    }
+
+    // 10. FingerDropS2CPacket 왕복 (isMaxReached=false)
+    @Test
+    void testFingerDropCodec_NotMax() {
+        FingerDropS2CPacket original = new FingerDropS2CPacket(5, false);
+        FingerDropS2CPacket decoded = roundTrip(FingerDropS2CPacket.CODEC, original);
+        assertEquals(5, decoded.newFingerCount());
+        assertFalse(decoded.isMaxReached());
+    }
+
+    // 11. FingerDropS2CPacket 왕복 (isMaxReached=true)
+    @Test
+    void testFingerDropCodec_Max() {
+        FingerDropS2CPacket original = new FingerDropS2CPacket(20, true);
+        FingerDropS2CPacket decoded = roundTrip(FingerDropS2CPacket.CODEC, original);
+        assertEquals(20, decoded.newFingerCount());
+        assertTrue(decoded.isMaxReached());
+    }
+
+    // 12. ChantingStateS2CPacket 왕복
+    @Test
+    void testChantingStateCodec() {
+        UUID uuid = UUID.randomUUID();
+        ChantingStateS2CPacket original = new ChantingStateS2CPacket(uuid, true, 45);
+        ChantingStateS2CPacket decoded = roundTrip(ChantingStateS2CPacket.CODEC, original);
+        assertEquals(uuid,  decoded.playerUuid());
+        assertTrue(decoded.chanting());
+        assertEquals(45, decoded.chantTicks());
     }
 }

@@ -2,6 +2,8 @@ package com.jjk.network.c2s;
 
 import com.jjk.JJKMod;
 import com.jjk.character.CharacterCommandService;
+import com.jjk.network.s2c.CharacterConfirmS2CPacket;
+import com.jjk.network.s2c.CharacterSelectFailS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.RegistryByteBuf;
 import net.minecraft.network.codec.PacketCodec;
@@ -25,7 +27,20 @@ public record CharacterSelectC2SPacket(String characterId) implements CustomPayl
         ctx.server().execute(() -> {
             CharacterCommandService service = new CharacterCommandService();
             CharacterCommandService.SelectResult result = service.select(ctx.player(), packet.characterId());
-            // TODO: send CharacterConfirmS2CPacket or CharacterSelectFailS2CPacket based on result
+            switch (result) {
+                case OK ->
+                    ServerPlayNetworking.send(ctx.player(),
+                        new CharacterConfirmS2CPacket(packet.characterId()));
+                case DUPLICATE_BLOCKED ->
+                    ServerPlayNetworking.send(ctx.player(),
+                        new CharacterSelectFailS2CPacket("duplicate"));
+                case GRADE_INSUFFICIENT ->
+                    ServerPlayNetworking.send(ctx.player(),
+                        new CharacterSelectFailS2CPacket("grade_insufficient"));
+                default ->
+                    ServerPlayNetworking.send(ctx.player(),
+                        new CharacterSelectFailS2CPacket("unknown"));
+            }
         });
     }
 }

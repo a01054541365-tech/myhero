@@ -45,3 +45,16 @@ logs/
 .claude/
 
 *.zip
+
+# Obsidian local state
+code/
+code/.obsidian/
+code/.obsidian/workspace.json
+code/.obsidian/plugins/terminal/data.json
+
+# Temporary patch/backup files
+docs/step8_AwakeningManager_patch_final.java
+
+build_output.txt
+
+code/.obsidian/community-plugins.json

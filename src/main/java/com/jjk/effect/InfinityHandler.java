@@ -1,5 +1,7 @@
 package com.jjk.effect;
 
+import com.jjk.JJKMod;
+import com.jjk.data.PlayerData;
 import net.minecraft.server.network.ServerPlayerEntity;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,9 +16,18 @@ public class InfinityHandler {
         return infinityState.getOrDefault(player.getUuid(), false);
     }
 
+    // §22-1: infinity is nullified when the attacker stands inside an active domain,
+    // or when megumi's mahoraga_hit_count reaches maharagaThreshold.
     public boolean canNeutralize(ServerPlayerEntity attacker, ServerPlayerEntity target) {
         if (!isInfinityActive(target)) return false;
-        // TODO: check neutralization conditions (special grade hit, binding vow timeout, etc.)
+        if (JJKMod.getDomainManager().getDomainAt(attacker.getBlockPos()).isPresent()) return true;
+
+        // 마허라가 의식 적응 — 메구미 전용
+        PlayerData attackerData = JJKMod.getPlayerRepository().load(attacker.getUuid());
+        if ("megumi".equals(attackerData.characterId)) {
+            int maharagaCount = attackerData.cooldowns.getOrDefault("mahoraga_hit_count", 0L).intValue();
+            if (maharagaCount >= JJKMod.getConfig().maharagaThreshold) return true;
+        }
         return false;
     }
 

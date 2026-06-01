@@ -229,12 +229,17 @@ class ISkillSetTest {
     }
 
     @Test
-    void testNanamiNotImplementedKeys() {
+    void testNanamiImplementedKeys() {
+        // keyId 1·2·4 구현됨 — CE 부족 또는 FAIL_NO_TARGET 반환 (NOT_IMPLEMENTED 아님)
         NanamiSkillSet skill = new NanamiSkillSet();
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftF(data, null, 0L));
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L));
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onV(data, null, 0L));
+        data.ceCurrent = 0f;
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftF(data, null, 0L),
+            "나나미 Shift+F 구현됨");
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L),
+            "나나미 R 구현됨 (CE 없어도 발동 가능)");
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onV(data, null, 0L),
+            "나나미 V 구현됨");
     }
 
     @Test
@@ -375,8 +380,8 @@ class ISkillSetTest {
     }
 
     @Test
-    void testMigratorV2() {
-        assertEquals(2, Migrator.CURRENT_VERSION);
+    void testMigratorCurrentVersion() {
+        assertEquals(11, Migrator.CURRENT_VERSION);
     }
 
     @Test

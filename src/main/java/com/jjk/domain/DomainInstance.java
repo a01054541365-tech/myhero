@@ -21,6 +21,8 @@ public class DomainInstance {
     public long expireAtTick;
     public float ownerDamageReduction = 0f;
     public long deployedAtTick = 0L;
+    // NPC 영역 여부 — true면 tickDomains에서 플레이어 소유자 조회 스킵
+    public boolean npcOwned = false;
 
     // 소유자 진영 — deployDomain 시점에 TeamManager.getTeam()으로 세팅
     public com.jjk.team.TeamManager.Team team;

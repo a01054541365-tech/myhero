@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
+import com.jjk.audit.AuditLogger;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.ZoneExitS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -12,6 +13,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
+import net.minecraft.util.math.Vec3d;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -52,26 +54,41 @@ public class DomainManager {
     public void tickDomains(ServerWorld world) {
         long currentTick = world.getTime();
 
-        // autoTargetAll 매 틱 영혼 데미지 (마히토 자폐원돈과)
+        // 매 틱 효과 처리 — autoTargetAll(마히토) + sukuna_malevolent_shrine(스쿠나)
         for (DomainInstance domain : new ArrayList<>(activeDomains.values())) {
-            if (!domain.autoTargetAll) continue;
-            ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
-            if (owner == null) { collapseDomain(domain.ownerUuid, currentTick); continue; }
-            PlayerData ownerData = JJKMod.getPlayerRepository().load(domain.ownerUuid);
-            if (ownerData.hpCurrent <= ownerData.hpMax * 0.50f
-                    || currentTick - domain.deployedAtTick >= 200) {
-                collapseDomain(domain.ownerUuid, currentTick);
-                continue;
-            }
-            float baseDot = 10f;
-            for (ServerPlayerEntity p : world.getPlayers()) {
-                if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
-                PlayerData pData = JJKMod.getPlayerRepository().load(p.getUuid());
-                float dmg = p.getUuid().equals(domain.ownerUuid)
-                        ? baseDot * (1f - domain.ownerDamageReduction)
-                        : baseDot;
-                pData.hpCurrent = Math.max(0f, pData.hpCurrent - dmg);
-                JJKMod.getPlayerRepository().save(pData);
+            if (domain.npcOwned) continue; // NPC 영역은 DomainDeployGoal.tick()이 직접 처리
+            if ("sukuna_malevolent_shrine".equals(domain.domainId)) {
+                // 복마어주자: 짝수 틱 = 절단(slash), 홀수 틱 = 화살(arrow)
+                ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
+                if (owner == null) { collapseDomain(domain.ownerUuid, currentTick); continue; }
+                boolean isSlash = (currentTick % 2 == 0);
+                float rawDamage = isSlash ? 15f : 10f;
+                float defenseMultiplier = isSlash ? 0.70f : 1.0f; // slash: 방어 30% 관통
+                for (ServerPlayerEntity p : world.getPlayers()) {
+                    if (p.getUuid().equals(domain.ownerUuid)) continue;
+                    if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
+                    JJKMod.getCombatPipeline().applyDomainDamage(owner, p, rawDamage, defenseMultiplier, world);
+                }
+            } else if (domain.autoTargetAll) {
+                // autoTargetAll 매 틱 영혼 데미지 (마히토 자폐원돈과)
+                ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
+                if (owner == null) { collapseDomain(domain.ownerUuid, currentTick); continue; }
+                PlayerData ownerData = JJKMod.getPlayerRepository().load(domain.ownerUuid);
+                if (ownerData.hpCurrent <= ownerData.hpMax * 0.50f
+                        || currentTick - domain.deployedAtTick >= 200) {
+                    collapseDomain(domain.ownerUuid, currentTick);
+                    continue;
+                }
+                float baseDot = 10f;
+                for (ServerPlayerEntity p : world.getPlayers()) {
+                    if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
+                    PlayerData pData = JJKMod.getPlayerRepository().load(p.getUuid());
+                    float dmg = p.getUuid().equals(domain.ownerUuid)
+                            ? baseDot * (1f - domain.ownerDamageReduction)
+                            : baseDot;
+                    pData.hpCurrent = Math.max(0f, pData.hpCurrent - dmg);
+                    JJKMod.getPlayerRepository().save(pData);
+                }
             }
         }
 
@@ -255,6 +272,55 @@ public class DomainManager {
     public boolean hasActiveDomain(UUID ownerUuid) {
         return activeDomains.values().stream()
                 .anyMatch(d -> d.ownerUuid.equals(ownerUuid));
+    }
+
+    /** NPC 포함 모든 소유자의 활성 영역 반환 (null = 없음). */
+    public DomainInstance getActiveDomain(UUID ownerUuid) {
+        return activeDomains.values().stream()
+            .filter(d -> d.ownerUuid.equals(ownerUuid))
+            .findFirst().orElse(null);
+    }
+
+    /**
+     * NPC(주령 등) 전용 영역 전개.
+     * PlayerData 없이 UUID + 위치 기준으로 DomainInstance 생성.
+     * CE 소모 없음 — 주령은 CE 시스템 외부.
+     */
+    public boolean deployNpcDomain(UUID npcUuid, Vec3d center,
+                                    String domainId, long currentTick) {
+        // 이미 전개 중이면 중복 방지
+        boolean alreadyActive = activeDomains.values().stream()
+            .anyMatch(d -> d.ownerUuid.equals(npcUuid));
+        if (alreadyActive) return false;
+
+        DomainDefinition def = domainDefs.get(domainId);
+        if (def == null) return false;
+
+        // 금지 청크 체크 (center가 null이면 ORIGIN 사용)
+        BlockPos blockCenter = center != null ? BlockPos.ofFloored(center) : BlockPos.ORIGIN;
+        ChunkPos chunk = new ChunkPos(blockCenter);
+        String chunkKey = chunk.x + "," + chunk.z;
+        if (config.domainBannedChunks.contains(chunkKey)) return false;
+
+        DomainInstance instance = new DomainInstance(
+            npcUuid, domainId, blockCenter,
+            def.wallHp, def.radius, def.isOpen,
+            false, def.sureHitActive, def.autoTargetAll);
+        instance.npcOwned = true;
+        instance.expireAtTick = currentTick + def.cooldownTicks;
+        instance.deployedAtTick = currentTick;
+        activeDomains.put(instance.instanceId, instance);
+
+        if (JJKMod.getInstance() != null && JJKMod.getAuditLogger() != null) {
+            JJKMod.getAuditLogger().logEvent("domain_start", npcUuid,
+                String.format("{\"domainId\":\"%s\",\"type\":\"npc\"}", domainId), currentTick);
+        }
+        return true;
+    }
+
+    /** 테스트용: DomainDefinition을 직접 등록. */
+    public void addDomainDefForTest(String id, DomainDefinition def) {
+        domainDefs.put(id, def);
     }
 
     public void clearAll() {

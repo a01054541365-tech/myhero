@@ -1,5 +1,11 @@
 package com.jjk;
 
+import com.jjk.bossbar.CeBossBarManager;
+import com.jjk.item.GuideBookItem;
+import com.jjk.chant.ChantingHandler;
+import com.jjk.curtain.CurtainManager;
+import com.jjk.data.PlayerData;
+import com.jjk.grade.GradeManager;
 import com.jjk.character.CharacterCommandService;
 import com.jjk.command.JjkCommandRegistry;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -25,7 +31,9 @@ import com.jjk.combat.CombatPipeline;
 import com.jjk.data.Migrator;
 import com.jjk.data.PlayerRepository;
 import com.jjk.domain.DomainManager;
+import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.ShikigamiEntityTypes;
+import com.jjk.item.CursedToolRegistry;
 import com.jjk.effect.EffectDeferQueue;
 import com.jjk.effect.FireEffectManager;
 import com.jjk.finger.FingerSystem;
@@ -60,6 +68,11 @@ public class JJKMod implements ModInitializer {
     private RespawnManager respawnManager;
     private EffectDeferQueue effectDeferQueue;
     private CombatPipeline combatPipeline;
+    private ShadowMarkerRegistry shadowMarkerRegistry;
+    private CeBossBarManager ceBossBarManager;
+    private GradeManager gradeManager;
+    private CurtainManager curtainManager;
+    private ChantingHandler chantingHandler;
     private final ComboTracker comboTracker = new ComboTracker();
     private TickScheduler tickScheduler;
     private MinecraftServer server;
@@ -81,8 +94,15 @@ public class JJKMod implements ModInitializer {
         respawnManager = new RespawnManager(config);
         effectDeferQueue = new EffectDeferQueue();
         combatPipeline = new CombatPipeline();
+        shadowMarkerRegistry = new ShadowMarkerRegistry(config);
+        ceBossBarManager = new CeBossBarManager();
+        gradeManager = new GradeManager();
+        curtainManager = new CurtainManager(config, playerRepository);
+        chantingHandler = new ChantingHandler();
 
         ShikigamiEntityTypes.register();
+        CursedSpiritEntityTypes.register();
+        CursedToolRegistry.registerItems();
 
         SkillRegistry.register("gojo",    new GojoSkillSet());
         SkillRegistry.register("itadori", new ItadoriSkillSet());
@@ -110,12 +130,14 @@ public class JJKMod implements ModInitializer {
 
         tickScheduler = new TickScheduler();
         tickScheduler.register(ceManager::regenTick, 1);
+        tickScheduler.register(ceBossBarManager::tick, 2);
         tickScheduler.register(awakeningManager::tickCheck, 1);
         tickScheduler.register(zoneStateManager::tick, 1);
         tickScheduler.register(burdenManager::tick, 1);
         tickScheduler.register(HakariSkillSet::tickJackpot, 1);
         tickScheduler.register(NanamiSkillSet::tickRCT, 10);
         tickScheduler.register(FireEffectManager::tickFirePlayer, 1);
+        tickScheduler.register(MegumiSkillSet::tickMaharagaFailCheck, 20);
 
         Packets.register();
         LOGGER.info("[JJK] 초기화 완료. schemaVersion={}", Migrator.CURRENT_VERSION);
@@ -219,8 +241,30 @@ public class JJKMod implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-                playerRepository.evict(handler.player.getUuid()));
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+                ceBossBarManager.onPlayerJoin(handler.player);
+                // 일일 접속 XP
+                PlayerData loginData = playerRepository.load(handler.player.getUuid());
+                gradeManager.onDailyLogin(loginData, handler.player);
+
+                // 가이드북 지급 — 1틱 딜레이로 인벤토리 로드 완료 보장
+                final net.minecraft.server.network.ServerPlayerEntity joinedPlayer = handler.player;
+                server.execute(() -> {
+                    PlayerData data = playerRepository.load(joinedPlayer.getUuid());
+                    if (!data.receivedGuideBook) {
+                        net.minecraft.item.ItemStack guide = GuideBookItem.create();
+                        if (!joinedPlayer.getInventory().insertStack(guide)) {
+                            joinedPlayer.dropItem(guide, false);
+                        }
+                        data.receivedGuideBook = true;
+                        playerRepository.saveImmediate(data);
+                    }
+                });
+        });
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+                playerRepository.evict(handler.player.getUuid());
+                ceBossBarManager.onPlayerLeave(handler.player.getUuid());
+        });
     }
 
     private void onServerStarting(MinecraftServer server) {
@@ -280,4 +324,9 @@ public class JJKMod implements ModInitializer {
     public static ComboTracker getComboTracker() { return INSTANCE.comboTracker; }
     public static TickScheduler getTickScheduler() { return INSTANCE.tickScheduler; }
     public static MinecraftServer getServer() { return INSTANCE.server; }
+    public static ShadowMarkerRegistry getShadowMarkerRegistry() { return INSTANCE.shadowMarkerRegistry; }
+    public static CeBossBarManager getCeBossBarManager() { return INSTANCE.ceBossBarManager; }
+    public static GradeManager getGradeManager() { return INSTANCE.gradeManager; }
+    public static CurtainManager getCurtainManager() { return INSTANCE.curtainManager; }
+    public static ChantingHandler getChantingHandler() { return INSTANCE.chantingHandler; }
 }

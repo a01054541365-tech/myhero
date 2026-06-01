@@ -1,7 +1,9 @@
 package com.jjk.mixin;
 
 import com.jjk.JJKMod;
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,6 +15,8 @@ public class ServerWorldMixin {
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void jjk$onWorldTick(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
+        ServerWorld world = (ServerWorld) (Object) this;
+        if (!world.getRegistryKey().equals(World.OVERWORLD)) return;
         JJKMod.getRespawnManager().tick();
         JJKMod.getTrialManager().tick();
     }
@@ -20,7 +24,9 @@ public class ServerWorldMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void jjk$onWorldTickTail(BooleanSupplier shouldKeepTicking, CallbackInfo ci) {
         ServerWorld world = (ServerWorld) (Object) this;
+        if (!world.getRegistryKey().equals(World.OVERWORLD)) return;
         JJKMod.getDomainManager().tickDomains(world);
         JJKMod.getEffectDeferQueue().tickWorld(world.getTime());
+        JJKMod.getCurtainManager().tickCurtains(world, world.getTime());
     }
 }

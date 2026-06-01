@@ -85,4 +85,19 @@ class FingerSystemTest {
         system.tryDrop("mob_rate0", data);
         assertEquals(0, data.fingerCount, "dropRate=0 → 드롭 없음");
     }
+
+    // 6. fingerCount 19→20 → maxReached 플래그 반환값 검증
+    @Test
+    void testFingerMaxReachedFlagAt20() {
+        JjkConfig config = new JjkConfig();
+        config.fingerDropRate = 1.0f;
+        config.fingerMaxCount = 20;
+        FingerSystem system = new FingerSystem(config);
+        PlayerData data = newData();
+        data.fingerCount = 19;
+
+        boolean dropped = system.tryDrop("mob_max19to20", data);
+        assertTrue(dropped, "19→20 드롭 성공");
+        assertEquals(20, data.fingerCount, "20개 만재 확인");
+    }
 }

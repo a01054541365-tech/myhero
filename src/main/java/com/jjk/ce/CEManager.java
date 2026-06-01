@@ -33,7 +33,33 @@ public class CEManager {
             }
         }
 
+        // 수동 방어 CE 소모: max_ce × shieldCeDrainRatio / 틱
+        if (data.shieldActive) {
+            float drain = data.ceMax * config.shieldCeDrainRatio();
+            data.ceCurrent = Math.max(0f, data.ceCurrent - drain);
+            if (data.ceCurrent <= 0f) data.shieldActive = false;
+        }
+
+        // 간이영역 CE 유지 소모: max_ce × simpleBarrierCostPerSecond / 20틱
+        if (data.simpleBarrierActive) {
+            float drain = data.ceMax * config.simpleBarrierCostPerSecond() / 20.0f;
+            data.ceCurrent = Math.max(0f, data.ceCurrent - drain);
+            if (data.ceCurrent <= 0f) data.simpleBarrierActive = false;
+        }
+
+        // 천여주박: CE 0 → 신체능력 버프 활성. CE 1 이상 회복 → 버프 해제.
+        if (data.ceCurrent <= 0f && !data.tenShadowsActive) {
+            data.tenShadowsActive = true;
+        } else if (data.ceCurrent >= 1f && data.tenShadowsActive) {
+            data.tenShadowsActive = false;
+        }
+
         JJKMod.getPlayerRepository().save(data);
+    }
+
+    /** CE 0이면 스킬 사용 불가. */
+    public boolean canUseSkill(PlayerData data) {
+        return data.ceCurrent > 0f;
     }
 
     public boolean canAfford(ServerPlayerEntity player, float amount) {

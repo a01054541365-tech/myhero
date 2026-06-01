@@ -5,11 +5,23 @@ import com.jjk.burden.BurdenManager;
 import com.jjk.character.CharacterCommandService;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
+import com.jjk.entity.CursedSpiritEntity;
+import com.jjk.entity.CursedSpiritEntityTypes;
+import com.jjk.entity.CursedSpiritGrade;
+import com.jjk.item.CursedToolItem;
+import com.jjk.item.CursedToolRegistry;
+import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.command.argument.BlockPosArgumentType;
+import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.entity.EntityType;
+import net.minecraft.item.ItemStack;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
@@ -18,6 +30,64 @@ import java.nio.file.Path;
 public final class JjkCommandRegistry {
 
     private JjkCommandRegistry() {}
+
+    private static int giveTool(ServerCommandSource src, ServerPlayerEntity target, String toolId) {
+        if (target == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+        CursedToolItem item = switch (toolId) {
+            case "cursed_dagger"    -> CursedToolRegistry.CURSED_DAGGER;
+            case "thousand_spear"   -> CursedToolRegistry.THOUSAND_SPEAR;
+            case "playful_cloud"    -> CursedToolRegistry.PLAYFUL_CLOUD;
+            case "inverted_spear"   -> CursedToolRegistry.INVERTED_SPEAR;
+            case "split_soul_blade" -> CursedToolRegistry.SPLIT_SOUL_BLADE;
+            default -> null;
+        };
+        if (item == null) {
+            src.sendError(Text.literal("[JJK] 알 수 없는 주구: " + toolId));
+            return 0;
+        }
+        ItemStack stack = new ItemStack(item);
+        if (!target.getInventory().insertStack(stack)) {
+            target.dropItem(stack, false);
+        }
+        final String name = target.getName().getString();
+        src.sendFeedback(() -> Text.literal("[JJK] 주구 지급: " + toolId + " → " + name), true);
+        return 1;
+    }
+
+    private static int spawnSpirit(ServerCommandSource src, String gradeLabel,
+                                    BlockPos pos, ServerWorld world) {
+        EntityType<CursedSpiritEntity> type = switch (gradeLabel) {
+            case "4급" -> CursedSpiritEntityTypes.GRADE_4;
+            case "3급" -> CursedSpiritEntityTypes.GRADE_3;
+            case "2급" -> CursedSpiritEntityTypes.GRADE_2;
+            case "1급" -> CursedSpiritEntityTypes.GRADE_1;
+            case "특급" -> CursedSpiritEntityTypes.SPECIAL;
+            default    -> null;
+        };
+        if (type == null) {
+            src.sendError(Text.literal("[JJK] 알 수 없는 등급: " + gradeLabel));
+            return 0;
+        }
+        CursedSpiritEntity spirit = type.create(world);
+        if (spirit == null) return 0;
+        spirit.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0f, 0f);
+        world.spawnEntity(spirit);
+        src.sendFeedback(() -> Text.literal("[JJK] 주령 소환: " + gradeLabel
+            + " @ " + pos.toShortString()), true);
+        return 1;
+    }
+
+    private static void resetCharacter(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        data.characterId = null;
+        JJKMod.getPlayerRepository().saveImmediate(data);
+        ServerPlayNetworking.send(player,
+                new CharacterSelectS2CPacket(new java.util.ArrayList<>(CharacterRegistry.ids())));
+        if (JJKMod.getAuditLogger() != null) {
+            JJKMod.getAuditLogger().logEvent("char_reset", player.getUuid(),
+                    "{\"by\":\"" + player.getUuid() + "\"}", player.getWorld().getTime());
+        }
+    }
 
     public static void init() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
@@ -110,6 +180,86 @@ public final class JjkCommandRegistry {
                                 return 0;
                             }
                         })
+                    )
+
+                    // /jj char — 캐릭터 초기화 서브커맨드
+                    .then(CommandManager.literal("char")
+                        .then(CommandManager.literal("reset")
+                            // /jj char reset — 자기 자신 (allowCharacterReselect 무관)
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity player = src.getPlayer();
+                                if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                resetCharacter(player);
+                                src.sendFeedback(() -> Text.literal("[JJK] 캐릭터가 초기화됐습니다. /jj select 로 재선택하세요."), false);
+                                return 1;
+                            })
+                            // /jj char reset <player> — OP 2
+                            .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .requires(src -> src.hasPermissionLevel(2))
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                    resetCharacter(target);
+                                    src.sendFeedback(() -> Text.literal("[JJK] " + target.getName().getString() + " 캐릭터 초기화 완료"), true);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj give <toolId> [target] — OP 2
+                    .then(CommandManager.literal("give")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("toolId", StringArgumentType.word())
+                            .suggests((ctx, builder) -> {
+                                java.util.stream.Stream.of(
+                                    "cursed_dagger", "thousand_spear",
+                                    "playful_cloud", "inverted_spear",
+                                    "split_soul_blade"
+                                ).forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(ctx -> giveTool(ctx.getSource(),
+                                ctx.getSource().getPlayer(),
+                                StringArgumentType.getString(ctx, "toolId")))
+                            .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .executes(ctx -> giveTool(ctx.getSource(),
+                                    EntityArgumentType.getPlayer(ctx, "target"),
+                                    StringArgumentType.getString(ctx, "toolId"))))
+                        )
+                    )
+
+                    // /jj spawn <grade> [pos] — OP 2
+                    .then(CommandManager.literal("spawn")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("grade", StringArgumentType.word())
+                            .suggests((ctx, builder) -> {
+                                java.util.stream.Stream.of("4급","3급","2급","1급","특급")
+                                    .forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity player = src.getPlayer();
+                                if (player == null) {
+                                    src.sendError(Text.literal("플레이어만 사용 가능합니다."));
+                                    return 0;
+                                }
+                                return spawnSpirit(src,
+                                    StringArgumentType.getString(ctx, "grade"),
+                                    player.getBlockPos(), (ServerWorld) player.getWorld());
+                            })
+                            .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    BlockPos pos = BlockPosArgumentType.getBlockPos(ctx, "pos");
+                                    ServerWorld world = src.getWorld();
+                                    return spawnSpirit(src,
+                                        StringArgumentType.getString(ctx, "grade"), pos, world);
+                                })
+                            )
+                        )
                     )
 
                     // /jj debug ... — OP 2

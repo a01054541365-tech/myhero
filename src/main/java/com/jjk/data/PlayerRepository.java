@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class PlayerRepository {
 
@@ -20,9 +21,15 @@ public class PlayerRepository {
 
     private Connection conn;
     private final Map<UUID, PlayerData> cache = new HashMap<>();
-    private final Migrator migrator = new Migrator();
 
-    // Called from SERVER_STARTING ??path is world/jjk/player_data.db
+    // Production constructor: no-arg, init(Path) sets up connection + migration
+    public PlayerRepository() {}
+
+    // Test constructor: accepts existing connection (Migrator called externally)
+    public PlayerRepository(Connection conn) {
+        this.conn = conn;
+    }
+
     public void init(Path dbPath) {
         try {
             Files.createDirectories(dbPath.getParent());
@@ -30,12 +37,15 @@ public class PlayerRepository {
             try (Statement st = conn.createStatement()) {
                 st.execute("PRAGMA journal_mode=WAL");
                 st.execute("PRAGMA foreign_keys=ON");
-                st.execute(DDL_PLAYER_DATA);
             }
-            migrator.migrate(conn);
+            new Migrator().migrate(conn);
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to initialize player_data.db", e);
+            throw new RuntimeException("Failed to initialize player_data.db", e);
         }
+    }
+
+    public Connection getConnection() {
+        return conn;
     }
 
     public void close() {
@@ -47,7 +57,6 @@ public class PlayerRepository {
         }
     }
 
-    // Checks cache first; queries DB on miss. Always sets data.uuid.
     public PlayerData load(UUID uuid) {
         Objects.requireNonNull(uuid);
         PlayerData cached = cache.get(uuid);
@@ -59,51 +68,71 @@ public class PlayerRepository {
         return data;
     }
 
-    // Writes to cache only. Flushed on saveImmediate / evict.
     public void save(PlayerData data) {
         Objects.requireNonNull(data.uuid);
         cache.put(data.uuid, data);
     }
 
-    // Writes to cache and immediately flushes to DB.
+    // snapshot() 후 저장. 원본을 DB에 직접 전달하지 않음.
     public void saveImmediate(PlayerData data) {
         Objects.requireNonNull(data.uuid);
         cache.put(data.uuid, data);
-        flush(data);
-    }
-
-    // Flushes to DB and evicts from cache. Call on player disconnect.
-    public void evict(UUID uuid) {
-        PlayerData data = cache.remove(uuid);
-        if (data != null) flush(data);
-    }
-
-    // ???? private ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-
-    private void flushAll() {
-        new ArrayList<>(cache.values()).forEach(this::flush);
-    }
-
-    private void flush(PlayerData data) {
-        if (conn == null) return;
+        PlayerData snap = data.snapshot();
         try {
-            upsertPlayerData(data);
+            upsertPlayerData(snap);
         } catch (SQLException e) {
-            LOGGER.error("Failed to flush data for {}", data.uuid, e);
+            LOGGER.error("saveImmediate failed for {}", data.uuid, e);
+            throw new RuntimeException("saveImmediate failed", e);
         }
     }
 
+    // snapshot() 후 비동기 저장. 실패 시 조용히 로그만.
+    public CompletableFuture<Void> saveAsync(PlayerData data) {
+        Objects.requireNonNull(data.uuid);
+        cache.put(data.uuid, data);
+        PlayerData snap = data.snapshot();
+        return CompletableFuture.runAsync(() -> {
+            try {
+                upsertPlayerData(snap);
+            } catch (SQLException e) {
+                LOGGER.error("saveAsync failed for {}", snap.uuid, e);
+            }
+        });
+    }
+
+    public void evict(UUID uuid) {
+        PlayerData data = cache.remove(uuid);
+        if (data != null) {
+            PlayerData snap = data.snapshot();
+            try {
+                upsertPlayerData(snap);
+            } catch (SQLException e) {
+                LOGGER.error("evict flush failed for {}", uuid, e);
+            }
+        }
+    }
+
+    // ─── private ─────────────────────────────────────────────────────────────
+
+    private void flushAll() {
+        new ArrayList<>(cache.values()).forEach(data -> {
+            PlayerData snap = data.snapshot();
+            try { upsertPlayerData(snap); }
+            catch (SQLException e) { LOGGER.error("flushAll failed for {}", snap.uuid, e); }
+        });
+    }
+
     private PlayerData loadFromDb(UUID uuid) {
-        if (conn == null) return new PlayerData();
+        if (conn == null) return PlayerData.createDefault(uuid);
         try (PreparedStatement ps = conn.prepareStatement(SELECT_PLAYER)) {
             ps.setString(1, uuid.toString());
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return new PlayerData();
+                if (!rs.next()) return PlayerData.createDefault(uuid);
                 return mapRow(rs);
             }
         } catch (SQLException e) {
             LOGGER.error("Failed to load data for {}", uuid, e);
-            return new PlayerData();
+            return PlayerData.createDefault(uuid);
         }
     }
 
@@ -141,19 +170,27 @@ public class PlayerRepository {
         d.deadShikigamiIds       = GSON.fromJson(rs.getString("dead_shikigami_ids"), LIST_TYPE);
         d.healingActive          = rs.getInt("healing_active") != 0;
         d.zonePenaltyUntilTick   = rs.getLong("zone_penalty_until_tick");
+        d.hasExecutionSword      = rs.getInt("has_execution_sword") != 0;
         d.jackpotActive          = rs.getInt("jackpot_active") != 0;
         d.jackpotEndTick         = rs.getLong("jackpot_end_tick");
         d.lastJackpotAttemptTick = rs.getLong("last_jackpot_attempt_tick");
-        d.hasExecutionSword      = rs.getInt("has_execution_sword") != 0;
         d.infinityActive         = rs.getInt("infinity_active") != 0;
         d.curtainActive          = rs.getInt("curtain_active") != 0;
         d.overtimeWork           = rs.getInt("overtime_work") != 0;
         d.fallingBlossomActive   = rs.getInt("falling_blossom_active") != 0;
         d.fallingBlossomUntil    = rs.getLong("falling_blossom_until");
         d.simpleBarrierActive    = rs.getInt("simple_barrier_active") != 0;
+        d.shikigamiDmgBoost      = rs.getFloat("shikigami_dmg_boost");
         d.schemaVersion          = rs.getInt("schema_version");
-        if (d.unlockedSkills == null) d.unlockedSkills = new ArrayList<>();
-        if (d.cooldowns == null)      d.cooldowns = new HashMap<>();
+        try { d.zoneEntryTick  = rs.getLong("zone_entry_tick"); }  catch (SQLException ignored) {}
+        try { d.lastAttackTick = rs.getLong("last_attack_tick"); } catch (SQLException ignored) {}
+        try { d.lastReceivedSkillId       = rs.getString("last_received_skill_id"); }       catch (SQLException ignored) {}
+        try { d.lastReceivedBaseDamage    = rs.getInt("last_received_base_damage"); }        catch (SQLException ignored) {}
+        try { d.lastReceivedCeCost        = rs.getInt("last_received_ce_cost"); }            catch (SQLException ignored) {}
+        try { d.lastReceivedCooldownTicks = rs.getInt("last_received_cooldown_ticks"); }     catch (SQLException ignored) {}
+        try { d.lastReceivedIsDomain      = rs.getInt("last_received_is_domain") != 0; }    catch (SQLException ignored) {}
+        if (d.unlockedSkills == null)   d.unlockedSkills = new ArrayList<>();
+        if (d.cooldowns == null)        d.cooldowns = new HashMap<>();
         if (d.deadShikigamiIds == null) d.deadShikigamiIds = new ArrayList<>();
         return d;
     }
@@ -179,7 +216,7 @@ public class PlayerRepository {
             ps.setLong(17,   d.domainCooldownUntil);
             ps.setLong(18,   d.jackpotCooldownUntil);
             ps.setLong(19,   d.curtainCooldownUntil);
-            ps.setString(20, d.trialState);
+            ps.setString(20, d.trialState != null ? d.trialState : "IDLE");
             ps.setInt(21,    d.burden);
             ps.setInt(22,    d.zoneActive ? 1 : 0);
             ps.setLong(23,   d.zoneEndTick);
@@ -193,70 +230,30 @@ public class PlayerRepository {
             ps.setString(31, GSON.toJson(d.deadShikigamiIds));
             ps.setInt(32,    d.healingActive ? 1 : 0);
             ps.setLong(33,   d.zonePenaltyUntilTick);
-            ps.setInt(34,    d.jackpotActive ? 1 : 0);
-            ps.setLong(35,   d.jackpotEndTick);
-            ps.setLong(36,   d.lastJackpotAttemptTick);
-            ps.setInt(37,    d.hasExecutionSword ? 1 : 0);
+            ps.setInt(34,    d.hasExecutionSword ? 1 : 0);
+            ps.setInt(35,    d.jackpotActive ? 1 : 0);
+            ps.setLong(36,   d.jackpotEndTick);
+            ps.setLong(37,   d.lastJackpotAttemptTick);
             ps.setInt(38,    d.infinityActive ? 1 : 0);
             ps.setInt(39,    d.curtainActive ? 1 : 0);
             ps.setInt(40,    d.overtimeWork ? 1 : 0);
             ps.setInt(41,    d.fallingBlossomActive ? 1 : 0);
             ps.setLong(42,   d.fallingBlossomUntil);
             ps.setInt(43,    d.simpleBarrierActive ? 1 : 0);
-            ps.setInt(44,    d.schemaVersion);
+            ps.setFloat(44,  d.shikigamiDmgBoost);
+            ps.setInt(45,    d.schemaVersion);
+            ps.setLong(46,   d.zoneEntryTick);
+            ps.setLong(47,   d.lastAttackTick);
+            ps.setString(48, d.lastReceivedSkillId);
+            ps.setInt(49,    d.lastReceivedBaseDamage);
+            ps.setInt(50,    d.lastReceivedCeCost);
+            ps.setInt(51,    d.lastReceivedCooldownTicks);
+            ps.setInt(52,    d.lastReceivedIsDomain ? 1 : 0);
             ps.executeUpdate();
         }
     }
 
-    // ???? SQL ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-
-    private static final String DDL_PLAYER_DATA = """
-            CREATE TABLE IF NOT EXISTS player_data (
-                uuid                        TEXT    PRIMARY KEY,
-                character_id                TEXT,
-                grade                       TEXT    NOT NULL DEFAULT '4급',
-                xp                          INTEGER NOT NULL DEFAULT 0,
-                mastery                     INTEGER NOT NULL DEFAULT 0,
-                ce_current                  REAL    NOT NULL DEFAULT 1000.0,
-                ce_max                      REAL    NOT NULL DEFAULT 1000.0,
-                hp_current                  REAL    NOT NULL DEFAULT 20.0,
-                hp_max                      REAL    NOT NULL DEFAULT 20.0,
-                attack_stat                 INTEGER NOT NULL DEFAULT 0,
-                defense_stat                INTEGER NOT NULL DEFAULT 0,
-                speed_stat                  INTEGER NOT NULL DEFAULT 0,
-                finger_count                INTEGER NOT NULL DEFAULT 0,
-                unlocked_skills             TEXT    NOT NULL DEFAULT '[]',
-                cooldowns                   TEXT    NOT NULL DEFAULT '{}',
-                binding_vow_declared_tick   INTEGER NOT NULL DEFAULT 0,
-                domain_cooldown_until       INTEGER NOT NULL DEFAULT 0,
-                jackpot_cooldown_until      INTEGER NOT NULL DEFAULT 0,
-                curtain_cooldown_until      INTEGER NOT NULL DEFAULT 0,
-                trial_state                 TEXT,
-                burden                      INTEGER NOT NULL DEFAULT 0,
-                zone_active                 INTEGER NOT NULL DEFAULT 0,
-                zone_end_tick               INTEGER NOT NULL DEFAULT 0,
-                last_combat_tick            INTEGER NOT NULL DEFAULT 0,
-                last_known_ip               TEXT,
-                awakening_active            INTEGER NOT NULL DEFAULT 0,
-                awakening_end_tick          INTEGER NOT NULL DEFAULT 0,
-                awakening_cooldown_until    INTEGER NOT NULL DEFAULT 0,
-                burst_active                INTEGER NOT NULL DEFAULT 0,
-                burst_end_tick              INTEGER NOT NULL DEFAULT 0,
-                dead_shikigami_ids          TEXT    NOT NULL DEFAULT '[]',
-                healing_active              INTEGER NOT NULL DEFAULT 0,
-                zone_penalty_until_tick     INTEGER NOT NULL DEFAULT 0,
-                jackpot_active              INTEGER NOT NULL DEFAULT 0,
-                jackpot_end_tick            INTEGER NOT NULL DEFAULT 0,
-                last_jackpot_attempt_tick   INTEGER NOT NULL DEFAULT 0,
-                has_execution_sword         INTEGER NOT NULL DEFAULT 0,
-                infinity_active             INTEGER NOT NULL DEFAULT 0,
-                curtain_active              INTEGER NOT NULL DEFAULT 0,
-                overtime_work               INTEGER NOT NULL DEFAULT 0,
-                falling_blossom_active      INTEGER NOT NULL DEFAULT 0,
-                falling_blossom_until       INTEGER NOT NULL DEFAULT 0,
-                simple_barrier_active       INTEGER NOT NULL DEFAULT 0,
-                schema_version              INTEGER NOT NULL DEFAULT 1
-            )""";
+    // ─── SQL ──────────────────────────────────────────────────────────────────
 
     private static final String SELECT_PLAYER =
             "SELECT * FROM player_data WHERE uuid = ?";
@@ -274,14 +271,23 @@ public class PlayerRepository {
                 awakening_active, awakening_end_tick, awakening_cooldown_until,
                 burst_active, burst_end_tick, dead_shikigami_ids,
                 healing_active, zone_penalty_until_tick,
-                jackpot_active, jackpot_end_tick, last_jackpot_attempt_tick,
-                has_execution_sword, infinity_active, curtain_active,
+                has_execution_sword, jackpot_active, jackpot_end_tick,
+                last_jackpot_attempt_tick, infinity_active, curtain_active,
                 overtime_work, falling_blossom_active, falling_blossom_until,
-                simple_barrier_active, schema_version
+                simple_barrier_active, shikigami_dmg_boost, schema_version,
+                zone_entry_tick, last_attack_tick,
+                last_received_skill_id, last_received_base_damage,
+                last_received_ce_cost, last_received_cooldown_ticks,
+                last_received_is_domain
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
-                ?,?, ?,?,?, ?,?,?,?, ?,?, ?,?,?, ?,?,?, ?,?,?,
-                ?,?,?,?,?,?,?,?,?,?,?
+                ?,?, ?,?,?,?,
+                ?,?,?,?, ?,?,
+                ?,?,?, ?,?,?,
+                ?,?, ?,?,?,
+                ?,?,?, ?,?,?,
+                ?,?,?, ?,?,
+                ?,?,?,?,?
             )
             ON CONFLICT(uuid) DO UPDATE SET
                 character_id              = excluded.character_id,
@@ -316,16 +322,24 @@ public class PlayerRepository {
                 dead_shikigami_ids        = excluded.dead_shikigami_ids,
                 healing_active            = excluded.healing_active,
                 zone_penalty_until_tick   = excluded.zone_penalty_until_tick,
+                has_execution_sword       = excluded.has_execution_sword,
                 jackpot_active            = excluded.jackpot_active,
                 jackpot_end_tick          = excluded.jackpot_end_tick,
                 last_jackpot_attempt_tick = excluded.last_jackpot_attempt_tick,
-                has_execution_sword       = excluded.has_execution_sword,
                 infinity_active           = excluded.infinity_active,
                 curtain_active            = excluded.curtain_active,
                 overtime_work             = excluded.overtime_work,
                 falling_blossom_active    = excluded.falling_blossom_active,
                 falling_blossom_until     = excluded.falling_blossom_until,
                 simple_barrier_active     = excluded.simple_barrier_active,
-                schema_version            = excluded.schema_version
+                shikigami_dmg_boost       = excluded.shikigami_dmg_boost,
+                schema_version            = excluded.schema_version,
+                zone_entry_tick                = excluded.zone_entry_tick,
+                last_attack_tick               = excluded.last_attack_tick,
+                last_received_skill_id         = excluded.last_received_skill_id,
+                last_received_base_damage      = excluded.last_received_base_damage,
+                last_received_ce_cost          = excluded.last_received_ce_cost,
+                last_received_cooldown_ticks   = excluded.last_received_cooldown_ticks,
+                last_received_is_domain        = excluded.last_received_is_domain
             """;
 }

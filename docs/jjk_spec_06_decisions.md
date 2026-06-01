@@ -3,7 +3,7 @@
 > 이 문서는 운영자가 직접 확정한 수치와 설계 결정을 기록한다.
 > 세션 시작 시 claude.md → jjk_spec_v5.md 다음으로 반드시 읽는다.
 > §LOCK 수치는 명시적 지시 없이 변경 금지.
-> 최종 확정일: 2026-05-28
+> 최초 확정 (2026-05-23). 최종 수정 (2026-05-31).
 
 ---
 
@@ -69,6 +69,11 @@
 | `zoneDurationTicks` | `300` | 확정 2026-05-28 |
 | `ceRegenOutOfCombat` | `1.0` | 확정 2026-05-28, config 조정 가능 |
 | `ceRegenInCombat` | `0.2` | 확정 2026-05-28, config 조정 가능 |
+| `maharagaTimeoutTicks` | `200` | 마허라가 의식 타임아웃 10초 — 운영자 조정 가능 |
+| `shadowMarkerLifetimeTicks` | `200` | 메구미 그림자 마커 유지시간 10초 — 운영자 조정 가능 |
+| `pveGradeMultiplier` | `1.0` | PvE 등급 배율 고정값 (PvP는 §7-1 표 적용) |
+| `zoneEntryBlackFlashCount` | `1` | Zone 진입에 필요한 흑섬 성공 횟수 |
+| `zoneStackable` | `false` | Zone 중첩 허용 여부 |
 
 ---
 

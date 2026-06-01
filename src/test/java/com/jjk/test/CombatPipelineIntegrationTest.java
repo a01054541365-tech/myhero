@@ -100,6 +100,33 @@ class CombatPipelineIntegrationTest {
                 "HP 25% 상태에서 피격 후 target.awakeningActive=true");
     }
 
+    // ─── TASK-46: Stage 6c 비율 감쇠 통합 케이스 ────────────────────────────────
+
+    @Test
+    void defenseStatApplied_inProcess() {
+        // defenseStat=60, defenseMultiplier=1.0
+        // 비율 감쇠: 100 × (100/(100+60)) = 62.5
+        float result = CombatPipeline.applyDefenseStat(100f, 60, 1.0f, false);
+        assertEquals(62.5f, result, 0.01f, "defenseStat=60 → damage×(100/160)=62.5");
+    }
+
+    @Test
+    void soulDirect_bypassesDefenseStat() {
+        // isSoulDirect=true → 방어 무시, 원본 데미지 유지
+        float result = CombatPipeline.applyDefenseStat(100f, 75, 1.0f, true);
+        assertEquals(100f, result, 0.01f, "isSoulDirect=true → 방어 무시");
+    }
+
+    @Test
+    void dismantleDefenseMultiplier_appliedInProcess() {
+        // defenseMultiplier=0.80 (해체) → effectiveDefense=60 → 100×(100/160)=62.5
+        // 일반 공격 defenseStat=75 → effectiveDefense=75 → 100×(100/175)≈57.14
+        float dmgDismantle = CombatPipeline.applyDefenseStat(100f, 75, 0.80f, false);
+        float dmgNormal    = CombatPipeline.applyDefenseStat(100f, 75, 1.00f, false);
+        assertEquals(62.5f, dmgDismantle, 0.01f, "해체 관통: 100×(100/160)=62.5");
+        assertTrue(dmgDismantle > dmgNormal, "해체가 일반 공격보다 finalDamage 높아야 함");
+    }
+
     @Test
     void testCooldownSetAfterSkill() {
         // 스킬 성공 후 attacker.cooldowns에 keyId 만료 틱 기록

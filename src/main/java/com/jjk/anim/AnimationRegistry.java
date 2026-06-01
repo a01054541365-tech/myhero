@@ -72,12 +72,18 @@ public final class AnimationRegistry {
         m.put(57, "awakening_enter");
         m.put(58, "zone_enter");
         m.put(59, "itadori_domain_startup");
-        m.put(60, "sukuna_v");
+        // 나나미 신규 스킬 — 56·57·58은 기존 공용 이펙트(black_flash_great·awakening_enter·zone_enter)가 사용 중
+        m.put(60, "nanami_dismantle");
+        m.put(61, "nanami_overtime");
+        m.put(62, "nanami_ten_puncture");
         return m;
     }
 
+    /** 등록된 animId 이름 반환. 없으면 IllegalArgumentException. */
     public static String get(int id) {
-        return REGISTRY.getOrDefault(id, "common_idle");
+        String name = REGISTRY.get(id);
+        if (name == null) throw new IllegalArgumentException("Unknown animId: " + id);
+        return name;
     }
 
     public static boolean has(int id) {

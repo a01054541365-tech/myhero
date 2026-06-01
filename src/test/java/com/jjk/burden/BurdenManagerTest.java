@@ -83,4 +83,19 @@ class BurdenManagerTest {
         manager.tickInternal(data, 100L);
         assertEquals(50, data.burden);
     }
+
+    @Test
+    void isSealed_trueWhileActive() {
+        PlayerData data = inumakiData();
+        long sealExpiry = 500L;
+        data.cooldowns.put("skill_seal", sealExpiry);
+        assertTrue(BurdenManager.isSealed(data, 499L), "봉인 만료 전에는 isSealed=true");
+    }
+
+    @Test
+    void isSealed_falseAfterExpiry() {
+        PlayerData data = inumakiData();
+        data.cooldowns.put("skill_seal", 500L);
+        assertFalse(BurdenManager.isSealed(data, 500L), "만료 틱 이후에는 isSealed=false");
+    }
 }

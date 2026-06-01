@@ -3,12 +3,13 @@ package com.jjk.awakening;
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.AwakeningS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 // 吏쟊OCK: HP 30% / 160??/ 2400??????륂뒄 癰궰野???AwakeningManagerTest????ｍ뜞 ??륁젟
 public class AwakeningManager {
 
-    private static final float AWAKENING_HP_THRESHOLD = 0.30f;
     private static final int AWAKENING_DURATION_TICKS = 160;
     private static final int AWAKENING_COOLDOWN_TICKS = 2400;
 
@@ -23,8 +24,9 @@ public class AwakeningManager {
         long currentTick = player.getWorld().getTime();
 
         if (data.awakeningActive && currentTick >= data.awakeningEndTick) {
-            deactivate(data, currentTick);
+            deactivate(data);
             JJKMod.getPlayerRepository().save(data);
+            ServerPlayNetworking.send(player, new AwakeningS2CPacket(false));
         }
     }
 
@@ -36,18 +38,51 @@ public class AwakeningManager {
         if (currentTick < data.awakeningCooldownUntil) return false;
 
         float hpRatio = player.getHealth() / player.getMaxHealth();
-        if (hpRatio > AWAKENING_HP_THRESHOLD) return false;
+        if (hpRatio > config.awakeningHpThreshold()) return false;
 
         data.awakeningActive = true;
         data.awakeningEndTick = currentTick + AWAKENING_DURATION_TICKS;
+        // §3-7: set cooldown at activation to close the race window (H-4)
+        data.awakeningCooldownUntil = currentTick + AWAKENING_COOLDOWN_TICKS;
         JJKMod.getPlayerRepository().save(data);
-        // TODO: send AwakeningS2CPacket
+        ServerPlayNetworking.send(player, new AwakeningS2CPacket(true));
         return true;
     }
 
-    private void deactivate(PlayerData data, long currentTick) {
+    private void deactivate(PlayerData data) {
         data.awakeningActive = false;
         data.awakeningEndTick = 0;
-        data.awakeningCooldownUntil = currentTick + AWAKENING_COOLDOWN_TICKS;
+    }
+
+    // ─── Pure-data overloads (CombatPipeline.processData 및 테스트용) ──────────
+
+    // §LOCK 상수 — 테스트에서 직접 참조 가능
+    public static final int   DURATION_TICKS      = AWAKENING_DURATION_TICKS; // 160
+    public static final int   COOLDOWN_TICKS_CONST = AWAKENING_COOLDOWN_TICKS; // 2400
+
+    /**
+     * §3-7: 순수 PlayerData 기반 각성 발동 판정. MC 패킷 미전송.
+     * CombatPipeline 5단계에서만 호출할 것 (CLAUDE.md §E 규정).
+     */
+    public void checkAndActivate(PlayerData data, float currentHp, float maxHp, long tick) {
+        float threshold = (JJKMod.getInstance() != null)
+                ? JJKMod.getConfig().awakeningHpThreshold() : config.awakeningHpThreshold();
+        if (currentHp > maxHp * threshold) return;
+        if (tick < data.awakeningCooldownUntil) return;
+        if (data.awakeningActive) return;
+        data.awakeningActive = true;
+        data.awakeningEndTick = tick + AWAKENING_DURATION_TICKS;   // §LOCK: 160
+        data.awakeningCooldownUntil = tick + AWAKENING_COOLDOWN_TICKS; // §LOCK: 2400
+    }
+
+    /**
+     * §3-7: 각성 만료 tick 체크 (순수 PlayerData). MC 패킷 미전송.
+     * ServerPlayerEntityMixin tick at=TAIL 에서 호출 (TickScheduler 경유).
+     */
+    public void tickCheck(PlayerData data, long tick) {
+        if (data.awakeningActive && tick >= data.awakeningEndTick) {
+            data.awakeningActive = false;
+            data.awakeningEndTick = 0;
+        }
     }
 }
