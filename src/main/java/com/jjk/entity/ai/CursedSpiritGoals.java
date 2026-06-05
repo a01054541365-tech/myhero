@@ -179,9 +179,10 @@ public final class CursedSpiritGoals {
 
             // 영역 활성 중: 매 틱 범위 내 플레이어에게 자동 데미지
             if (!(spirit.getWorld() instanceof ServerWorld sw)) return;
+            long currentTick = sw.getTime();
             DomainInstance domain = JJKMod.getDomainManager()
                 .getActiveDomain(spirit.getUuid());
-            if (domain == null || !domain.sureHitActive) return;
+            if (domain == null || !domain.isSureHitReady(currentTick)) return;
 
             float tickDmg = spirit.getGrade().attackDamage * 0.3f;
             for (PlayerEntity p : sw.getPlayers()) {

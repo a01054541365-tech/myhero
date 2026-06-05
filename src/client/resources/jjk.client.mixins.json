@@ -2,7 +2,9 @@
 	"required": true,
 	"package": "com.jjk.client.mixin",
 	"compatibilityLevel": "JAVA_21",
-	"client": [],
+	"client": [
+		"BossBarHudMixin"
+	],
 	"injectors": {
 		"defaultRequire": 1
 	},

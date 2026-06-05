@@ -35,12 +35,14 @@ public class CharacterCommandService {
             return SelectResult.DUPLICATE_BLOCKED;
         }
 
-        // grade check (§26-2): player's current grade must meet the character's minimum
+        // grade check (§26-2): skip on first selection (characterId == null)
         CharacterRegistry.CharacterMeta meta = CharacterRegistry.get(characterId);
-        int requiredRank = GRADE_ORDER.getOrDefault(meta.defaultGrade(), 0);
-        int playerRank = data.grade != null ? GRADE_ORDER.getOrDefault(data.grade, 0) : 0;
-        if (playerRank < requiredRank) {
-            return SelectResult.GRADE_INSUFFICIENT;
+        if (data.characterId != null) {
+            int requiredRank = GRADE_ORDER.getOrDefault(meta.defaultGrade(), 0);
+            int playerRank = GRADE_ORDER.getOrDefault(data.grade, 0);
+            if (playerRank < requiredRank) {
+                return SelectResult.GRADE_INSUFFICIENT;
+            }
         }
 
         data.characterId = characterId;

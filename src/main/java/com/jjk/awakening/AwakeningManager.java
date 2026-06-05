@@ -34,6 +34,7 @@ public class AwakeningManager {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long currentTick = player.getWorld().getTime();
 
+        if (data.jackpotActive) return false;
         if (data.awakeningActive) return false;
         if (currentTick < data.awakeningCooldownUntil) return false;
 
@@ -65,6 +66,7 @@ public class AwakeningManager {
      * CombatPipeline 5단계에서만 호출할 것 (CLAUDE.md §E 규정).
      */
     public void checkAndActivate(PlayerData data, float currentHp, float maxHp, long tick) {
+        if (data.jackpotActive) return;
         float threshold = (JJKMod.getInstance() != null)
                 ? JJKMod.getConfig().awakeningHpThreshold() : config.awakeningHpThreshold();
         if (currentHp > maxHp * threshold) return;

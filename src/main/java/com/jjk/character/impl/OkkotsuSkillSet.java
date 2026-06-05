@@ -6,6 +6,7 @@ import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.combat.CooldownManager;
 import com.jjk.combat.DamageContext;
+import com.jjk.combat.TechniqueLoader;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.RikaEntity;
@@ -25,12 +26,12 @@ public class OkkotsuSkillSet implements ISkillSet {
     // key 0: rika_summon, 1: sword_slash, 2: copy_technique, 3: rika_burst, 4: reverse_cursed_technique
     // CE/CD 수치: jjk_spec_v5.md §6-5
     private static final int CE_0 = 260,  CD_0 = 30,  ANIM_0 = 50;
-    private static final int CE_1 = 180,  CD_1 = 10,  ANIM_1 = 40;  // sword_slash animId §6-5
+    private static final int CE_1 = 180,  CD_1 = 12,  ANIM_1 = 40;  // sword_slash animId §6-5
     private static final int CE_2 = 300,  CD_2 = 45,  ANIM_2 = 52;
     private static final int CE_3 = 1100, CD_3 = 60,  ANIM_3 = 53;
     private static final int CD_4 = 8;   // RCT: 업프런트 CE 없음, 드레인 방식
 
-    private static final float SWORD_SLASH_DAMAGE = 72f;
+    private static final float SWORD_SLASH_DAMAGE = 60f;
     private static final float BURST_DURATION_TICKS = 200f;  // 10초
 
     @Override
@@ -122,7 +123,8 @@ public class OkkotsuSkillSet implements ISkillSet {
                 })
                 .toList();
 
-        float externalBuff = data.burstActive ? 1.30f : 1.0f;
+        float burstMult = TechniqueLoader.getBurstMultiplier("okkotsu", 3);
+        float externalBuff = data.burstActive ? burstMult : 1.0f;
         for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target,
                             IDamageSource.NORMAL_TECHNIQUE, SWORD_SLASH_DAMAGE)

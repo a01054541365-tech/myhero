@@ -37,6 +37,10 @@ public class TeamManager implements ITeamProvider {
         return a != t;
     }
 
+    public boolean isCursedSpirit(PlayerData data) {
+        return data.characterId != null && CURSED_SPIRITS.contains(data.characterId);
+    }
+
     /** Pure-data 같은 진영 판정 (processData 및 테스트용). */
     public boolean isSameTeam(PlayerData a, PlayerData b) {
         String ac = a.characterId;

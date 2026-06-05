@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class Migrator {
 
-    public static final int CURRENT_VERSION = 11;
+    public static final int CURRENT_VERSION = 14;
 
     private static final String DDL_PLAYER_DATA = """
             CREATE TABLE IF NOT EXISTS player_data (
@@ -75,7 +75,12 @@ public class Migrator {
                 chanting                    INTEGER NOT NULL DEFAULT 0,
                 chant_start_tick            INTEGER NOT NULL DEFAULT 0,
                 received_guide_book         INTEGER NOT NULL DEFAULT 0,
-                trial_target_uuid           TEXT
+                trial_target_uuid           TEXT,
+                cursed_stones               INTEGER NOT NULL DEFAULT 0,
+                mastery_reset_count         INTEGER NOT NULL DEFAULT 0,
+                bounty                      INTEGER NOT NULL DEFAULT 0,
+                weekly_quest_done           INTEGER NOT NULL DEFAULT -1,
+                costume_id                  TEXT    NOT NULL DEFAULT 'default'
             )""";
 
     private static final String DDL_AUDIT_LOG = """
@@ -197,6 +202,26 @@ public class Migrator {
                 // 히구루마 재판 대상 UUID (TASK-34)
                 try (Statement st = conn.createStatement()) {
                     try { st.execute("ALTER TABLE player_data ADD COLUMN trial_target_uuid TEXT"); } catch (SQLException ignored) {}
+                }
+            }
+            case 12 -> {
+                // 주력석 경제 시스템 (TASK-68)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN cursed_stones       INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN mastery_reset_count INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN bounty              INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 13 -> {
+                // 주간 퀘스트 완료 epoch week (TASK-99)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN weekly_quest_done INTEGER NOT NULL DEFAULT -1"); } catch (SQLException ignored) {}
+                }
+            }
+            case 14 -> {
+                // 의상 시스템 (TASK-F)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN costume_id TEXT NOT NULL DEFAULT 'default'"); } catch (SQLException ignored) {}
                 }
             }
         }

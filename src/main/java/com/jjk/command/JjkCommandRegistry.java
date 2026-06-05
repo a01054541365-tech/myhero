@@ -2,14 +2,17 @@ package com.jjk.command;
 
 import com.jjk.JJKMod;
 import com.jjk.burden.BurdenManager;
+import com.jjk.dungeon.DungeonManager;
 import com.jjk.character.CharacterCommandService;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.CursedSpiritEntity;
 import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.CursedSpiritGrade;
+import com.jjk.grade.GradeManager;
 import com.jjk.item.CursedToolItem;
 import com.jjk.item.CursedToolRegistry;
+import com.jjk.item.GuideBookItem;
 import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -26,6 +29,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
 import java.nio.file.Path;
+import java.util.Set;
 
 public final class JjkCommandRegistry {
 
@@ -74,6 +78,37 @@ public final class JjkCommandRegistry {
         world.spawnEntity(spirit);
         src.sendFeedback(() -> Text.literal("[JJK] 주령 소환: " + gradeLabel
             + " @ " + pos.toShortString()), true);
+        return 1;
+    }
+
+    private static final Set<String> VALID_GRADES =
+        Set.of("4급", "3급", "2급", "1급", "준특급", "특급");
+
+    private static int showStatus(ServerCommandSource src, PlayerData data, String name) {
+        String char_ = data.characterId != null ? data.characterId : "미선택";
+        String grade = data.grade != null ? data.grade : "-";
+        src.sendFeedback(() -> Text.literal("=== [JJK] " + name + " 상태 ==="), false);
+        src.sendFeedback(() -> Text.literal("캐릭터: " + char_), false);
+        src.sendFeedback(() -> Text.literal("등급: " + grade), false);
+        src.sendFeedback(() -> Text.literal(
+            "CE: " + (int)data.ceCurrent + " / " + (int)data.ceMax), false);
+        src.sendFeedback(() -> Text.literal(
+            "HP: " + (int)data.hpCurrent + " / " + (int)data.hpMax), false);
+        src.sendFeedback(() -> Text.literal("숙련도: " + data.mastery), false);
+        src.sendFeedback(() -> Text.literal("손가락: " + data.fingerCount), false);
+        src.sendFeedback(() -> Text.literal("==========================="), false);
+        return 1;
+    }
+
+    private static int doResetCooldowns(ServerCommandSource src, PlayerData data) {
+        data.cooldowns.clear();
+        data.domainCooldownUntil    = 0L;
+        data.awakeningCooldownUntil = 0L;
+        data.jackpotCooldownUntil   = 0L;
+        data.curtainCooldownUntil   = 0L;
+        data.bindingVowDeclaredTick = -1L;
+        JJKMod.getPlayerRepository().saveImmediate(data);
+        src.sendFeedback(() -> Text.literal("[JJK] " + data.uuid + " 쿨타임 전체 초기화 완료"), true);
         return 1;
     }
 
@@ -138,7 +173,7 @@ public final class JjkCommandRegistry {
                         )
                     )
 
-                    // /jj info — 플레이어 권한 (OP 불필요)
+                    // /jj info [target] — self: 누구나, target: OP 2
                     .then(CommandManager.literal("info")
                         .executes(ctx -> {
                             ServerCommandSource src = ctx.getSource();
@@ -163,6 +198,14 @@ public final class JjkCommandRegistry {
                                     "[JJK] 부담: " + data.burden + " | 봉인: " + (sealed ? "활성" : "없음")), false);
                             return 1;
                         })
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .requires(src -> src.hasPermissionLevel(2))
+                            .executes(ctx -> {
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                return showStatus(ctx.getSource(), data, target.getName().getString());
+                            })
+                        )
                     )
 
                     // /jj reload — OP 2
@@ -230,9 +273,26 @@ public final class JjkCommandRegistry {
                         )
                     )
 
-                    // /jj spawn <grade> [pos] — OP 2
+                    // /jj spawn <grade> [pos] or /jj spawn cursedspirit <grade> — OP 2
                     .then(CommandManager.literal("spawn")
                         .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("cursedspirit")
+                            .then(CommandManager.argument("grade", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    java.util.stream.Stream.of("4급","3급","2급","1급","특급")
+                                        .forEach(builder::suggest);
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity player = src.getPlayer();
+                                    if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                    return spawnSpirit(src,
+                                        StringArgumentType.getString(ctx, "grade"),
+                                        player.getBlockPos(), (ServerWorld) player.getWorld());
+                                })
+                            )
+                        )
                         .then(CommandManager.argument("grade", StringArgumentType.word())
                             .suggests((ctx, builder) -> {
                                 java.util.stream.Stream.of("4급","3급","2급","1급","특급")
@@ -257,6 +317,33 @@ public final class JjkCommandRegistry {
                                     ServerWorld world = src.getWorld();
                                     return spawnSpirit(src,
                                         StringArgumentType.getString(ctx, "grade"), pos, world);
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj dungeon — OP 2
+                    .then(CommandManager.literal("dungeon")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("enter")
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity player = src.getPlayer();
+                                if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                long tick = player.getWorld().getTime();
+                                JJKMod.getDungeonManager().enterDungeon(player, tick);
+                                src.sendFeedback(() -> Text.literal("[JJK] 던전 입장"), false);
+                                return 1;
+                            })
+                        )
+                        .then(CommandManager.literal("reset")
+                            .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                    JJKMod.getDungeonManager().exitDungeon(target.getUuid());
+                                    src.sendFeedback(() -> Text.literal("[JJK] 던전 진행도 초기화: " + target.getName().getString()), true);
+                                    return 1;
                                 })
                             )
                         )
@@ -314,6 +401,118 @@ public final class JjkCommandRegistry {
                                     JJKMod.getPlayerRepository().saveImmediate(data);
                                     int count = data.fingerCount;
                                     src.sendFeedback(() -> Text.literal("[JJK] 손가락 지급: " + count + "/" + max), true);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj guide — 가이드북 재지급 (플레이어 권한)
+                    .then(CommandManager.literal("guide")
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) {
+                                src.sendError(Text.literal("플레이어만 사용 가능합니다."));
+                                return 0;
+                            }
+                            ItemStack guide = GuideBookItem.create();
+                            if (!player.getInventory().insertStack(guide)) {
+                                player.dropItem(guide, false);
+                            }
+                            src.sendFeedback(() -> Text.literal("[JJK] 가이드북을 지급했습니다."), false);
+                            return 1;
+                        })
+                    )
+
+                    // /jj status — 자신의 상세 상태 (플레이어 권한)
+                    .then(CommandManager.literal("status")
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                            PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+                            return showStatus(src, data, player.getName().getString());
+                        })
+                    )
+
+                    // /jj top — 등급 랭킹 상위 5명 (플레이어 권한)
+                    .then(CommandManager.literal("top")
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            java.util.List<String[]> top =
+                                JJKMod.getPlayerRepository().findTopPlayers(5);
+                            src.sendFeedback(() -> Text.literal("=== [JJK] 등급 랭킹 ==="), false);
+                            for (int i = 0; i < top.size(); i++) {
+                                String[] entry = top.get(i);
+                                int rank = i + 1;
+                                src.sendFeedback(() -> Text.literal(rank + "위: " + entry[0] + " — " + entry[1]), false);
+                            }
+                            if (top.isEmpty()) {
+                                src.sendFeedback(() -> Text.literal("데이터 없음"), false);
+                            }
+                            src.sendFeedback(() -> Text.literal("======================"), false);
+                            return 1;
+                        })
+                    )
+
+                    // /jj tps — 현재 TPS (OP 2)
+                    .then(CommandManager.literal("tps")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .executes(ctx -> {
+                            float mspt = ctx.getSource().getServer().getAverageTickTime();
+                            double tps = mspt > 0 ? Math.min(20.0, 1000.0 / mspt) : 20.0;
+                            ctx.getSource().sendFeedback(
+                                () -> Text.literal(String.format("[JJK] 현재 TPS: %.1f / 20.0", tps)), false);
+                            return 1;
+                        })
+                    )
+
+                    // /jj resetcooldowns [target] — 쿨타임 전체 초기화 (OP 2)
+                    .then(CommandManager.literal("resetcooldowns")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                            PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+                            return doResetCooldowns(src, data);
+                        })
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                return doResetCooldowns(src, data);
+                            })
+                        )
+                    )
+
+                    // /jj setgrade <target> <grade> — 등급 강제 설정 (OP 2)
+                    .then(CommandManager.literal("setgrade")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .then(CommandManager.argument("grade", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    java.util.stream.Stream.of("4급","3급","2급","1급","준특급","특급")
+                                        .forEach(builder::suggest);
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                    String grade = StringArgumentType.getString(ctx, "grade");
+                                    if (!VALID_GRADES.contains(grade)) {
+                                        src.sendError(Text.literal("[JJK] 유효하지 않은 등급: " + grade
+                                            + " (4급/3급/2급/1급/준특급/특급)"));
+                                        return 0;
+                                    }
+                                    PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                    data.grade = grade;
+                                    JJKMod.getPlayerRepository().saveImmediate(data);
+                                    final String tName = target.getName().getString();
+                                    src.sendFeedback(() -> Text.literal(
+                                        "[JJK] " + tName + " 등급 → " + grade), true);
                                     return 1;
                                 })
                             )

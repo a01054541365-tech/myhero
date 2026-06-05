@@ -43,7 +43,7 @@ class ISkillSetTest {
         CharacterRegistry.register("mahito", new CharacterRegistry.CharacterMeta("mahito", "마히토", "특급", 4500f));
         SkillRegistry.register("hakari", new HakariSkillSet());
         CharacterRegistry.register("hakari", new CharacterRegistry.CharacterMeta("hakari", "하카리 킨지", "1급", 4000f));
-        SkillRegistry.register("higuruma", new HigurumaskillSet());
+        SkillRegistry.register("higuruma", new HigurumaSkillSet());
         CharacterRegistry.register("higuruma", new CharacterRegistry.CharacterMeta("higuruma", "히구루마 히로미", "1급", 3500f));
     }
 
@@ -257,7 +257,7 @@ class ISkillSetTest {
 
     @Test
     void testHigurumaSwordCondition() {
-        HigurumaskillSet skill = new HigurumaskillSet();
+        HigurumaSkillSet skill = new HigurumaSkillSet();
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
         data.hasExecutionSword = false;
         assertEquals(SkillResult.FAIL_CONDITION, skill.onV(data, null, 0L));
@@ -270,7 +270,7 @@ class ISkillSetTest {
 
     @Test
     void testHigurumaImplementedKeys() {
-        HigurumaskillSet skill = new HigurumaskillSet();
+        HigurumaSkillSet skill = new HigurumaSkillSet();
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
         data.ceCurrent = 9999f;
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onF(data, null, 0L));
@@ -279,11 +279,14 @@ class ISkillSetTest {
     }
 
     @Test
-    void testHigurumaNotImplementedKeys() {
-        HigurumaskillSet skill = new HigurumaskillSet();
+    void testHigurumaShiftFAndRImplemented() {
+        // TASK-102: Shift+F·R 구현 완료 → NOT_IMPLEMENTED 아님
+        HigurumaSkillSet skill = new HigurumaSkillSet();
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftF(data, null, 0L));
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L));
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftF(data, null, 0L),
+            "Shift+F 구현됨 (검사 논고)");
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L),
+            "R 구현됨 (증거 인멸)");
     }
 
     @Test
@@ -381,7 +384,7 @@ class ISkillSetTest {
 
     @Test
     void testMigratorCurrentVersion() {
-        assertEquals(11, Migrator.CURRENT_VERSION);
+        assertEquals(13, Migrator.CURRENT_VERSION);
     }
 
     @Test

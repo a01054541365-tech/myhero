@@ -1,5 +1,6 @@
 package com.jjk.combat;
 
+import com.jjk.JJKMod;
 import net.minecraft.entity.LivingEntity;
 
 // §LOCK: PvP 상한 max_hp × 0.40 — DamageCalculatorTest 수치 보호
@@ -13,6 +14,9 @@ public class TickDamageCap {
     }
 
     public float apply(float damage, LivingEntity target) {
-        return apply(damage, target.getMaxHealth(), CAP_RATIO);
+        float ratio = (JJKMod.getInstance() != null)
+                ? JJKMod.getConfig().pvpDamageCapMaxHpRatio
+                : CAP_RATIO;
+        return apply(damage, target.getMaxHealth(), ratio);
     }
 }

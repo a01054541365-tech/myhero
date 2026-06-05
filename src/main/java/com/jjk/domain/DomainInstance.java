@@ -55,6 +55,16 @@ public class DomainInstance {
         this.currentRadius = this.maxRadius;
     }
 
+    private static final int STARTUP_TICKS = 20;
+
+    /**
+     * 영역 필중(sureHit) 활성 여부 — deployedAtTick 기준 20틱 startup 후 활성.
+     * sureHitActive=false(정의 기준)인 영역은 항상 false.
+     */
+    public boolean isSureHitReady(long currentTick) {
+        return sureHitActive && currentTick >= deployedAtTick + STARTUP_TICKS;
+    }
+
     public boolean isExpired(long currentTick) {
         if (expireAtTick > 0 && currentTick >= expireAtTick) return true;
         if (wallHp <= 0 && !isOpen) return true;

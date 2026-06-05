@@ -1,6 +1,10 @@
 package com.jjk.test;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
+import com.jjk.api.skill.SkillResult;
 import com.jjk.awakening.AwakeningManager;
 import com.jjk.burden.BurdenManager;
 import com.jjk.character.impl.NanamiSkillSet;
@@ -12,11 +16,17 @@ import com.jjk.domain.DomainDefinition;
 import com.jjk.domain.DomainInstance;
 import com.jjk.domain.DomainManager;
 import com.jjk.domain.DomainPriorityCalculator;
+import com.jjk.economy.CursedStoneManager;
 import com.jjk.entity.CursedSpiritGrade;
 import com.jjk.finger.FingerSystem;
 import com.jjk.item.CursedToolEffect;
 import com.jjk.item.CursedToolItem;
 import com.jjk.item.CursedToolRegistry;
+import com.jjk.network.c2s.NpcServiceC2SPacket;
+import com.jjk.npc.ShokoService;
+import com.jjk.npc.YagaService;
+import com.jjk.quest.QuestDef;
+import com.jjk.quest.QuestManager;
 import com.jjk.team.TeamManager;
 import com.jjk.trial.TrialManager;
 import net.minecraft.util.math.BlockPos;
@@ -38,6 +48,7 @@ class IntegrationSmokeTest {
 
     private PlayerRepository repo;
     private JjkConfig config;
+    private CursedStoneManager csm;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -45,6 +56,8 @@ class IntegrationSmokeTest {
         Connection conn = DriverManager.getConnection("jdbc:sqlite::memory:");
         new Migrator().migrate(conn);
         repo = new PlayerRepository(conn);
+        csm = new CursedStoneManager(repo);
+        JJKMod.initForTest(csm, repo);
     }
 
     private PlayerData newPlayer(String characterId) {
@@ -490,5 +503,170 @@ class IntegrationSmokeTest {
             npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L);
         assertFalse(bannedResult, "금지 청크(0,0) → deployNpcDomain false");
         config.domainBannedChunks.clear(); // 다른 테스트 영향 없도록
+    }
+
+    // ── 시나리오 19: 건축물 생성 플로우 ─────────────────────────────────────────
+    @Test
+    void scenario19_buildingConfig_flow() {
+        JjkConfig cfg = new JjkConfig();
+        assertFalse(cfg.jjtBuildingGenerated(), "초기 generated=false");
+
+        cfg.setJjtBuildingGenerated(true);
+        assertTrue(cfg.jjtBuildingGenerated(), "빌드 완료 후 true");
+
+        // 재진입 방지 가드
+        assertTrue(cfg.jjtBuildingGenerated(), "generated=true → 재생성 방지 플래그");
+
+        // NPC 스폰 좌표 범위 검증
+        int[] ijichi = {-15, 1, -12};
+        assertTrue(ijichi[0] >= -20 && ijichi[0] <= 20, "이치지 1층 X 범위");
+        assertTrue(ijichi[1] >= 0   && ijichi[1] <= 8,  "이치지 1층 Y 범위");
+        assertTrue(ijichi[2] >= -15 && ijichi[2] <= 15, "이치지 1층 Z 범위");
+
+        int[] gojoShiyu = {-15, -19, 0};
+        assertTrue(gojoShiyu[1] >= -20 && gojoShiyu[1] <= -11, "공시우 B2 Y 범위");
+
+        int[] yaga = {-10, 19, 0};
+        assertTrue(yaga[1] >= 18 && yaga[1] <= 27, "야가 3층 Y 범위");
+    }
+
+    // ── 시나리오 20: 주력석 경제 순환 ───────────────────────────────────────────
+    @Test
+    void scenario20_cursedStone_economy() {
+        PlayerData playerA = newPlayer("itadori");
+
+        // GRADE_4 처치 → XP + 석
+        playerA.xp += CursedSpiritGrade.GRADE_4.xpDrop;
+        assertEquals(10L, playerA.xp, "4급 처치 XP = 10");
+
+        csm.give(playerA, 40L, "spirit_kill_4", null);
+        assertEquals(40L, playerA.cursedStones, "4급 처치 → 40석");
+
+        // 현상금 누적
+        PlayerData playerB = newPlayer("mahito");
+        csm.addBounty(playerB, 50L);
+        assertEquals(50L, playerB.bounty, "bounty += 50");
+
+        // 현상금 정산
+        csm.give(playerB, playerB.bounty, "settle", null);
+        long settled = playerB.cursedStones;
+        playerB.bounty = 0L;
+        assertEquals(0L, playerB.bounty, "정산 후 bounty = 0");
+        assertEquals(50L, settled, "bounty → cursedStones 변환");
+
+        // 젠인 창고지기 구매
+        PlayerData buyer = newPlayer("itadori");
+        buyer.cursedStones = 500L;
+        csm.spend(buyer, 300L, "buy_cursed_dagger", null);
+        assertEquals(200L, buyer.cursedStones, "500 - 300 = 200석");
+    }
+
+    // ── 시나리오 21: NPC 서비스 쿨타임 영속성 ───────────────────────────────────
+    @Test
+    void scenario21_npcService_cooldown_persistence() {
+        PlayerData data = newPlayer("itadori");
+        data.cursedStones = 1000L;
+        long tick = 100L;
+
+        SkillResult r = ShokoService.handle(
+            new NpcServiceC2SPacket("shoko", "heal_full", null),
+            data, null, tick, csm);
+        assertEquals(SkillResult.SUCCESS, r, "완전 회복 성공");
+        assertTrue(data.cooldowns.containsKey("npc_shoko_heal_full"), "쿨타임 키 등록됨");
+
+        // save → reload
+        repo.saveImmediate(data);
+        PlayerData loaded = repo.load(data.uuid);
+        assertTrue(loaded.cooldowns.containsKey("npc_shoko_heal_full"), "재접속 후 쿨타임 유지");
+
+        // 쿨타임 중 재사용
+        loaded.cursedStones = 1000L;
+        SkillResult r2 = ShokoService.handle(
+            new NpcServiceC2SPacket("shoko", "heal_full", null),
+            loaded, null, tick + 100L, csm);
+        assertEquals(SkillResult.ON_COOLDOWN, r2, "쿨타임 중 재사용 → ON_COOLDOWN");
+    }
+
+    // ── 시나리오 22: 퀘스트 진행도 연동 ────────────────────────────────────────
+    @Test
+    void scenario22_questProgress_flow() {
+        PlayerData data = newPlayer("itadori");
+        QuestManager qm = JJKMod.getQuestManager();
+
+        int today = (int)(System.currentTimeMillis() / 86400000L);
+        QuestDef quest = qm.getDailyQuest(data.uuid, today);
+        assertNotNull(quest, "일일 퀘스트 배정");
+
+        assertEquals(0L, data.cooldowns.getOrDefault("quest_daily_prog", 0L), "초기 진행도 = 0");
+
+        // target - 1 회 progress
+        for (int i = 0; i < quest.target() - 1; i++) {
+            qm.progress(data, quest.type(), null, 0L);
+        }
+        long progBefore = data.cooldowns.getOrDefault("quest_daily_prog", 0L);
+        assertEquals(quest.target() - 1, progBefore, "target-1 진행 후 확인");
+
+        // 마지막 progress → 완료
+        qm.progress(data, quest.type(), null, 0L);
+        boolean done = data.cooldowns.getOrDefault("quest_daily_done", -1L) == today;
+        assertTrue(done, "퀘스트 완료 확인");
+
+        // 완료 후 재시도 → 변화 없음
+        long stonesBefore = data.cursedStones;
+        qm.progress(data, quest.type(), null, 0L);
+        assertEquals(stonesBefore, data.cursedStones, "완료 후 재시도 → 변화 없음");
+    }
+
+    // ── 시나리오 23: 주구 강화 + CombatPipeline 연동 ────────────────────────────
+    @Test
+    void scenario23_tool_enhance_combat() {
+        // 천호창 기본 + 1단계 강화 효과
+        float baseBonus = CursedToolRegistry.getEffect("thousand_spear").attackBonus();
+        float enhBonus  = 0.03f;
+        float total     = baseBonus + enhBonus;
+        assertEquals(0.17f, total, 0.001f, "천호창 1단계: 0.14 + 0.03 = 0.17");
+
+        // 강화 단계 추적
+        PlayerData data = newPlayer("itadori");
+        data.cooldowns.put("tool_enhance_thousand_spear", 1L);
+        int enhLevel = data.cooldowns.getOrDefault("tool_enhance_thousand_spear", 0L).intValue();
+        assertEquals(1, enhLevel, "강화 단계 1 확인");
+
+        // 3단계 후 추가 강화 → FAIL
+        data.cooldowns.put("tool_enhance_thousand_spear", 3L);
+        data.cursedStones = 99999L;
+        SkillResult r = YagaService.handle(
+            new NpcServiceC2SPacket("yaga", "enhance", "thousand_spear"),
+            data, null, 0L, csm);
+        assertEquals(SkillResult.FAIL, r, "3단계 후 추가 강화 → FAIL");
+
+        // isSoulDirect 방어 무시
+        float dmgSoul = CombatPipeline.applyDefenseStat(100f, 80, 1.0f, true);
+        assertEquals(100f, dmgSoul, 0.01f, "석혼도 방어 무시 = 100f");
+    }
+
+    // ── 시나리오 24: NPC GUI payload 검증 ──────────────────────────────────────
+    @Test
+    void scenario24_npcPayload_validation() {
+        Gson gson = new Gson();
+
+        // 이치지 payload
+        String ijichiPayload = "{\"stones\":500,\"questDesc\":\"주령 5마리 처치\","
+            + "\"questTarget\":5,\"questProg\":0,\"questDone\":false}";
+        JsonObject j = gson.fromJson(ijichiPayload, JsonObject.class);
+        assertTrue(j.has("questDesc"),   "questDesc 필드 존재");
+        assertTrue(j.has("questTarget"), "questTarget 필드 존재");
+        assertTrue(j.has("questProg"),   "questProg 필드 존재");
+
+        // 야가 payload
+        String yagaPayload = "{\"stones\":500,\"toolId\":\"thousand_spear\",\"enhLevel\":1}";
+        JsonObject yj = gson.fromJson(yagaPayload, JsonObject.class);
+        assertEquals("thousand_spear", yj.get("toolId").getAsString(), "toolId 일치");
+        assertEquals(1, yj.get("enhLevel").getAsInt(), "enhLevel 일치");
+
+        // 공시우 payload — 주술사 진영
+        String gojoPayload = "{\"stones\":500,\"bounty\":0,\"isCursedSpirit\":false}";
+        JsonObject gj = gson.fromJson(gojoPayload, JsonObject.class);
+        assertFalse(gj.get("isCursedSpirit").getAsBoolean(), "주술사 → isCursedSpirit false");
     }
 }

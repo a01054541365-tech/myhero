@@ -5,6 +5,7 @@ import com.jjk.JjkConfig;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.combat.TechniqueLoader;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.CharacterInfoS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -78,6 +79,22 @@ public class GradeManager {
                                ServerPlayerEntity player) {
         data.grade = to.label;
 
+        // 등급 상승 주력석 지급
+        if (player != null && JJKMod.getCursedStoneManager() != null) {
+            long stoneReward = switch (to) {
+                case GRADE_3      -> 100L;
+                case GRADE_2      -> 150L;
+                case GRADE_1      -> 200L;
+                case SEMI_SPECIAL -> 350L;
+                case SPECIAL      -> 500L;
+                default           -> 0L;
+            };
+            if (stoneReward > 0L) {
+                JJKMod.getCursedStoneManager()
+                    .give(data, stoneReward, "grade_up_" + to.label, player);
+            }
+        }
+
         // CE_max 증가
         float ceIncrease = switch (to) {
             case GRADE_3      -> 100f;
@@ -99,9 +116,16 @@ public class GradeManager {
                     "{\"from\":\"" + from.label + "\",\"to\":\"" + to.label + "\"}", 0L);
         }
 
-        // 클라이언트 알림
+        // 주간 퀘스트 연동
+        if (JJKMod.getQuestManager() != null) {
+            JJKMod.getQuestManager().progressWeekly(data, "grade_up", player);
+        }
+
+        // 클라이언트 알림 (채팅 메시지 + HUD 갱신 패킷)
         if (player != null) {
             player.sendMessage(Text.literal("[JJK] 등급 상승! " + from.label + " → " + to.label), false);
+            ServerPlayNetworking.send(player,
+                    new CharacterInfoS2CPacket(data.characterId, data.grade, data.ceMax, data.ceCurrent));
         }
     }
 

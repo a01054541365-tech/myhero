@@ -189,6 +189,11 @@ public class PlayerRepository {
         try { d.lastReceivedCeCost        = rs.getInt("last_received_ce_cost"); }            catch (SQLException ignored) {}
         try { d.lastReceivedCooldownTicks = rs.getInt("last_received_cooldown_ticks"); }     catch (SQLException ignored) {}
         try { d.lastReceivedIsDomain      = rs.getInt("last_received_is_domain") != 0; }    catch (SQLException ignored) {}
+        try { d.cursedStones      = rs.getLong("cursed_stones"); }       catch (SQLException ignored) {}
+        try { d.masteryResetCount = rs.getInt("mastery_reset_count"); }  catch (SQLException ignored) {}
+        try { d.bounty            = rs.getLong("bounty"); }               catch (SQLException ignored) {}
+        try { d.weeklyQuestDone   = rs.getLong("weekly_quest_done"); }    catch (SQLException ignored) {}
+        try { d.costumeId         = rs.getString("costume_id"); if (d.costumeId == null) d.costumeId = "default"; } catch (SQLException ignored) {}
         if (d.unlockedSkills == null)   d.unlockedSkills = new ArrayList<>();
         if (d.cooldowns == null)        d.cooldowns = new HashMap<>();
         if (d.deadShikigamiIds == null) d.deadShikigamiIds = new ArrayList<>();
@@ -249,7 +254,86 @@ public class PlayerRepository {
             ps.setInt(50,    d.lastReceivedCeCost);
             ps.setInt(51,    d.lastReceivedCooldownTicks);
             ps.setInt(52,    d.lastReceivedIsDomain ? 1 : 0);
+            ps.setLong(53,   d.cursedStones);
+            ps.setInt(54,    d.masteryResetCount);
+            ps.setLong(55,   d.bounty);
+            ps.setLong(56,   d.weeklyQuestDone);
+            ps.setString(57, d.costumeId != null ? d.costumeId : "default");
             ps.executeUpdate();
+        }
+    }
+
+    /** 등급 상위 N명 반환. 각 항목은 [displayName, grade] 배열. */
+    public List<String[]> findTopPlayers(int limit) {
+        if (conn == null) return List.of();
+        String sql = """
+            SELECT uuid, grade FROM player_data
+            WHERE grade IS NOT NULL
+            ORDER BY CASE grade
+                WHEN '특급'   THEN 6
+                WHEN '준특급'  THEN 5
+                WHEN '1급'    THEN 4
+                WHEN '2급'    THEN 3
+                WHEN '3급'    THEN 2
+                ELSE 1
+            END DESC, xp DESC
+            LIMIT ?
+            """;
+        List<String[]> result = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String uuidStr = rs.getString("uuid");
+                    String grade   = rs.getString("grade");
+                    String display = uuidStr;
+                    if (com.jjk.JJKMod.getServer() != null) {
+                        try {
+                            UUID id = UUID.fromString(uuidStr);
+                            var p = com.jjk.JJKMod.getServer().getPlayerManager().getPlayer(id);
+                            display = p != null ? p.getName().getString()
+                                               : (uuidStr.length() >= 8 ? uuidStr.substring(0, 8) + "…" : uuidStr);
+                        } catch (Exception ignored) {}
+                    }
+                    result.add(new String[]{display, grade != null ? grade : "4급"});
+                }
+            }
+        } catch (SQLException e) {
+            LOGGER.error("findTopPlayers failed", e);
+        }
+        return result;
+    }
+
+    /** 최고 등급 주술사 플레이어 이름 반환 (GojoShiyuService 정보 구매용). */
+    public String findTopGradeSorcerer() {
+        if (conn == null) return "알 수 없음";
+        String sql = """
+            SELECT uuid FROM player_data
+            WHERE character_id IN ('gojo','itadori','megumi','okkotsu','nanami','inumaki','hakari','higuruma')
+            ORDER BY CASE grade
+                WHEN '특급'  THEN 6
+                WHEN '준특급' THEN 5
+                WHEN '1급'   THEN 4
+                WHEN '2급'   THEN 3
+                WHEN '3급'   THEN 2
+                ELSE 1
+            END DESC, xp DESC
+            LIMIT 1
+            """;
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) return "알 수 없음";
+            String uuidStr = rs.getString("uuid");
+            if (com.jjk.JJKMod.getServer() != null) {
+                try {
+                    java.util.UUID uuid = java.util.UUID.fromString(uuidStr);
+                    var p = com.jjk.JJKMod.getServer().getPlayerManager().getPlayer(uuid);
+                    if (p != null) return p.getName().getString();
+                } catch (Exception ignored) {}
+            }
+            return uuidStr.length() >= 8 ? uuidStr.substring(0, 8) + "..." : uuidStr;
+        } catch (SQLException e) {
+            return "알 수 없음";
         }
     }
 
@@ -278,7 +362,10 @@ public class PlayerRepository {
                 zone_entry_tick, last_attack_tick,
                 last_received_skill_id, last_received_base_damage,
                 last_received_ce_cost, last_received_cooldown_ticks,
-                last_received_is_domain
+                last_received_is_domain,
+                cursed_stones, mastery_reset_count, bounty,
+                weekly_quest_done,
+                costume_id
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
                 ?,?, ?,?,?,?,
@@ -287,7 +374,9 @@ public class PlayerRepository {
                 ?,?, ?,?,?,
                 ?,?,?, ?,?,?,
                 ?,?,?, ?,?,
-                ?,?,?,?,?
+                ?,?,?,?,?,
+                ?,?,?,?,
+                ?
             )
             ON CONFLICT(uuid) DO UPDATE SET
                 character_id              = excluded.character_id,
@@ -340,6 +429,11 @@ public class PlayerRepository {
                 last_received_base_damage      = excluded.last_received_base_damage,
                 last_received_ce_cost          = excluded.last_received_ce_cost,
                 last_received_cooldown_ticks   = excluded.last_received_cooldown_ticks,
-                last_received_is_domain        = excluded.last_received_is_domain
+                last_received_is_domain        = excluded.last_received_is_domain,
+                cursed_stones                  = excluded.cursed_stones,
+                mastery_reset_count            = excluded.mastery_reset_count,
+                bounty                         = excluded.bounty,
+                weekly_quest_done              = excluded.weekly_quest_done,
+                costume_id                     = excluded.costume_id
             """;
 }

@@ -3,7 +3,7 @@
 > 이 문서는 운영자가 직접 확정한 수치와 설계 결정을 기록한다.
 > 세션 시작 시 claude.md → jjk_spec_v5.md 다음으로 반드시 읽는다.
 > §LOCK 수치는 명시적 지시 없이 변경 금지.
-> 최초 확정 (2026-05-23). 최종 수정 (2026-05-31).
+> 최초 확정 (2026-05-23). 최종 수정 (2026-06-03).
 
 ---
 
@@ -59,7 +59,7 @@
 | `respawnHpPercent` | `0.50` | |
 | `fingerDropRate` | `0.10` | §LOCK |
 | `fingerMaxCount` | `20` | §LOCK |
-| `blackFlashBaseRate` | `5` | §LOCK |
+| `blackFlashBaseRate` | `1` | §LOCK — Normal 흑섬 1% (원작 0.1% 대비 ×10 상향. 5%는 Zone 과다 발동 우려로 재확정 2026-06-03) |
 | `blackFlashZoneBonus` | `10` | §LOCK |
 | `xpMultiplierGradeDiff` | `1.5` | |
 | `allowCharacterReselect` | `false` | |
@@ -77,6 +77,133 @@
 
 ---
 
+## config.json 확장 키 목록 (구현 과정 추가분, 2026-06-03 등재)
+
+> 아래 키들은 초기 확정 목록에 없었으나 구현 과정에서 추가됐다.
+> 삭제 금지. 수치 변경 시 운영자 확인 필요.
+
+### 전투 시스템 확장
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `zoneEntryBlackFlashCount` | 1 | Zone 진입 필요 흑섬 횟수 |
+| `zoneStackable` | false | Zone 중첩 허용 여부 |
+| `maharagaTimeoutTicks` | 200 | 마허라가 의식 적응 타임아웃 틱 |
+| `shadowMarkerLifetimeTicks` | 200 | 메구미 그림자 마커 지속 틱 |
+| `pveGradeMultiplier` | 1.0 | PvE 등급 데미지 배율 |
+| `blackFlashLowHpBonus` | 7 | 저체력(30% 이하) 흑섬 추가 발동률(%) |
+| `blackFlashZoneAtkBonus` | 15 | Zone 중 공격력 보너스(%) |
+| `blackFlashZoneSkillBonus` | 10 | Zone 중 스킬 데미지 보너스(%) |
+| `fingerStatBonusPercent` | 5 | 스쿠나 손가락 1개당 스탯 보너스(%) |
+
+### 각성 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `awakeningHpThreshold` | 0.05 | 각성 발동 HP 임계값 (5%) |
+| `awakeningMultiplier` | 1.5 | 각성 중 데미지 배율 |
+
+### 방어 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `shieldCeDrainRatio` | 0.005 | 수동 방어 CE 소모율 (max_ce × 0.5%/s) |
+| `shieldDamageReduction` | 0.02 | 수동 방어 데미지 감소율 (2%) |
+| `simpleBarrierCostActivate` | 0.03 | 간이 영역 발동 CE 비용 (max_ce × 3%) |
+| `simpleBarrierCostPerSecond` | 0.002 | 간이 영역 유지 CE 소모 (max_ce × 0.2%/s) |
+| `simpleBarrierSureHitNegate` | 0.7 | 간이 영역 필중 무효화율 (70%) |
+| `simpleBarrierAllyBonus` | 0.08 | 간이 영역 아군 방어 보너스 (8%) |
+| `fallingBlossomSureHitBlock` | 0.8 | 낙화의 정 필중 차단율 (80%) |
+| `fallingBlossomCeDrain` | 0.02 | 낙화의 정 CE 소모율 (max_ce × 2%) |
+
+### 반전술식
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `reverseHealSelfPerTick` | 0.3 | 자기 반전 틱당 회복량 |
+| `reverseCeDrainSelfRatio` | 0.008 | 자기 반전 CE 소모율 |
+| `reverseHealOtherPerTick` | 0.4 | 타인 반전 틱당 회복량 |
+| `reverseCeDrainOtherRatio` | 0.012 | 타인 반전 CE 소모율 |
+
+### 캐릭터 특수 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `tenShadowsBodyBonus` | 0.2 | 메구미 십종영법 본체 보너스 (20%) |
+| `burdenDecayOutOfCombat` | 0.25 | 이누마키 부담 전투 외 감소량/틱 |
+| `burdenDecayInCombat` | 0.1 | 이누마키 부담 전투 중 감소량/틱 |
+| `burdenSealThreshold` | 100 | 이누마키 부담 봉인 임계값 |
+
+### 주술도구
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `cursedToolAttackBonus_dagger` | 0.08 | 단검 공격력 보너스 (8%) |
+| `cursedToolAttackBonus_spear` | 0.14 | 창 공격력 보너스 (14%) |
+| `cursedToolAttackBonus_cloud` | 0.2 | 구름 공격력 보너스 (20%) |
+| `cursedToolAttackBonus_inverted` | 0.28 | 역천 공격력 보너스 (28%) |
+| `cursedToolAttackBonus_soul` | 0.18 | 혼 공격력 보너스 (18%) |
+| `cursedToolCeReduction_spear` | 0.08 | 창 CE 소모 감소율 (8%) |
+| `cursedToolRangeBonus_cloud` | 0.12 | 구름 사거리 보너스 (12%) |
+| `cursedToolDefPenetration_inverted` | 0.15 | 역천 방어 관통율 (15%) |
+| `cursedToolBlackFlashBonus_soul` | 5 | 혼 흑섬 보너스율 (5%) |
+| `cursedToolSealCooldown_inverted` | 120 | 역천 봉인 쿨타임 (틱) |
+
+### 주술고등학교 건물
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `jjtBuilding_enabled` | true | JJT 건물 생성 활성화 |
+| `jjtBuilding_centerX` | 0 | 건물 중심 X 좌표 |
+| `jjtBuilding_centerY` | 64 | 건물 중심 Y 좌표 |
+| `jjtBuilding_centerZ` | 0 | 건물 중심 Z 좌표 |
+| `jjtBuilding_generated` | true | 건물 생성 완료 플래그 |
+| `trainingRoomPos` | [0.0, 64.0, 0.0] | 훈련실 위치 |
+| `infirmaryPos` | [10.0, 64.0, 0.0] | 의무실 위치 |
+| `storagePos` | [-10.0, 64.0, 0.0] | 창고 위치 |
+| `entrancePos` | [0.0, 64.0, 20.0] | 입구 위치 |
+
+### XP 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `xpGrade4to3` | 500 | 4급 → 3급 필요 XP |
+| `xpGrade3to2` | 1200 | 3급 → 2급 필요 XP |
+| `xpGrade2to1` | 2500 | 2급 → 1급 필요 XP |
+| `xpGrade1toSemi` | 5000 | 1급 → 준1급 필요 XP |
+| `xpGradeSemiToSpecial` | 12000 | 준1급 → 특급 필요 XP |
+| `xpOnKill` | 50 | 처치 시 획득 XP |
+| `xpOnDamagePerHit` | 1 | 타격 시 획득 XP |
+| `xpOnDamageCapPerCombat` | 20 | 전투당 데미지 XP 상한 |
+| `xpOnBlackFlash` | 15 | 흑섬 발동 시 획득 XP |
+| `xpOnPerfect` | 30 | Perfect 흑섬 시 획득 XP |
+| `xpOnDailyLogin` | 30 | 일일 로그인 획득 XP |
+
+### 창(唱) 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `chantMaxTicks` | 60 | 창 최대 지속 틱 (3초) |
+| `chantMaxMultiplier` | 2.0 | 창 최대 배율 |
+| `chantCeDrainRatio` | 0.2 | 창 CE 소모율 |
+
+### 커튼 시스템
+
+| 키 | 실제값 | 설명 |
+|---|---|---|
+| `curtainBasicCeCost` | 800 | 기본 커튼 발동 CE |
+| `curtainBasicCePerTick` | 0.8 | 기본 커튼 유지 CE/틱 |
+| `curtainBasicDurationTicks` | 4000 | 기본 커튼 지속 틱 |
+| `curtainBasicRadius` | 25 | 기본 커튼 반경 |
+| `curtainBasicCooldownTicks` | 600 | 기본 커튼 쿨타임 틱 |
+| `curtainSpecialCeCost` | 2000 | 특수 커튼 발동 CE |
+| `curtainSpecialCePerTick` | 1.5 | 특수 커튼 유지 CE/틱 |
+| `curtainSpecialDurationTicks` | 8000 | 특수 커튼 지속 틱 |
+| `curtainSpecialRadius` | 45 | 특수 커튼 반경 |
+| `curtainSpecialCooldownTicks` | 1200 | 특수 커튼 쿨타임 틱 |
+
+---
+
 ## domains.json 확정값
 
 | domainId | radius | wallHp | isOpen | sureHitActive | 비고 |
@@ -88,6 +215,11 @@
 | `megumi_chimera_shadow` | 20 | 750 | false | false | wallHp 절반, sureHit 없음 |
 | `jogo_volcano_domain` | 25 | 1500 | false | true | |
 | `hakari_jackpot_domain` | 20 | 1500 | false | true | |
+| `cursed_spirit_domain` | 15 | 800 | true |
+
+> **cursed_spirit_domain 비고**: NPC 전용 영역. ownerCharacter=cursed_spirit.
+> ceCost=0 (NPC 자동 전개), autoTargetAll=true, cooldownTicks=200.
+> 플레이어 캐릭터 영역 7개와 별도 관리. 수치 근거: domains.json 실측값 (2026-06-03 등재).
 
 ---
 
@@ -102,7 +234,7 @@
 | 4 | V |
 
 미사용 키: `baseDamage=0, ceCost=0, cooldownTicks=0, notImplemented=true`
-스쿠나: 5개 키 전부 NOT_IMPLEMENTED 스텁. animId 예약값 F=21, Shift+F=22, R=23, Shift+R=24, V=0
+스쿠나: 5개 키 전부 실구현 완료 (2026-06-01). 수치는 §P3-6 및 techniques.json 참조. animId F=21, SF=22, R=23, SR=24, V=7
 
 ---
 
@@ -165,18 +297,26 @@
 - 전 캐릭터 기본값: "4급" (별도 명시 없으면 모두 "4급")
 - 이후 캐릭터 작업 시 unlockGrade는 "4급"으로 통일
 
-### P3-6. 스쿠나 확정 스킬 수치 (운영자 확정 2026-05-28)
-- F  해체(解體):    baseDamage=8,  ceCost=10,  cooldownTicks=10,  animId=21
-- SF 필살참(捌):    baseDamage=18, ceCost=25,  cooldownTicks=40,  animId=22
-- R  개(開)·화염:   baseDamage=30, ceCost=50,  cooldownTicks=120, animId=23
-- SR 세계절단참:    baseDamage=50, ceCost=100, cooldownTicks=240, animId=24
-- V  복마어주자:    baseDamage=0,  ceCost=200, cooldownTicks=360, animId=7
+### P3-6. 스쿠나 확정 스킬 수치 (2026-06-01 커밋 d4fa590으로 업그레이드 확정)
+
+| keyId | 스킬 | baseDamage | ceCost | cooldownTicks | animId |
+|---|---|---|---|---|---|
+| 0 (F 해체) | dismantle | 72 | 180 | 6 | 21 |
+| 1 (SF 필살참) | arrow | 55 | 140 | 5 | 22 |
+| 2 (R 개·화염) | reverse_eight_handled | 95 | 400 | 40 | 23 |
+| 3 (SR 세계절단참) | cleave | 110 | 500 | 50 | 24 |
+| 4 (V 복마어주자) | malevolent_shrine | 0 | 3000 | 360 | 7 |
+
 효과:
-  해체: 직선 참격 투사체 (EffectDeferQueue 지연 판정)
-  필살참: 대상 현재 HP 비례 추가 피해 (target.hpCurrent × 0.20f)
-  개·화염: 범위 폭발 4블록 + 화상 80틱 (FireEffectManager 활용)
-  세계절단참: isSoulDirect=true, bypassRCT=true (방어·RCT 무시)
-  복마어주자: DomainManager.deployDomain("sukuna_malevolent_shrine")
+- 해체: 직선 참격 (HitValidator 기반)
+- 필살참: 대상 현재 HP 비례 추가 피해 (target.hpCurrent × 0.20f). 손가락 10개+ 시 범위 ×1.3
+- 개·화염: 범위 폭발 + 화상 80틱 (FireEffectManager 활용)
+- 세계절단참: isSoulDirect=true, bypassRCT=true (방어·RCT 무시). 손가락 20개 시 CD ×0.80
+- 복마어주자: DomainManager.deployDomain("sukuna_malevolent_shrine")
+
+> 수치 근거: 2026-06-01 커밋(d4fa590) 의도적 업그레이드.
+> techniques.json이 단일 소스. §LOCK 적용.
+> (이전값: F baseDamage=8/ceCost=10/CD=10 — 2026-05-30 72cb376 커밋)
 
 ---
 

@@ -22,16 +22,16 @@ import java.util.List;
 public class SukunaSkillSet implements ISkillSet {
 
     // 확정 수치 (Phase 3)
-    private static final float BD_F  = 72f;
-    private static final float BD_SF = 55f;
+    private static final float BD_F  = 42f;
+    private static final float BD_SF = 26f;
     private static final float BD_R  = 95f;
-    private static final float BD_SR = 110f;
+    private static final float BD_SR = 16f;
 
-    private static final int CE_F  = 180, BASE_CD_F  = 6,   ANIM_F  = 21;
-    private static final int CE_SF = 140, BASE_CD_SF = 5,   ANIM_SF = 22;
-    private static final int CE_R  = 400, BASE_CD_R  = 40,  ANIM_R  = 23;
-    private static final int CE_SR = 500, BASE_CD_SR = 50,  ANIM_SR = 24;
-    private static final int CE_V  = 3000, BASE_CD_V = 360, ANIM_V  = 7;
+    private static final int CE_F  = 400,  BASE_CD_F  = 6,   ANIM_F  = 21;
+    private static final int CE_SF = 140,  BASE_CD_SF = 5,   ANIM_SF = 22;
+    private static final int CE_R  = 400,  BASE_CD_R  = 40,  ANIM_R  = 23;
+    private static final int CE_SR = 500,  BASE_CD_SR = 50,  ANIM_SR = 24;
+    private static final int CE_V  = 4800, BASE_CD_V  = 360, ANIM_V  = 7;
 
     // ── ISkillSet 인터페이스 ──────────────────────────────────────────────────
 

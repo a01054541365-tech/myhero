@@ -5,6 +5,7 @@ import com.jjk.JjkConfig;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.chant.ChantingHandler;
 import com.jjk.audit.AuditLogger;
+import com.jjk.entity.CursedSpiritEntity;
 import com.jjk.entity.ShikigamiEntity;
 import com.jjk.awakening.AwakeningManager;
 import com.jjk.ce.CEManager;
@@ -168,12 +169,13 @@ public class CombatPipeline {
                 if (ctx.isBlackFlash) nullified = true;
                 // 조건 3: nKeyApplied=true (영역전연)
                 if (ctx.nKeyApplied) nullified = true;
-                // 조건 4: 공격자가 영역 내부에 있음
+                // 조건 4: 공격자가 필중 활성 영역 내부에 있음 (startup 20틱 후)
                 if (ctx.attacker != null) {
+                    long domainTick = ctx.attacker.getWorld().getTime();
                     Optional<DomainInstance> domain =
                         JJKMod.getDomainManager()
                             .getDomainAt(ctx.attacker.getBlockPos());
-                    if (domain.isPresent()) nullified = true;
+                    if (domain.isPresent() && domain.get().isSureHitReady(domainTick)) nullified = true;
                 }
                 if (!nullified) return;
             }
@@ -384,6 +386,45 @@ public class CombatPipeline {
                 }
                 if (ctx.target.getHealth() <= 0f) {
                     gm.onKill(atkXpData, targetData, attackerPlayer, xpTick);
+
+                    // Stage 9d: 주력석 지급
+                    if (JJKMod.getCursedStoneManager() != null) {
+                        long stonesReward = 0L;
+                        if (ctx.target instanceof ServerPlayerEntity) {
+                            stonesReward = 30L;
+                            if (TeamManager.getTeam(atkXpData.characterId) == TeamManager.Team.CURSED_SPIRIT
+                                    && TeamManager.getTeam(targetData.characterId) == TeamManager.Team.JUJUTSU_SORCERER) {
+                                JJKMod.getCursedStoneManager().addBounty(atkXpData, 50L);
+                            }
+                        } else if (ctx.target instanceof CursedSpiritEntity spirit) {
+                            stonesReward = switch (spirit.getGrade()) {
+                                case GRADE_4      -> 40L;
+                                case GRADE_3      -> 60L;
+                                case GRADE_2      -> 80L;
+                                case GRADE_1      -> 100L;
+                                case SEMI_SPECIAL -> 150L;
+                                case SPECIAL      -> 200L;
+                            };
+                            // C-5: 주령 처치 퀘스트 진행 (kill_spirit)
+                            if (JJKMod.getQuestManager() != null) {
+                                JJKMod.getQuestManager().progress(
+                                    atkXpData, "kill_spirit", attackerPlayer, xpTick);
+                            }
+                        }
+                        if (stonesReward > 0L) {
+                            JJKMod.getCursedStoneManager()
+                                .give(atkXpData, stonesReward, "combat_kill", attackerPlayer);
+                        }
+                        if (ctx.isBlackFlash) {
+                            JJKMod.getCursedStoneManager()
+                                .give(atkXpData, 10L, "black_flash", attackerPlayer);
+                        }
+                        if (atkXpData.lastDamageTakenTick < atkXpData.lastAttackTick
+                                && atkXpData.lastAttackTick > 0) {
+                            JJKMod.getCursedStoneManager()
+                                .give(atkXpData, 20L, "perfect_kill", attackerPlayer);
+                        }
+                    }
 
                     // Stage 9b: 스쿠나 플레이어 사망 시 손가락 드롭 판정
                     if (ctx.target instanceof ServerPlayerEntity deadPlayer) {

@@ -2,7 +2,6 @@ package com.jjk.domain;
 
 import com.jjk.data.PlayerData;
 
-import java.util.concurrent.ThreadLocalRandom;
 
 public class DomainPriorityCalculator {
 
@@ -57,10 +56,10 @@ public class DomainPriorityCalculator {
 
     public DomainInstance resolveConflict(DomainInstance a, PlayerData dataA,
                                           DomainInstance b, PlayerData dataB) {
-        float p1 = calculate(a, dataA);
-        float p2 = calculate(b, dataB);
+        float p1 = calculate(dataA, a);
+        float p2 = calculate(dataB, b);
         if (Math.abs(p1 - p2) < 0.001f) {
-            return ThreadLocalRandom.current().nextBoolean() ? a : b;
+            return a.ownerUuid.hashCode() >= b.ownerUuid.hashCode() ? a : b;
         }
         return p1 >= p2 ? a : b;
     }

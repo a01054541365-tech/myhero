@@ -22,6 +22,10 @@ repositories {
 		url = 'https://maven.kosmx.dev/'
 	}
 	maven { url 'https://maven.fabricmc.net/' }
+	maven {
+		name = "AzureLib"
+		url = "https://libs.azuredoom.com:4443/mods"
+	}
 }
 
 loom {
@@ -49,7 +53,7 @@ dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:1.21.1"
 	mappings "net.fabricmc:yarn:1.21.1+build.3:v2"
-	modImplementation "net.fabricmc:fabric-loader:0.17.2"
+	modImplementation "net.fabricmc:fabric-loader:0.17.3"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:0.116.6+1.21.1"
 
 	testImplementation "org.junit.jupiter:junit-jupiter-api:5.10.0"
@@ -57,6 +61,7 @@ dependencies {
 	testImplementation "org.junit.platform:junit-platform-launcher:1.10.0"
 
 	modImplementation "software.bernie.geckolib:geckolib-fabric-1.21.1:4.8.3"
+	modImplementation files('libs/azurelib-fabric-1.21.1-3.1.8.jar')
 	modImplementation "dev.kosmx.player-anim:player-animation-lib-fabric:2.0.4+1.21.1"
 	implementation include("org.xerial:sqlite-jdbc:3.45.1.0")
 }

@@ -6,13 +6,34 @@ import com.jjk.client.anim.PlayerAnimationDispatcher;
 import com.jjk.client.anim.SkillAnimController;
 import com.jjk.client.fx.SkillFxDispatcher;
 import com.jjk.client.hud.JjkHudRenderer;
+import com.jjk.client.renderer.CeProjectileEntityRenderer;
+import com.jjk.client.renderer.CursedSpiritEntityRenderer;
 import com.jjk.client.renderer.CurtainRenderer;
 import com.jjk.client.renderer.DomainBoundaryRenderer;
+import com.jjk.client.renderer.NpcEntityRenderer;
 import com.jjk.client.renderer.NueEntityRenderer;
 import com.jjk.client.renderer.RikaEntityRenderer;
 import com.jjk.client.renderer.WhiteDogEntityRenderer;
 import com.jjk.client.screen.CharacterSelectScreen;
+import com.jjk.client.screen.npc.GojoShiyuScreen;
+import com.jjk.client.screen.npc.IjichiScreen;
+import com.jjk.client.screen.npc.KusakabeScreen;
+import com.jjk.client.screen.npc.NahovinoScreen;
+import com.jjk.client.screen.npc.ShokoScreen;
+import com.jjk.client.screen.npc.YagaScreen;
+import com.jjk.client.screen.npc.ZeninShopScreen;
+import com.jjk.client.costume.CostumeClientCache;
+import com.jjk.client.costume.CostumeRenderLayer;
+import com.jjk.client.fx.ParticleThrottle;
+import com.jjk.client.fx.SkillEffectRenderer;
+import com.jjk.client.hud.BlackFlashOverlay;
+import com.jjk.client.renderer.AwakeningAuraRenderer;
+import com.jjk.network.s2c.CostumeSyncS2CPacket;
+import com.jjk.network.s2c.SkillEffectS2CPacket;
+import com.jjk.network.s2c.NpcOpenGuiS2CPacket;
+import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.ShikigamiEntityTypes;
+import com.jjk.entity.npc.NpcRegistry;
 import com.jjk.network.c2s.SkillUseC2SPacket;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import com.jjk.network.s2c.AwakeningS2CPacket;
@@ -38,6 +59,8 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback;
+import net.minecraft.client.render.entity.PlayerEntityRenderer;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
 import net.minecraft.client.option.KeyBinding;
@@ -63,6 +86,7 @@ public class JJKModClient implements ClientModInitializer {
     private static KeyBinding KEY_SKILL_R;
     private static KeyBinding KEY_SKILL_SR;
     private static KeyBinding KEY_SKILL_V;
+    private static KeyBinding KEY_SKILL_C;
 
     @Override
     public void onInitializeClient() {
@@ -75,6 +99,46 @@ public class JJKModClient implements ClientModInitializer {
         EntityRendererRegistry.register(ShikigamiEntityTypes.WHITE_DOG, WhiteDogEntityRenderer::new);
         EntityRendererRegistry.register(ShikigamiEntityTypes.RIKA, RikaEntityRenderer::new);
         EntityRendererRegistry.register(ShikigamiEntityTypes.MAHORAGA, NueEntityRenderer::new);
+
+        // ── NPC 렌더러 등록 (7종) ──────────────────────────────────
+        EntityRendererRegistry.register(NpcRegistry.ZENIN_STORAGE, NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.KUSAKABE,       NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.SHOKO,          NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.GOJO_SHIYU,     NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.IJICHI,         NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.YAGA,           NpcEntityRenderer::new);
+        EntityRendererRegistry.register(NpcRegistry.NAHOBINO,       NpcEntityRenderer::new);
+
+        // ── 주령 렌더러 등록 (5종) ──────────────────────────────────
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.GRADE_4, CursedSpiritEntityRenderer::new);
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.GRADE_3, CursedSpiritEntityRenderer::new);
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.GRADE_2, CursedSpiritEntityRenderer::new);
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.GRADE_1, CursedSpiritEntityRenderer::new);
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.SPECIAL,  CursedSpiritEntityRenderer::new);
+
+        // ── CE 투사체 렌더러 등록 ──────────────────────────────────
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.CE_PROJECTILE, CeProjectileEntityRenderer::new);
+
+        // 스킬 이펙트 렌더러 + 각성 오라 렌더러 등록
+        SkillEffectRenderer.register();
+        AwakeningAuraRenderer.register();
+        HudRenderCallback.EVENT.register(BlackFlashOverlay.INSTANCE::render);
+
+        // 의상 렌더 레이어 — PlayerEntityRenderer에 FeatureRenderer 추가
+        //noinspection unchecked
+        LivingEntityFeatureRendererRegistrationCallback.EVENT.register(
+            (entityType, renderer, registrationHelper, context) -> {
+                if (renderer instanceof PlayerEntityRenderer per) {
+                    registrationHelper.register(
+                        new CostumeRenderLayer((net.minecraft.client.render.entity.feature
+                            .FeatureRendererContext) per));
+                }
+            }
+        );
+
+        // 서버 접속 해제 시 의상 캐시 초기화
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
+            CostumeClientCache.clear());
 
         // HUD 렌더러 등록
         HudRenderCallback.EVENT.register(JjkHudRenderer.INSTANCE::render);
@@ -111,9 +175,12 @@ public class JJKModClient implements ClientModInitializer {
                 new KeyBinding("key.jjk.skill_sr", GLFW.GLFW_KEY_H, KEY_CATEGORY));
         KEY_SKILL_V  = KeyBindingHelper.registerKeyBinding(
                 new KeyBinding("key.jjk.skill_v",  GLFW.GLFW_KEY_V, KEY_CATEGORY));
+        KEY_SKILL_C  = KeyBindingHelper.registerKeyBinding(
+                new KeyBinding("key.jjk.skill_c",  GLFW.GLFW_KEY_C, KEY_CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             SkillAnimController.tick(client);
+            JjkHudRenderer.INSTANCE.tick(client);
             if (client.player == null || client.world == null) return;
             if (client.currentScreen != null) return;
             checkAndSend(KEY_SKILL_F,  0);
@@ -121,6 +188,7 @@ public class JJKModClient implements ClientModInitializer {
             checkAndSend(KEY_SKILL_R,  2);
             checkAndSend(KEY_SKILL_SR, 3);
             checkAndSend(KEY_SKILL_V,  4);
+            checkAndSend(KEY_SKILL_C,  5);
         });
     }
 
@@ -172,6 +240,9 @@ public class JJKModClient implements ClientModInitializer {
                     boolean isOpen = domainName.contains("sukuna");
                     DomainBoundaryRenderer.activateDomain(domainUUID, domainName, center, 15.0f, isOpen);
                     SkillAnimController.onZoneEnter(pkt, mc.player);
+                    long worldTick = mc.world != null ? mc.world.getTime() : 0L;
+                    JjkClientState.onZoneEnter(domainName, worldTick);
+                    JjkHudRenderer.INSTANCE.getDomainIndicator().onEnter(domainName, worldTick);
                 }));
 
         // ZoneExitS2CPacket — 도메인 경계 제거 + 애니메이션 중지
@@ -182,13 +253,19 @@ public class JJKModClient implements ClientModInitializer {
                     DomainBoundaryRenderer.deactivateDomain(domainUUID);
                     MinecraftClient mc = ctx.client();
                     if (mc.player != null) PlayerAnimationDispatcher.stop(mc.player);
+                    long worldTick = mc.world != null ? mc.world.getTime() : 0L;
+                    JjkClientState.onZoneExit();
+                    JjkHudRenderer.INSTANCE.getDomainIndicator().onExit(worldTick);
                 }));
 
-        // AwakeningS2CPacket — 각성 애니메이션
+        // AwakeningS2CPacket — 각성 애니메이션 + 클라이언트 상태 갱신
         ClientPlayNetworking.registerGlobalReceiver(AwakeningS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() -> {
                     LOGGER.debug("AWAKENING active={}", pkt.active());
                     MinecraftClient mc = ctx.client();
+                    JjkClientState.setAwakening(pkt.active());
+                    AwakeningAuraRenderer.setLocalPlayerAwakening(pkt.active());
+                    if (pkt.active()) BlackFlashOverlay.INSTANCE.triggerActivateFlash();
                     if (mc.player != null) SkillAnimController.onAwakening(pkt, mc.player);
                 }));
 
@@ -236,6 +313,22 @@ public class JJKModClient implements ClientModInitializer {
                     }
                 }));
 
+        // NpcOpenGuiS2CPacket — NPC GUI 화면 열기 (TASK-94)
+        ClientPlayNetworking.registerGlobalReceiver(NpcOpenGuiS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    net.minecraft.client.gui.screen.Screen screen = switch (pkt.npcId()) {
+                        case "zenin_storage" -> new ZeninShopScreen(pkt.payload());
+                        case "kusakabe"      -> new KusakabeScreen(pkt.payload());
+                        case "shoko"         -> new ShokoScreen(pkt.payload());
+                        case "gojo_shiyu"    -> new GojoShiyuScreen(pkt.payload());
+                        case "ijichi"        -> new IjichiScreen(pkt.payload());
+                        case "yaga"          -> new YagaScreen(pkt.payload());
+                        case "nahobino"      -> new NahovinoScreen(pkt.payload());
+                        default -> null;
+                    };
+                    if (screen != null) ctx.client().setScreen(screen);
+                }));
+
         // FingerDropS2CPacket — 손가락 획득 알림 (TASK-35)
         ClientPlayNetworking.registerGlobalReceiver(FingerDropS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() -> {
@@ -245,5 +338,27 @@ public class JJKModClient implements ClientModInitializer {
                         : "§4손가락 획득! (" + pkt.newFingerCount() + "/20)";
                     ctx.client().player.sendMessage(Text.literal(msg), true);
                 }));
+
+        // BossBarUpdateS2CPacket — CE/HP 상태 클라이언트 캐시 갱신
+        ClientPlayNetworking.registerGlobalReceiver(
+                com.jjk.network.s2c.BossBarUpdateS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    JjkClientState.updateHp(pkt.hp(), pkt.hpMax());
+                    JjkClientState.updateCe((float) pkt.ce(), (float) pkt.ceMax());
+                }));
+
+        // SkillCooldownSyncS2CPacket — 스킬 쿨타임 HUD 갱신
+        ClientPlayNetworking.registerGlobalReceiver(
+                com.jjk.network.s2c.SkillCooldownSyncS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    MinecraftClient mc = ctx.client();
+                    if (mc.world == null) return;
+                    JjkClientState.onSkillCooldown(pkt.keyId(), pkt.cooldownTicks(), mc.world.getTime());
+                }));
+
+        // CostumeSyncS2CPacket — 의상 캐시 갱신
+        ClientPlayNetworking.registerGlobalReceiver(CostumeSyncS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() ->
+                CostumeClientCache.update(pkt.targetUuid(), pkt.costumeId())));
     }
 }

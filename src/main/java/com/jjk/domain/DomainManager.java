@@ -31,7 +31,6 @@ public class DomainManager {
 
     private final JjkConfig config;
     private final Map<UUID, DomainInstance> activeDomains = new HashMap<>();
-    private final DomainPriorityCalculator priorityCalc = new DomainPriorityCalculator();
     private final Map<String, DomainDefinition> domainDefs = new HashMap<>();
 
     public DomainManager(JjkConfig config) {
@@ -156,10 +155,15 @@ public class DomainManager {
                     owner.getUuid(), domainId, center,
                     def.wallHp, def.radius, def.isOpen, def.isIncomplete,
                     def.sureHitActive, def.autoTargetAll);
-            float newPriority = priorityCalc.calculate(tempNew, data);
+            float newPriority = DomainPriorityCalculator.calculate(data, tempNew);
             PlayerData existOwnerData = JJKMod.getPlayerRepository().load(existing.ownerUuid);
-            float existPriority = priorityCalc.calculate(existing, existOwnerData);
-            if (newPriority <= existPriority) return false;
+            float existPriority = DomainPriorityCalculator.calculate(existOwnerData, existing);
+            // §8-2 동점: UUID hashCode로 결정적 처리
+            if (Math.abs(newPriority - existPriority) < 0.001f) {
+                if (owner.getUuid().hashCode() <= existing.ownerUuid.hashCode()) return false;
+            } else if (newPriority < existPriority) {
+                return false;
+            }
             conflictingDomain = existing;
             conflictingOwnerData = existOwnerData;
             break;
@@ -325,6 +329,15 @@ public class DomainManager {
 
     public void clearAll() {
         activeDomains.clear();
+    }
+
+    /** 스폰 검증용: 해당 위치가 활성 영역 내부인지 확인. */
+    public boolean isInsideAnyDomain(Vec3d pos) {
+        BlockPos bp = BlockPos.ofFloored(pos);
+        for (DomainInstance domain : activeDomains.values()) {
+            if (domain.center.isWithinDistance(bp, domain.currentRadius)) return true;
+        }
+        return false;
     }
 
     private String getTeamName(UUID uuid) {

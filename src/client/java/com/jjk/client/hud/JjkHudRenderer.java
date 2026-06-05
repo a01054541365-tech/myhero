@@ -19,16 +19,31 @@ public class JjkHudRenderer {
     private float lastDamage = 0f;
     private int damageDisplayTicks = 0;
 
+    private final CEBarRenderer       ceBar        = new CEBarRenderer();
+    private final SkillCooldownHUD    cooldownHud  = new SkillCooldownHUD();
+    private final DomainIndicator     domainIndicator = new DomainIndicator();
+
     public void render(DrawContext context, RenderTickCounter tickCounter) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
 
+        long worldTick = client.world.getTime();
+
         renderHealthBar(context, client);
+        ceBar.render(context, client);
+        cooldownHud.render(context, client);
+        domainIndicator.tick(worldTick);
+        domainIndicator.render(context, client);
         renderChantingBar(context, client);
         if (damageDisplayTicks > 0) {
             renderDamageNumber(context, client);
             damageDisplayTicks--;
         }
+    }
+
+    /** 매 클라이언트 틱 호출 (ClientTickEvents.END_CLIENT_TICK에서). */
+    public void tick(MinecraftClient client) {
+        ceBar.tick();
     }
 
     private void renderHealthBar(DrawContext context, MinecraftClient client) {
@@ -100,4 +115,6 @@ public class JjkHudRenderer {
         this.lastDamage = damage;
         this.damageDisplayTicks = 40;
     }
+
+    public DomainIndicator getDomainIndicator() { return domainIndicator; }
 }

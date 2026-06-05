@@ -143,12 +143,15 @@ public class CurtainManager {
         return null;
     }
 
-    /** 경계 통과 차단: 내부 → 외부 이동 시 경계로 되돌림. */
+    /** 경계 통과 차단: 내부→외부(기본·특수 공통) + 외부→내부(촉탁식 완전 봉쇄) */
     public void enforceOnPlayer(ServerPlayerEntity player) {
         UUID uuid = player.getUuid();
         for (CurtainInstance curtain : activeCurtains.values()) {
-            if (!curtain.playersInside().contains(uuid)) continue;
-            if (!isInsideCurtain(player.getPos(), curtain)) {
+            boolean inside = curtain.playersInside().contains(uuid);
+            boolean isOwner = curtain.ownerId().equals(uuid);
+
+            if (inside && !isInsideCurtain(player.getPos(), curtain)) {
+                // 내부 → 외부 이동 차단 (기본·특수 공통)
                 Vec3d center = curtain.center();
                 Vec3d toPlayer = player.getPos().subtract(center);
                 double len = toPlayer.horizontalLength();
@@ -156,6 +159,19 @@ public class CurtainManager {
                 if (len > 0) {
                     Vec3d boundary = center.add(toPlayer.multiply(r / len));
                     player.teleport(boundary.x, player.getY(), boundary.z, true);
+                }
+            } else if (!inside && !isOwner && "special".equals(curtain.curtainType())
+                    && isInsideCurtain(player.getPos(), curtain)) {
+                // 외부 → 내부 진입 차단 (촉탁식 완전 봉쇄, 시전자 제외)
+                Vec3d center = curtain.center();
+                Vec3d toPlayer = player.getPos().subtract(center);
+                double len = toPlayer.horizontalLength();
+                double r = curtain.radius() + 0.5;
+                if (len > 0) {
+                    Vec3d outside = center.add(toPlayer.multiply(r / len));
+                    player.teleport(outside.x, player.getY(), outside.z, true);
+                } else {
+                    player.teleport(center.x + curtain.radius() + 1.0, player.getY(), center.z, true);
                 }
             }
         }

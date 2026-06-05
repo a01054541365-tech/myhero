@@ -15,9 +15,11 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import java.util.Comparator;
 import java.util.List;
 
-public class HigurumaskillSet implements ISkillSet {
+public class HigurumaSkillSet implements ISkillSet {
 
-    private static final int CE_0 = 120, CD_0 = 15, ANIM_0 = 38;
+    private static final int CE_0 = 180, CD_0 = 15, ANIM_0 = 38;
+    private static final int CE_1 = 250, CD_1 = 30, ANIM_1 = 63; // 검사 논고
+    private static final int CE_2 = 180, CD_2 = 60, ANIM_2 = 64; // 증거 인멸
     private static final int CE_3 = 600, CD_3 = 90, ANIM_3 = 55;
     private static final int ANIM_4 = 39;
 
@@ -25,7 +27,8 @@ public class HigurumaskillSet implements ISkillSet {
     public SkillResult use(ServerPlayerEntity player, int keyId) {
         return switch (keyId) {
             case 0 -> useSubmitEvidence(player);
-            case 1, 2 -> SkillResult.NOT_IMPLEMENTED;
+            case 1 -> useProsecutorArgument(player);
+            case 2 -> useEvidenceDestruction(player);
             case 3 -> useJury(player);
             case 4 -> useExecutionerSword(player);
             default -> SkillResult.FAIL;
@@ -46,6 +49,8 @@ public class HigurumaskillSet implements ISkillSet {
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
             case 0 -> CD_0;
+            case 1 -> CD_1;
+            case 2 -> CD_2;
             case 3 -> CD_3;
             default -> 0;
         };
@@ -55,6 +60,8 @@ public class HigurumaskillSet implements ISkillSet {
     public int getCeCost(int keyId) {
         return switch (keyId) {
             case 0 -> CE_0;
+            case 1 -> CE_1;
+            case 2 -> CE_2;
             case 3 -> CE_3;
             default -> 0;
         };
@@ -64,6 +71,8 @@ public class HigurumaskillSet implements ISkillSet {
     public String getSkillName(int keyId) {
         return switch (keyId) {
             case 0 -> "submit_evidence";
+            case 1 -> "prosecutor_argument";
+            case 2 -> "evidence_destruction";
             case 3 -> "jury";
             case 4 -> "executioner_sword";
             default -> "not_implemented";
@@ -91,12 +100,40 @@ public class HigurumaskillSet implements ISkillSet {
 
     @Override
     public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
-        return SkillResult.NOT_IMPLEMENTED;
+        if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_1) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 10.0, 60f);
+        data.ceCurrent -= CE_1;
+        for (LivingEntity target : targets) {
+            if (target instanceof ServerPlayerEntity tp) {
+                com.jjk.data.PlayerData td = JJKMod.getPlayerRepository().load(tp.getUuid());
+                td.cooldowns.replaceAll((k, v) -> v + 60L);
+                JJKMod.getPlayerRepository().save(td);
+            }
+        }
+        data.cooldowns.put("1", tick + CD_1);
+        broadcastAnim(player, ANIM_1);
+        return SkillResult.SUCCESS;
     }
 
     @Override
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
-        return SkillResult.NOT_IMPLEMENTED;
+        if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.ceCurrent < CE_2) return SkillResult.FAIL_CE_INSUFFICIENT;
+
+        data.ceCurrent -= CE_2;
+        data.cooldowns.put("trial_bonus_until", tick + 60L);
+        data.cooldowns.put("2", tick + CD_2);
+
+        if (player != null) {
+            broadcastAnim(player, ANIM_2);
+        }
+        JJKMod.getPlayerRepository().save(data);
+        return SkillResult.SUCCESS;
     }
 
     @Override
@@ -130,6 +167,44 @@ public class HigurumaskillSet implements ISkillSet {
         data.hasExecutionSword = false;
         JJKMod.getPlayerRepository().saveImmediate(data);
         broadcastAnim(player, ANIM_4);
+        return SkillResult.SUCCESS;
+    }
+
+    // Shift+F — 검사 논고: 전방 대상 쿨타임 +60틱
+    private SkillResult useProsecutorArgument(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        if (data.cooldowns.getOrDefault("skill_1", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+
+        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 10.0, 60f);
+        for (LivingEntity target : targets) {
+            if (target instanceof ServerPlayerEntity tp) {
+                com.jjk.data.PlayerData td = JJKMod.getPlayerRepository().load(tp.getUuid());
+                td.cooldowns.replaceAll((k, v) -> v + 60L);
+                JJKMod.getPlayerRepository().save(td);
+            }
+        }
+
+        JJKMod.getCEManager().consume(player, CE_1);
+        data.cooldowns.put("skill_1", tick + CD_1);
+        JJKMod.getPlayerRepository().save(data);
+        broadcastAnim(player, ANIM_1);
+        return SkillResult.SUCCESS;
+    }
+
+    // R — 증거 인멸: 다음 재판 성공률 +20%
+    private SkillResult useEvidenceDestruction(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        if (data.cooldowns.getOrDefault("skill_2", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
+
+        JJKMod.getCEManager().consume(player, CE_2);
+        data.cooldowns.put("trial_bonus_until", tick + 60L);
+        data.cooldowns.put("skill_2", tick + CD_2);
+        JJKMod.getPlayerRepository().save(data);
+        broadcastAnim(player, ANIM_2);
         return SkillResult.SUCCESS;
     }
 

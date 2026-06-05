@@ -2,7 +2,7 @@ package com.jjk.test;
 
 import com.jjk.JjkConfig;
 import com.jjk.api.skill.SkillResult;
-import com.jjk.character.impl.HigurumaskillSet;
+import com.jjk.character.impl.HigurumaSkillSet;
 import com.jjk.data.PlayerData;
 import com.jjk.trial.TrialManager;
 import org.junit.jupiter.api.Test;
@@ -91,7 +91,7 @@ class TrialManagerTest {
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
         data.hasExecutionSword = true;
         data.ceCurrent = 9999f;
-        HigurumaskillSet skill = new HigurumaskillSet();
+        HigurumaSkillSet skill = new HigurumaSkillSet();
         // player=null → FAIL_NO_TARGET (hasExecutionSword 체크 통과 후 타겟 탐색 실패)
         SkillResult result = skill.onV(data, null, 0L);
         assertEquals(SkillResult.FAIL_NO_TARGET, result, "player=null이면 FAIL_NO_TARGET");

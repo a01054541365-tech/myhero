@@ -204,7 +204,7 @@ public class MegumiSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    /** TickScheduler period=20 — 마허라가 조복 실패 조건 체크. */
+    /** TickScheduler period=20 — 마허라가 조복 성공/실패 조건 체크. */
     public static void tickMaharagaFailCheck(ServerPlayerEntity player) {
         if (!(player.getWorld() instanceof ServerWorld world)) return;
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
@@ -213,11 +213,28 @@ public class MegumiSkillSet implements ISkillSet {
 
         long currentTick = world.getTime();
         long startTick = data.cooldowns.getOrDefault("mahoraga_start_tick", 0L);
+        long hitCount = data.cooldowns.getOrDefault("mahoraga_hit_count", 0L);
+
+        boolean success = hitCount >= JJKMod.getConfig().maharagaThreshold;
         boolean timeout = (currentTick - startTick) >= JJKMod.getConfig().getMaharagaTimeoutTicks();
         boolean ceExhausted = data.ceCurrent <= 0f;
         boolean hpLow = data.hpCurrent <= data.hpMax * 0.50f;
 
-        if (timeout || ceExhausted || hpLow) {
+        if (success) {
+            // 조복 성공: 패널티 없음
+            data.cooldowns.remove("mahoraga_active");
+            data.cooldowns.remove("mahoraga_hit_count");
+            data.cooldowns.remove("mahoraga_start_tick");
+            data.cooldowns.remove("mahoraga_adaptation_start");
+            despawnMahoraga(player, world);
+            JJKMod.getPlayerRepository().saveImmediate(data);
+            player.sendMessage(net.minecraft.text.Text.literal("[JJK] 마허라가 조복 완료!"), true);
+            if (JJKMod.getAuditLogger() != null) {
+                JJKMod.getAuditLogger().logEvent("mahoraga_success", data.uuid,
+                        "{\"hitCount\":" + hitCount + "}", currentTick);
+            }
+        } else if (timeout || ceExhausted || hpLow) {
+            // 조복 실패: CE 전량 소진 + skill_seal
             data.ceCurrent = 0f;
             data.cooldowns.put("skill_seal", currentTick + JJKMod.getConfig().sealDurationTicks);
             data.cooldowns.remove("mahoraga_active");
@@ -226,6 +243,12 @@ public class MegumiSkillSet implements ISkillSet {
             data.cooldowns.remove("mahoraga_adaptation_start");
             despawnMahoraga(player, world);
             JJKMod.getPlayerRepository().saveImmediate(data);
+            player.sendMessage(net.minecraft.text.Text.literal("[JJK] 마허라가 조복 실패!"), true);
+            if (JJKMod.getAuditLogger() != null) {
+                String reason = timeout ? "timeout" : (ceExhausted ? "ce_exhausted" : "hp_low");
+                JJKMod.getAuditLogger().logEvent("mahoraga_fail", data.uuid,
+                        "{\"reason\":\"" + reason + "\",\"hitCount\":" + hitCount + "}", currentTick);
+            }
         }
     }
 

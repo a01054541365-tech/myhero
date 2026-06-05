@@ -122,6 +122,17 @@ public class PlayerData {
     // === 히구루마 재판 대상 UUID (TASK-34) ===
     public String trialTargetUuid;  // null = 없음
 
+    // === 주력석 경제 시스템 ===
+    public long cursedStones;       // 주력석 보유량
+    public int  masteryResetCount;  // 숙련도 초기화 횟수
+    public long bounty;             // 현상금 누적액 (주령 진영)
+
+    // === 주간 퀘스트 ===
+    public long weeklyQuestDone = -1L; // 완료한 epoch week (-1 = 미완료)
+
+    // === 의상 시스템 ===
+    public String costumeId = "default";
+
     // === 스키마 버전 ===
     public int schemaVersion = 1;
 
@@ -208,6 +219,11 @@ public class PlayerData {
         copy.blackFlashFocusEndTick      = this.blackFlashFocusEndTick;
         copy.receivedGuideBook           = this.receivedGuideBook;
         copy.trialTargetUuid             = this.trialTargetUuid;
+        copy.cursedStones                = this.cursedStones;
+        copy.masteryResetCount           = this.masteryResetCount;
+        copy.bounty                      = this.bounty;
+        copy.weeklyQuestDone             = this.weeklyQuestDone;
+        copy.costumeId                   = this.costumeId;
         copy.schemaVersion               = this.schemaVersion;
         return copy;
     }

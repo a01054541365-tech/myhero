@@ -121,4 +121,48 @@ class DomainManagerTest {
         assertTrue(closedPriority > openPriority,
                 "결계형(" + closedPriority + ") > 개방형(" + openPriority + ")");
     }
+
+    // 8. 특급 vs 4급 충돌 → resolveConflict가 스펙 공식 기반으로 특급 승리
+    @Test
+    void conflictResolution_higherGradeWins() {
+        DomainPriorityCalculator calc = new DomainPriorityCalculator();
+
+        PlayerData special = PlayerData.createDefault(UUID.randomUUID());
+        special.grade = "special_grade";
+        special.mastery = 0;
+        special.ceCurrent = 100f;
+        special.ceMax = 100f;
+
+        PlayerData grade4 = PlayerData.createDefault(UUID.randomUUID());
+        grade4.grade = "grade_4";
+        grade4.mastery = 0;
+        grade4.ceCurrent = 100f;
+        grade4.ceMax = 100f;
+
+        DomainInstance domSpecial = closedInst(1500f, 20f);
+        DomainInstance domGrade4  = closedInst(1500f, 20f);
+
+        DomainInstance winner = calc.resolveConflict(domSpecial, special, domGrade4, grade4);
+        assertSame(domSpecial, winner, "특급 > 4급 → 특급 승리 (§8-2 스펙 공식)");
+    }
+
+    // 9. 동점 시 resolveConflict는 동일 입력에 항상 같은 결과 반환 (결정적)
+    @Test
+    void conflictResolution_tieBreak_deterministic() {
+        DomainPriorityCalculator calc = new DomainPriorityCalculator();
+
+        // 동일한 grade/mastery/ce/wallHp → 우선순위 동점
+        PlayerData dataA = PlayerData.createDefault(UUID.randomUUID());
+        dataA.grade = "grade_4"; dataA.mastery = 0; dataA.ceCurrent = 0f; dataA.ceMax = 100f;
+
+        PlayerData dataB = PlayerData.createDefault(UUID.randomUUID());
+        dataB.grade = "grade_4"; dataB.mastery = 0; dataB.ceCurrent = 0f; dataB.ceMax = 100f;
+
+        DomainInstance domA = closedInst(0f, 20f);
+        DomainInstance domB = closedInst(0f, 20f);
+
+        DomainInstance result1 = calc.resolveConflict(domA, dataA, domB, dataB);
+        DomainInstance result2 = calc.resolveConflict(domA, dataA, domB, dataB);
+        assertSame(result1, result2, "동점 시 동일 입력 → 항상 같은 결과 (UUID hashCode 기반)");
+    }
 }

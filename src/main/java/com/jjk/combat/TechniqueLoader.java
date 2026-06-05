@@ -101,4 +101,9 @@ public class TechniqueLoader {
         TechniqueDefinition def = get(characterId, keyId);
         return def != null ? def.cePerTick : 0f;
     }
+
+    public static float getBurstMultiplier(String characterId, int keyId) {
+        TechniqueDefinition def = get(characterId, keyId);
+        return (def != null && def.burstMultiplier > 1.0f) ? def.burstMultiplier : 1.30f;
+    }
 }

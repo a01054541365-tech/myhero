@@ -24,7 +24,7 @@ public class ItadoriSkillSet implements ISkillSet {
     // key 0: divergent_fist, 1: manji_kick, 2: black_flash_focus, 3: domain_startup, 4: rct
     // §6-3 이타도리 기준
     private static final int CE_0 = 80,   CD_0 = 4;    // 5→4 (§6-3 이타도리 기준)
-    private static final int CE_1 = 90,   CD_1 = 7;
+    private static final int CE_1 = 90,   CD_1 = 6;
     private static final int CE_2 = 120,  CD_2 = 20;   // 0→120, 120→20 (§6-3 이타도리 기준)
     private static final int CE_3 = 2200, CD_3 = 300;  // 2400→2200, 480→300 (§6-3 이타도리 기준)
     private static final int CE_4 = 0,    CD_4 = 5;

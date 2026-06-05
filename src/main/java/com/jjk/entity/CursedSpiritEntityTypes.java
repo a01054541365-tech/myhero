@@ -15,15 +15,17 @@ public final class CursedSpiritEntityTypes {
     public static EntityType<CursedSpiritEntity> GRADE_3;
     public static EntityType<CursedSpiritEntity> GRADE_2;
     public static EntityType<CursedSpiritEntity> GRADE_1;
+    public static EntityType<CursedSpiritEntity> SEMI_SPECIAL;
     public static EntityType<CursedSpiritEntity> SPECIAL;
     public static EntityType<CeProjectileEntity> CE_PROJECTILE;
 
     public static void register() {
-        GRADE_4 = registerSpirit("cursed_spirit_grade4", CursedSpiritGrade.GRADE_4);
-        GRADE_3 = registerSpirit("cursed_spirit_grade3", CursedSpiritGrade.GRADE_3);
-        GRADE_2 = registerSpirit("cursed_spirit_grade2", CursedSpiritGrade.GRADE_2);
-        GRADE_1 = registerSpirit("cursed_spirit_grade1", CursedSpiritGrade.GRADE_1);
-        SPECIAL = registerSpirit("cursed_spirit_special", CursedSpiritGrade.SPECIAL);
+        GRADE_4      = registerSpirit("cursed_spirit_grade4",       CursedSpiritGrade.GRADE_4);
+        GRADE_3      = registerSpirit("cursed_spirit_grade3",       CursedSpiritGrade.GRADE_3);
+        GRADE_2      = registerSpirit("cursed_spirit_grade2",       CursedSpiritGrade.GRADE_2);
+        GRADE_1      = registerSpirit("cursed_spirit_grade1",       CursedSpiritGrade.GRADE_1);
+        SEMI_SPECIAL = registerSpirit("cursed_spirit_semi_special", CursedSpiritGrade.SEMI_SPECIAL);
+        SPECIAL      = registerSpirit("cursed_spirit_special",      CursedSpiritGrade.SPECIAL);
 
         CE_PROJECTILE = Registry.register(
             Registries.ENTITY_TYPE,

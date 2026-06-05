@@ -18,15 +18,15 @@ import java.util.List;
 
 public class NanamiSkillSet implements ISkillSet {
 
-    // §LOCK: techniques.json 수치와 동일 — 변경 금지
-    private static final float BD_F   = 50f;
+    // techniques.json 수치와 동일 — 변경 시 JSON도 동시 수정
+    private static final float BD_F   = 32f;
     private static final float BD_SR  = 86f;
     private static final float BD_SF  = 60f;   // 무장해체
     private static final float BD_V   = 78f;   // 십: 분
     private static final int   CE_F   = 110, CD_F   = 6,  ANIM_F   = 1;
     private static final int   CE_SR  = 240, CD_SR  = 20, ANIM_SR  = 54;
     private static final int   CE_SF  = 160, CD_SF  = 10, ANIM_SF  = 60; // 무장해체
-    private static final int   CD_R   = 8,               ANIM_R   = 61; // 극한초과 (CE 없음)
+    private static final int   CE_R   = 220, CD_R   = 8,  ANIM_R   = 61; // 극한초과
     private static final int   CE_V   = 200, CD_V   = 14, ANIM_V   = 62; // 십: 분
     private static final int   DISMANTLE_CD_DELAY = 40;                    // 무장해체 쿨타임 지연
 
@@ -74,7 +74,7 @@ public class NanamiSkillSet implements ISkillSet {
         return switch (keyId) {
             case 0 -> CE_F;
             case 1 -> CE_SF;
-            case 2 -> 0;
+            case 2 -> CE_R;
             case 3 -> CE_SR;
             case 4 -> CE_V;
             default -> 0;

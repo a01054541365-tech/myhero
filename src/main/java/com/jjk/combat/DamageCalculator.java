@@ -18,7 +18,6 @@ public class DamageCalculator {
     private static final float BLACK_FLASH_GREAT   = 2.0f;
     private static final float MULTI_HIT_2ND       = 0.85f;
     private static final float MULTI_HIT_3RD_PLUS  = 0.70f;
-    private static final float AWAKENING_MULT       = 1.25f;
     private static final float MAX_FINAL_MULT       = 4.0f;
 
     private final Map<UUID, TickDamageTracker> tickAccum = new HashMap<>();
@@ -88,11 +87,11 @@ public class DamageCalculator {
         // External buff multiplier (Nanami overtime_work, Jogo rain debuff, etc.)
         damage *= ctx.externalBuffMult;
 
-        // 각성 데미지 배율 ×1.25
+        // 각성 데미지 배율: config.awakeningMultiplier() (§LOCK 1.5)
         if (modEnabled && ctx.attacker != null) {
             PlayerData attackerData = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
             if (attackerData.awakeningActive) {
-                damage *= AWAKENING_MULT;
+                damage *= JJKMod.getConfig().awakeningMultiplier();
             }
         }
 

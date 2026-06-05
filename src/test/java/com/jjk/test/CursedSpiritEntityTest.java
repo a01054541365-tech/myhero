@@ -12,7 +12,7 @@ class CursedSpiritEntityTest {
     @Test
     void grade4_attributes() {
         CursedSpiritGrade g = CursedSpiritGrade.GRADE_4;
-        assertEquals(15f,   g.maxHp,         0.001f, "GRADE_4 HP = 15");
+        assertEquals(30f,   g.maxHp,         0.001f, "GRADE_4 HP = 30");
         assertEquals(4f,    g.attackDamage,   0.001f, "GRADE_4 ATK = 4");
         assertEquals(0.25f, g.movementSpeed,  0.001f, "GRADE_4 SPEED = 0.25");
         assertEquals(12,    g.detectionRange,         "GRADE_4 RANGE = 12");
@@ -62,8 +62,8 @@ class CursedSpiritEntityTest {
     void special_xpDrop_400() {
         assertEquals(400, CursedSpiritGrade.SPECIAL.xpDrop,
             "특급 주령 처치 시 xpDrop = 400");
-        assertEquals(200f, CursedSpiritGrade.SPECIAL.maxHp,   0.001f, "특급 HP = 200");
-        assertEquals(48f,  CursedSpiritGrade.SPECIAL.attackDamage, 0.001f, "특급 ATK = 48");
+        assertEquals(400f, CursedSpiritGrade.SPECIAL.maxHp,   0.001f, "특급 HP = 400");
+        assertEquals(38f,  CursedSpiritGrade.SPECIAL.attackDamage, 0.001f, "특급 ATK = 38");
         assertEquals(0.35f,CursedSpiritGrade.SPECIAL.movementSpeed, 0.001f, "특급 SPEED = 0.35");
     }
 }

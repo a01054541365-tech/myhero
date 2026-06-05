@@ -1,11 +1,12 @@
 package com.jjk.entity;
 
 public enum CursedSpiritGrade {
-    GRADE_4("4급",  15f,  4f, 0.25f, 12,  10, AiTier.BASIC),
-    GRADE_3("3급",  30f,  9f, 0.28f, 16,  25, AiTier.RANGED),
-    GRADE_2("2급",  55f, 17f, 0.30f, 20,  60, AiTier.EVASIVE),
-    GRADE_1("1급",  90f, 28f, 0.32f, 24, 150, AiTier.SKILLED),
-    SPECIAL("특급", 200f, 48f, 0.35f, 30, 400, AiTier.BOSS);
+    GRADE_4     ("4급",   30f,  4f, 0.25f, 12,  10, AiTier.BASIC),
+    GRADE_3     ("3급",   60f,  8f, 0.28f, 16,  25, AiTier.RANGED),
+    GRADE_2     ("2급",  100f, 14f, 0.30f, 20,  60, AiTier.EVASIVE),
+    GRADE_1     ("1급",  180f, 20f, 0.32f, 24, 150, AiTier.SKILLED),
+    SEMI_SPECIAL("준특급", 280f, 28f, 0.33f, 27, 270, AiTier.SKILLED),
+    SPECIAL     ("특급",  400f, 38f, 0.35f, 30, 400, AiTier.BOSS);
 
     public enum AiTier { BASIC, RANGED, EVASIVE, SKILLED, BOSS }
 

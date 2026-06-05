@@ -54,6 +54,7 @@ code/.obsidian/plugins/terminal/data.json
 
 # Temporary patch/backup files
 docs/step8_AwakeningManager_patch_final.java
+backup.bat
 
 build_output.txt
 

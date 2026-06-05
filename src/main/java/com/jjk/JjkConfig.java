@@ -1,6 +1,7 @@
 package com.jjk;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +15,8 @@ import java.util.List;
 public class JjkConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("jjk-config");
-    private static final Gson GSON = new Gson();
+    private static final Gson GSON        = new Gson();
+    private static final Gson GSON_PRETTY = new GsonBuilder().setPrettyPrinting().create();
 
     private static final String[] KNOWN_KEYS = {
         "mangaExpEnabled", "allowDuplicateCharacter", "gradePvpScaling",
@@ -37,7 +39,8 @@ public class JjkConfig {
         "curtainSpecialCeCost", "curtainSpecialCePerTick", "curtainSpecialDurationTicks",
         "curtainSpecialRadius", "curtainSpecialCooldownTicks",
         "blackFlashLowHpBonus", "blackFlashZoneAtkBonus", "blackFlashZoneSkillBonus",
-        "fingerStatBonusPercent", "awakeningHpThreshold", "awakeningMultiplier",
+        "fingerStatBonusPercent", "awakeningHpThreshold", "awakeningDurationTicks",
+        "awakeningMultiplier", "awakeningCooldownTicks",
         "shieldCeDrainRatio", "shieldDamageReduction",
         "simpleBarrierCostActivate", "simpleBarrierCostPerSecond",
         "simpleBarrierSureHitNegate", "simpleBarrierAllyBonus",
@@ -50,7 +53,11 @@ public class JjkConfig {
         "cursedToolAttackBonus_cloud", "cursedToolAttackBonus_inverted",
         "cursedToolAttackBonus_soul", "cursedToolCeReduction_spear",
         "cursedToolRangeBonus_cloud", "cursedToolDefPenetration_inverted",
-        "cursedToolBlackFlashBonus_soul", "cursedToolSealCooldown_inverted"
+        "cursedToolBlackFlashBonus_soul", "cursedToolSealCooldown_inverted",
+        "jjtBuilding_enabled", "jjtBuilding_centerX", "jjtBuilding_centerY",
+        "jjtBuilding_centerZ", "jjtBuilding_generated",
+        "nonSorcMult", "nonSorcMultExtreme",
+        "buildingsGenerated", "cursedSpiritSpawnEnabled"
     };
 
     public boolean mangaExpEnabled                 = false;
@@ -75,9 +82,9 @@ public class JjkConfig {
     public float   xpMultiplierGradeDiff           = 1.5f;
     public boolean allowCharacterReselect          = false;
     public int     rikaLifetimeTicks               = 200;    // §LOCK
-    public int     maharagaThreshold               = 2;      // decisions §2-1
-    public int     sealDurationTicks               = 400;    // decisions §2-2
-    public int     zoneDurationTicks               = 300;    // decisions §2-3
+    public int     maharagaThreshold               = 5;      // §LOCK decisions §2-1
+    public int     sealDurationTicks               = 600;    // §LOCK decisions §2-2
+    public int     zoneDurationTicks               = 200;    // §LOCK decisions §2-3
     public float   ceRegenOutOfCombat              = 1.0f;   // decisions §2-4
     public float   ceRegenInCombat                 = 0.2f;   // decisions §2-4
     public int     zoneEntryBlackFlashCount        = 1;      // 흑섬 1회 즉시 진입
@@ -89,8 +96,10 @@ public class JjkConfig {
     public int     blackFlashZoneAtkBonus          = 15;    // Zone 내 공격력 %
     public int     blackFlashZoneSkillBonus        = 10;    // Zone 내 스킬 데미지 %
     public int     fingerStatBonusPercent          = 5;     // 스쿠나 손가락 1개당 %
-    public float   awakeningHpThreshold            = 0.05f; // 각성 발동 HP 비율
-    public float   awakeningMultiplier             = 1.5f;  // 각성 배율
+    public float   awakeningHpThreshold            = 0.05f; // §LOCK 각성 발동 HP 비율 (5%)
+    public int     awakeningDurationTicks          = 160;   // §LOCK decisions
+    public float   awakeningMultiplier             = 1.5f;  // §LOCK 각성 배율
+    public int     awakeningCooldownTicks          = 2400;  // §LOCK decisions
     public float   shieldCeDrainRatio              = 0.005f;
     public float   shieldDamageReduction           = 0.02f;
     public float   simpleBarrierCostActivate       = 0.03f;
@@ -118,6 +127,25 @@ public class JjkConfig {
     public float   cursedToolDefPenetration_inverted = 0.15f;
     public int     cursedToolBlackFlashBonus_soul  = 5;
     public int     cursedToolSealCooldown_inverted = 120;
+    // 주술고전 건축물 설정
+    public boolean jjtBuilding_enabled   = true;
+    public int     jjtBuilding_centerX   = 0;
+    public int     jjtBuilding_centerY   = 64;
+    public int     jjtBuilding_centerZ   = 0;
+    public boolean jjtBuilding_generated = false;
+    // 비술사 피해 배율
+    public float   nonSorcMult          = 1.8f;   // 일반형 비술사 피해 배율
+    public float   nonSorcMultExtreme   = 2.2f;   // 극단형(isExtreme) 비술사 피해 배율
+    // 원작 건축물 5개 생성 여부 (JJT 건물 외 4개)
+    public boolean buildingsGenerated         = false;
+    // 주령 자동 스폰 on/off
+    public boolean cursedSpiritSpawnEnabled   = true;
+    // NPC 텔레포트 좌표 [x, y, z]
+    public double[] trainingRoomPos = {0.0, 64.0, 0.0};
+    public double[] infirmaryPos    = {10.0, 64.0, 0.0};
+    public double[] storagePos      = {-10.0, 64.0, 0.0};
+    public double[] entrancePos     = {0.0, 64.0, 20.0};
+    public double[] blackmarketPos  = {0.0, 64.0, 0.0};
     public int     xpGrade4to3                     = 500;
     public int     xpGrade3to2                     = 1200;
     public int     xpGrade2to1                     = 2500;
@@ -201,7 +229,9 @@ public class JjkConfig {
         this.blackFlashZoneSkillBonus        = fresh.blackFlashZoneSkillBonus;
         this.fingerStatBonusPercent          = fresh.fingerStatBonusPercent;
         this.awakeningHpThreshold            = fresh.awakeningHpThreshold;
+        this.awakeningDurationTicks          = fresh.awakeningDurationTicks;
         this.awakeningMultiplier             = fresh.awakeningMultiplier;
+        this.awakeningCooldownTicks          = fresh.awakeningCooldownTicks;
         this.shieldCeDrainRatio              = fresh.shieldCeDrainRatio;
         this.shieldDamageReduction           = fresh.shieldDamageReduction;
         this.simpleBarrierCostActivate       = fresh.simpleBarrierCostActivate;
@@ -252,6 +282,16 @@ public class JjkConfig {
         this.cursedToolDefPenetration_inverted   = fresh.cursedToolDefPenetration_inverted;
         this.cursedToolBlackFlashBonus_soul      = fresh.cursedToolBlackFlashBonus_soul;
         this.cursedToolSealCooldown_inverted     = fresh.cursedToolSealCooldown_inverted;
+        this.jjtBuilding_enabled                 = fresh.jjtBuilding_enabled;
+        this.jjtBuilding_centerX                 = fresh.jjtBuilding_centerX;
+        this.jjtBuilding_centerY                 = fresh.jjtBuilding_centerY;
+        this.jjtBuilding_centerZ                 = fresh.jjtBuilding_centerZ;
+        this.jjtBuilding_generated               = fresh.jjtBuilding_generated;
+        this.nonSorcMult                         = fresh.nonSorcMult;
+        this.nonSorcMultExtreme                  = fresh.nonSorcMultExtreme;
+        this.buildingsGenerated                  = fresh.buildingsGenerated;
+        this.blackmarketPos                      = fresh.blackmarketPos;
+        this.cursedSpiritSpawnEnabled            = fresh.cursedSpiritSpawnEnabled;
     }
 
     // Backward-compatible no-arg load: uses Minecraft server working directory
@@ -271,7 +311,9 @@ public class JjkConfig {
     public int   blackFlashZoneSkillBonus()      { return blackFlashZoneSkillBonus; }
     public int   fingerStatBonusPercent()        { return fingerStatBonusPercent; }
     public float awakeningHpThreshold()          { return awakeningHpThreshold; }
+    public int   awakeningDurationTicks()        { return awakeningDurationTicks; }
     public float awakeningMultiplier()           { return awakeningMultiplier; }
+    public int   awakeningCooldownTicks()        { return awakeningCooldownTicks; }
     public float shieldCeDrainRatio()            { return shieldCeDrainRatio; }
     public float shieldDamageReduction()         { return shieldDamageReduction; }
     public float simpleBarrierCostActivate()     { return simpleBarrierCostActivate; }
@@ -323,4 +365,43 @@ public class JjkConfig {
     public float   cursedToolDefPenetration_inverted()  { return cursedToolDefPenetration_inverted; }
     public int     cursedToolBlackFlashBonus_soul()     { return cursedToolBlackFlashBonus_soul; }
     public int     cursedToolSealCooldown_inverted()    { return cursedToolSealCooldown_inverted; }
+
+    public float   nonSorcMult()          { return nonSorcMult; }
+    public float   nonSorcMultExtreme()   { return nonSorcMultExtreme; }
+
+    public boolean jjtBuildingEnabled()   { return jjtBuilding_enabled; }
+    public int     jjtBuildingCenterX()   { return jjtBuilding_centerX; }
+    public int     jjtBuildingCenterY()   { return jjtBuilding_centerY; }
+    public int     jjtBuildingCenterZ()   { return jjtBuilding_centerZ; }
+    public boolean jjtBuildingGenerated() { return jjtBuilding_generated; }
+    public void    setJjtBuildingGenerated(boolean v) { jjtBuilding_generated = v; }
+
+    public void save() {
+        save(Path.of("config/jjk/config.json"));
+    }
+
+    public void save(Path configPath) {
+        try {
+            Files.createDirectories(configPath.getParent());
+            Files.writeString(configPath, GSON_PRETTY.toJson(this));
+        } catch (Exception e) {
+            LOGGER.warn("[JJK] Failed to save config.json: {}", e.getMessage());
+        }
+    }
+
+    public net.minecraft.util.math.Vec3d trainingRoomPos() {
+        return new net.minecraft.util.math.Vec3d(trainingRoomPos[0], trainingRoomPos[1], trainingRoomPos[2]);
+    }
+    public net.minecraft.util.math.Vec3d infirmaryPos() {
+        return new net.minecraft.util.math.Vec3d(infirmaryPos[0], infirmaryPos[1], infirmaryPos[2]);
+    }
+    public net.minecraft.util.math.Vec3d storagePos() {
+        return new net.minecraft.util.math.Vec3d(storagePos[0], storagePos[1], storagePos[2]);
+    }
+    public net.minecraft.util.math.Vec3d entrancePos() {
+        return new net.minecraft.util.math.Vec3d(entrancePos[0], entrancePos[1], entrancePos[2]);
+    }
+    public net.minecraft.util.math.Vec3d blackmarketPos() {
+        return new net.minecraft.util.math.Vec3d(blackmarketPos[0], blackmarketPos[1], blackmarketPos[2]);
+    }
 }

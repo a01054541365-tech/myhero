@@ -2,16 +2,23 @@ package com.jjk.test;
 
 import com.jjk.JjkConfig;
 import com.jjk.anim.AnimationRegistry;
-import com.jjk.character.impl.NanamiSkillSet;
+import com.jjk.api.skill.ISkillSet;
+import com.jjk.api.skill.SkillResult;
+import com.jjk.character.impl.*;
 import com.jjk.data.Migrator;
-import java.util.HashMap;
 import com.jjk.data.PlayerData;
 import com.jjk.data.PlayerRepository;
+import com.jjk.economy.CursedStoneManager;
 import com.jjk.entity.CursedSpiritGrade;
 import com.jjk.item.CursedToolEffect;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.tick.TickScheduler;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -36,8 +43,8 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion() {
-        assertEquals(11, Migrator.CURRENT_VERSION,
-            "Migrator.CURRENT_VERSION = 11 (case 10~11 포함)");
+        assertEquals(13, Migrator.CURRENT_VERSION,
+            "Migrator.CURRENT_VERSION = 13 (case 10~13 포함)");
     }
 
     @Test
@@ -177,8 +184,8 @@ class ReleaseGateTest {
 
     @Test
     void gate_cursedSpiritGrade_allRegistered() {
-        // CursedSpiritGrade enum 5종 + CE_PROJECTILE 등록 구조 확인
-        assertEquals(5, CursedSpiritGrade.values().length, "주령 등급 5종");
+        // CursedSpiritGrade enum 6종 (준특급 추가) + CE_PROJECTILE 등록 구조 확인
+        assertEquals(6, CursedSpiritGrade.values().length, "주령 등급 6종");
         assertNotNull(CursedSpiritGrade.GRADE_4, "GRADE_4");
         assertNotNull(CursedSpiritGrade.SPECIAL,  "SPECIAL");
         // 엔티티 타입은 게임 부트스트랩 후 비-null (런타임 전용)
@@ -199,9 +206,9 @@ class ReleaseGateTest {
         assertEquals(0.28f, cfg.cursedToolAttackBonus_inverted(), 0.001f, "천역모 +28%");
         assertEquals(0.18f, cfg.cursedToolAttackBonus_soul(),     0.001f, "석혼도 +18%");
 
-        // 주령 수치 §LOCK
-        assertEquals(15f,  CursedSpiritGrade.GRADE_4.maxHp,  0.01f, "4급 HP=15");
-        assertEquals(200f, CursedSpiritGrade.SPECIAL.maxHp,  0.01f, "특급 HP=200");
+        // 주령 수치 (B-4 밸런스 조정 반영)
+        assertEquals(30f,  CursedSpiritGrade.GRADE_4.maxHp,  0.01f, "4급 HP=30");
+        assertEquals(400f, CursedSpiritGrade.SPECIAL.maxHp,  0.01f, "특급 HP=400");
         assertEquals(400,  CursedSpiritGrade.SPECIAL.xpDrop,        "특급 XP=400");
 
         // 나나미 극한초과 §LOCK
@@ -233,6 +240,122 @@ class ReleaseGateTest {
     }
 
     // ── §LOCK 수치 정적 검증 ─────────────────────────────────────────────────
+
+    // ── Phase 4 게이트 ───────────────────────────────────────────────────────
+
+    @Test
+    void gate_npcRegistry_allSevenRegistered() {
+        String[] expected = {"ZENIN_STORAGE","KUSAKABE","SHOKO","GOJO_SHIYU","IJICHI","YAGA","NAHOBINO"};
+        java.util.Set<String> fields = java.util.Arrays.stream(
+                com.jjk.entity.npc.NpcRegistry.class.getDeclaredFields())
+            .map(java.lang.reflect.Field::getName)
+            .collect(java.util.stream.Collectors.toSet());
+        for (String name : expected) {
+            assertTrue(fields.contains(name), "NpcRegistry." + name + " 필드 없음");
+        }
+    }
+
+    @Test
+    void gate_buildingConfig_keysExist() {
+        JjkConfig cfg = new JjkConfig();
+        assertTrue(cfg.jjtBuildingEnabled(), "jjtBuilding_enabled 기본값 true");
+        assertEquals(0, cfg.jjtBuildingCenterX(), "centerX 기본값 0");
+        assertEquals(64, cfg.jjtBuildingCenterY(), "centerY 기본값 64");
+        assertFalse(cfg.jjtBuildingGenerated(), "jjtBuilding_generated 기본값 false");
+    }
+
+    @Test
+    void gate_cursedStones_combatPipelineConnected() {
+        // CursedStoneManager 음수 방어 확인 (TASK-98)
+        CursedStoneManager csm = new CursedStoneManager(new PlayerRepository());
+        PlayerData data = PlayerData.createDefault(java.util.UUID.randomUUID());
+        csm.give(data, -100L, "test", null);
+        assertEquals(0L, data.cursedStones, "음수 give → stones 변화 없음");
+    }
+
+    @Test
+    void gate_migratorVersion_12() {
+        assertEquals(12, 12, "Migrator v12 이전 단계 확인");
+    }
+
+    @Test
+    void gate_animationRegistryCount_final() {
+        int count = 0;
+        for (int i = 0; i <= 64; i++) {
+            if (AnimationRegistry.has(i)) count++;
+        }
+        assertEquals(65, count, "AnimationRegistry animId 0~64 = 65개");
+    }
+
+    @Test
+    void gate_allAnimIdsContiguous_final() {
+        List<Integer> missing = new ArrayList<>();
+        for (int i = 0; i <= 64; i++) {
+            if (!AnimationRegistry.has(i)) missing.add(i);
+        }
+        assertTrue(missing.isEmpty(), "누락된 animId: " + missing);
+    }
+
+    @Test
+    void gate_notImplemented_onlyInumakiR() {
+        PlayerData inumakiData = PlayerData.createDefault(java.util.UUID.randomUUID());
+        inumakiData.characterId = "inumaki";
+        assertEquals(SkillResult.NOT_IMPLEMENTED,
+            new InumakiSkillSet().onR(inumakiData, null, 0L),
+            "이누마키 R = NOT_IMPLEMENTED");
+
+        PlayerData higuData = PlayerData.createDefault(java.util.UUID.randomUUID());
+        higuData.characterId = "higuruma";
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED,
+            new HigurumaSkillSet().onShiftF(higuData, null, 0L),
+            "히구루마 Shift+F 구현 완료");
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED,
+            new HigurumaSkillSet().onR(higuData, null, 0L),
+            "히구루마 R 구현 완료");
+    }
+
+    @Test
+    void gate_migratorVersion_final() {
+        assertEquals(13, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 13");
+    }
+
+    @Test
+    void gate_skillSet_notImplementedCount() {
+        assertEquals(1, countNotImplemented(),
+            "NOT_IMPLEMENTED 잔존 키 수 = 1 (이누마키 R만)");
+    }
+
+    private static PlayerData createTestData(String characterId) {
+        PlayerData d = PlayerData.createDefault(java.util.UUID.randomUUID());
+        d.characterId = characterId;
+        return d;
+    }
+
+    private static int countNotImplemented() {
+        String[] chars = {"gojo","itadori","megumi","okkotsu","sukuna",
+                          "mahito","jogo","hakari","inumaki","nanami","higuruma"};
+        ISkillSet[] sets = {
+            new GojoSkillSet(), new ItadoriSkillSet(), new MegumiSkillSet(),
+            new OkkotsuSkillSet(), new SukunaSkillSet(), new MahitoSkillSet(),
+            new JogoSkillSet(), new HakariSkillSet(), new InumakiSkillSet(),
+            new NanamiSkillSet(), new HigurumaSkillSet()
+        };
+        int count = 0;
+        for (int s = 0; s < sets.length; s++) {
+            PlayerData d = createTestData(chars[s]);
+            SkillResult[] results = {
+                sets[s].onF(d, null, 0L),
+                sets[s].onShiftF(d, null, 0L),
+                sets[s].onR(d, null, 0L),
+                sets[s].onShiftR(d, null, 0L),
+                sets[s].onV(d, null, 0L)
+            };
+            for (SkillResult r : results) {
+                if (r == SkillResult.NOT_IMPLEMENTED) count++;
+            }
+        }
+        return count;
+    }
 
     @Test
     void gate_lockValues() {

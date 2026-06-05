@@ -76,6 +76,8 @@ public final class AnimationRegistry {
         m.put(60, "nanami_dismantle");
         m.put(61, "nanami_overtime");
         m.put(62, "nanami_ten_puncture");
+        m.put(63, "higuruma_argument");
+        m.put(64, "higuruma_evidence");
         return m;
     }
 

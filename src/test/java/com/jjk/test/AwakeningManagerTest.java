@@ -76,4 +76,24 @@ class AwakeningManagerTest {
         mgr.checkAndActivate(data, 20f * 0.04f, 20f, 1L);
         assertEquals(originalEndTick, data.awakeningEndTick, "이미 활성 → awakeningEndTick 변화 없음");
     }
+
+    @Test
+    void awakening_blockedDuringJackpot() {
+        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
+        data.jackpotActive = true;
+        mgr.checkAndActivate(data, 20f * 0.03f, 20f, 0L); // HP 3% — 조건 충족
+        assertFalse(data.awakeningActive, "잭팟 활성 중 각성 발동 불가");
+    }
+
+    @Test
+    void awakening_allowedAfterJackpotEnds() {
+        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
+        data.jackpotActive = true;
+        mgr.checkAndActivate(data, 20f * 0.03f, 20f, 0L);
+        assertFalse(data.awakeningActive, "잭팟 중 미발동");
+
+        data.jackpotActive = false;
+        mgr.checkAndActivate(data, 20f * 0.03f, 20f, 1L);
+        assertTrue(data.awakeningActive, "잭팟 종료 후 HP 3% → 각성 발동");
+    }
 }

@@ -1,0 +1,15 @@
+package com.jjk.effect;
+
+public enum SkillEffectType {
+    GOJO_BLUE_PULL,
+    GOJO_RED_BLAST,
+    GOJO_PURPLE_BEAM,
+    SUKUNA_SLASH,
+    SUKUNA_CLEAVE,
+    MAHITO_SOUL_SLASH,
+    ITADORI_BLACK_FLASH,
+    NANAMI_RATIO,
+    DOMAIN_OPEN,
+    DOMAIN_CLOSE,
+    AWAKENING_TRIGGER
+}

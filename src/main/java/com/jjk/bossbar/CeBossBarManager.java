@@ -3,6 +3,8 @@ package com.jjk.bossbar;
 import com.jjk.JJKMod;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.BossBarUpdateS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -41,6 +43,14 @@ public class CeBossBarManager {
         bar.setPercent(ratio);
         bar.setColor(colorFor(ratio));
         bar.setName(buildTitle(player));
+
+        ServerPlayNetworking.send(player, new BossBarUpdateS2CPacket(
+                data.characterId != null ? data.characterId : "",
+                (int) data.hpCurrent,
+                (int) data.hpMax,
+                (int) data.ceCurrent,
+                (int) data.ceMax
+        ));
     }
 
     private static Text buildTitle(ServerPlayerEntity player) {
@@ -48,7 +58,13 @@ public class CeBossBarManager {
         String charName = data.characterId != null
                 ? CharacterRegistry.get(data.characterId).displayName()
                 : "?";
-        return Text.literal("주력 [" + charName + "]");
+        int hp  = (int) data.hpCurrent;
+        int hpM = (int) data.hpMax;
+        int ce  = (int) data.ceCurrent;
+        int ceM = (int) data.ceMax;
+        return Text.literal(
+                "[" + charName + "] HP: " + hp + " / " + hpM
+                + "  CE: " + ce + " / " + ceM);
     }
 
     private static BossBar.Color colorFor(float ratio) {

@@ -5,6 +5,7 @@ import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.character.SkillRegistry;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.SkillCooldownSyncS2CPacket;
 import com.jjk.network.s2c.SkillResultS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.RegistryByteBuf;
@@ -44,7 +45,7 @@ public record SkillUseC2SPacket(UUID playerUuid, byte keyId, UUID targetUuid)
     public static void handle(SkillUseC2SPacket packet, ServerPlayNetworking.Context ctx) {
         ctx.server().execute(() -> {
             int keyIdInt = packet.keyId() & 0xFF;
-            if (keyIdInt > 4) {
+            if (keyIdInt > 5) {
                 if (JJKMod.getAuditLogger() != null) {
                     JJKMod.getAuditLogger().logEvent("INVALID_PACKET", ctx.player().getUuid(),
                             "{\"keyId\":" + keyIdInt + "}", 0L);
@@ -62,7 +63,13 @@ public record SkillUseC2SPacket(UUID playerUuid, byte keyId, UUID targetUuid)
             ISkillSet skillSet = SkillRegistry.get(data.characterId);
             if (skillSet == null) return;
             SkillResult result = skillSet.use(ctx.player(), keyIdInt);
-            if (result != SkillResult.SUCCESS) {
+            if (result == SkillResult.SUCCESS) {
+                int cdTicks = skillSet.getCooldownTicks(keyIdInt);
+                if (cdTicks > 0) {
+                    ServerPlayNetworking.send(ctx.player(),
+                            new SkillCooldownSyncS2CPacket(keyIdInt, cdTicks));
+                }
+            } else {
                 ServerPlayNetworking.send(ctx.player(),
                         new SkillResultS2CPacket(keyIdInt, result.name(), 0f));
             }

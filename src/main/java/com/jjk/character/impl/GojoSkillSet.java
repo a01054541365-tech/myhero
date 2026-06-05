@@ -20,10 +20,10 @@ import java.util.Optional;
 public class GojoSkillSet implements ISkillSet {
 
     // key 0: blue, 1: red, 2: purple, 3: unlimited_void, 4: infinity_toggle, 5: curtain_toggle
-    private static final int CE_0 = 80,   CD_0 = 4;
-    private static final int CE_1 = 160,  CD_1 = 8;
-    private static final int CE_2 = 650,  CD_2 = 60;
-    private static final int CE_3 = 3000, CD_3 = 360;
+    private static final int CE_0 = 360,  CD_0 = 4;
+    private static final int CE_1 = 360,  CD_1 = 8;
+    private static final int CE_2 = 520,  CD_2 = 60;
+    private static final int CE_3 = 6000, CD_3 = 360;
     private static final int CE_4 = 30,   CD_4 = 1;    // 50→30, 5→1 (§6-2 고죠 기준) | CE_4는 토글 ON 최소 보유량 기준; 실제 소모는 CEManager 드레인(1.5/틱)으로 처리
     private static final int CE_5 = 200,  CD_5 = 60;
 

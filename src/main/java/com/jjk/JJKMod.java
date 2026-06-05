@@ -1,8 +1,17 @@
 package com.jjk;
 
 import com.jjk.bossbar.CeBossBarManager;
+import com.jjk.dungeon.DungeonManager;
+import com.jjk.economy.CursedStoneManager;
+import com.jjk.entity.npc.NpcRegistry;
+import com.jjk.server.AutoAnnouncer;
+import com.jjk.server.WelcomeHandler;
+import com.jjk.world.BuildingGenerator;
+import com.jjk.world.JjkStructureBuilder;
+import com.jjk.event.PotionUseHandler;
 import com.jjk.item.GuideBookItem;
 import com.jjk.chant.ChantingHandler;
+import com.jjk.quest.QuestManager;
 import com.jjk.curtain.CurtainManager;
 import com.jjk.data.PlayerData;
 import com.jjk.grade.GradeManager;
@@ -14,6 +23,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.text.Text;
@@ -27,12 +37,16 @@ import com.jjk.ce.CEManager;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.character.SkillRegistry;
 import com.jjk.character.impl.*;
+import com.jjk.network.s2c.CharacterInfoS2CPacket;
+import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.jjk.combat.CombatPipeline;
 import com.jjk.data.Migrator;
 import com.jjk.data.PlayerRepository;
 import com.jjk.domain.DomainManager;
 import com.jjk.entity.CursedSpiritEntityTypes;
+import com.jjk.entity.CursedSpiritSpawnManager;
 import com.jjk.entity.ShikigamiEntityTypes;
+import com.jjk.item.CostumeItemRegistry;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.effect.EffectDeferQueue;
 import com.jjk.effect.FireEffectManager;
@@ -73,6 +87,9 @@ public class JJKMod implements ModInitializer {
     private GradeManager gradeManager;
     private CurtainManager curtainManager;
     private ChantingHandler chantingHandler;
+    private CursedStoneManager cursedStoneManager;
+    private QuestManager questManager;
+    private DungeonManager dungeonManager;
     private final ComboTracker comboTracker = new ComboTracker();
     private TickScheduler tickScheduler;
     private MinecraftServer server;
@@ -100,9 +117,15 @@ public class JJKMod implements ModInitializer {
         curtainManager = new CurtainManager(config, playerRepository);
         chantingHandler = new ChantingHandler();
 
+        cursedStoneManager = new CursedStoneManager(playerRepository);
+        questManager = new QuestManager();
+        dungeonManager = new DungeonManager();
+
         ShikigamiEntityTypes.register();
         CursedSpiritEntityTypes.register();
         CursedToolRegistry.registerItems();
+        CostumeItemRegistry.register();
+        NpcRegistry.register();
 
         SkillRegistry.register("gojo",    new GojoSkillSet());
         SkillRegistry.register("itadori", new ItadoriSkillSet());
@@ -114,7 +137,7 @@ public class JJKMod implements ModInitializer {
         SkillRegistry.register("hakari",    new HakariSkillSet());
         SkillRegistry.register("inumaki",   new InumakiSkillSet());
         SkillRegistry.register("nanami",    new NanamiSkillSet());
-        SkillRegistry.register("higuruma",  new HigurumaskillSet());
+        SkillRegistry.register("higuruma",  new HigurumaSkillSet());
 
         CharacterRegistry.register("gojo",    new CharacterRegistry.CharacterMeta("gojo",    "Satoru Gojo",       "special_grade", 5000f));
         CharacterRegistry.register("itadori", new CharacterRegistry.CharacterMeta("itadori", "Yuji Itadori",      "grade_1",       4000f));
@@ -138,8 +161,13 @@ public class JJKMod implements ModInitializer {
         tickScheduler.register(NanamiSkillSet::tickRCT, 10);
         tickScheduler.register(FireEffectManager::tickFirePlayer, 1);
         tickScheduler.register(MegumiSkillSet::tickMaharagaFailCheck, 20);
+        AutoAnnouncer autoAnnouncer = new AutoAnnouncer();
+        tickScheduler.register(autoAnnouncer::tick, 6000);
+        tickScheduler.register(CursedSpiritSpawnManager::tick, 200);
 
         Packets.register();
+        PotionUseHandler.register();
+        WelcomeHandler.register();
         LOGGER.info("[JJK] 초기화 완료. schemaVersion={}", Migrator.CURRENT_VERSION);
 
         // /jj — §10-1 (player commands via JjkCommandRegistry registered first, then OP subcommands)
@@ -241,11 +269,39 @@ public class JJKMod implements ModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            if (!config.jjtBuildingEnabled()) return;
+            if (config.jjtBuildingGenerated()) return;
+            net.minecraft.server.world.ServerWorld overworld =
+                server.getWorld(net.minecraft.world.World.OVERWORLD);
+            if (overworld == null) return;
+            int cx = config.jjtBuildingCenterX();
+            int cz = config.jjtBuildingCenterZ();
+            int surfaceY = overworld.getTopY(
+                net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, cx, cz);
+            net.minecraft.util.math.BlockPos center = new net.minecraft.util.math.BlockPos(
+                cx, surfaceY, cz);
+            new JjkStructureBuilder(overworld, center).buildAll();
+            config.setJjtBuildingGenerated(true);
+            config.save();
+            LOGGER.info("[JJK] 주술고전 건축물 생성 완료");
+        });
+        // 원작 건축물 4개 (시부야역·죠고화산·훈련도장·암시장) — jjtBuilding_generated 와 별도 플래그
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            if (!config.buildingsGenerated) {
+                BuildingGenerator.generateAll(server);
+            }
+        });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
                 ceBossBarManager.onPlayerJoin(handler.player);
                 // 일일 접속 XP
                 PlayerData loginData = playerRepository.load(handler.player.getUuid());
+                int todayEpochDay = (int) java.time.LocalDate.now().toEpochDay();
+                boolean isNewDay = (loginData.lastLoginDay != todayEpochDay);
                 gradeManager.onDailyLogin(loginData, handler.player);
+                if (isNewDay) {
+                    cursedStoneManager.give(loginData, 15L, "daily_login", handler.player);
+                }
 
                 // 가이드북 지급 — 1틱 딜레이로 인벤토리 로드 완료 보장
                 final net.minecraft.server.network.ServerPlayerEntity joinedPlayer = handler.player;
@@ -258,6 +314,15 @@ public class JJKMod implements ModInitializer {
                         }
                         data.receivedGuideBook = true;
                         playerRepository.saveImmediate(data);
+                    }
+                    // B-2: 캐릭터 선택 화면(미선택) 또는 캐릭터 정보(선택됨) 전송
+                    if (data.characterId == null) {
+                        ServerPlayNetworking.send(joinedPlayer,
+                            new CharacterSelectS2CPacket(new java.util.ArrayList<>(CharacterRegistry.ids())));
+                    } else {
+                        ServerPlayNetworking.send(joinedPlayer,
+                            new CharacterInfoS2CPacket(data.characterId, data.grade,
+                                data.ceMax, data.ceCurrent));
                     }
                 });
         });
@@ -329,4 +394,21 @@ public class JJKMod implements ModInitializer {
     public static GradeManager getGradeManager() { return INSTANCE.gradeManager; }
     public static CurtainManager getCurtainManager() { return INSTANCE.curtainManager; }
     public static ChantingHandler getChantingHandler() { return INSTANCE.chantingHandler; }
+    public static CursedStoneManager getCursedStoneManager() { return INSTANCE.cursedStoneManager; }
+    public static QuestManager getQuestManager() { return INSTANCE.questManager; }
+    public static DungeonManager getDungeonManager() { return INSTANCE.dungeonManager; }
+
+    /** 테스트용: 최소 JJKMod 상태 초기화. 프로덕션 코드에서 호출 금지. */
+    public static void initForTest(CursedStoneManager csm, PlayerRepository repo) {
+        if (INSTANCE == null) INSTANCE = new JJKMod();
+        INSTANCE.cursedStoneManager = csm;
+        INSTANCE.playerRepository   = repo;
+        if (INSTANCE.config == null)         INSTANCE.config = new JjkConfig();
+        if (INSTANCE.gradeManager == null)   INSTANCE.gradeManager = new GradeManager();
+        if (INSTANCE.questManager == null)   INSTANCE.questManager = new QuestManager();
+        if (INSTANCE.teamManager == null)    INSTANCE.teamManager = new TeamManager();
+        if (INSTANCE.dungeonManager == null) INSTANCE.dungeonManager = new DungeonManager();
+        if (INSTANCE.ceManager == null)      INSTANCE.ceManager = new CEManager(INSTANCE.config);
+        if (INSTANCE.awakeningManager == null) INSTANCE.awakeningManager = new AwakeningManager(INSTANCE.config);
+    }
 }
