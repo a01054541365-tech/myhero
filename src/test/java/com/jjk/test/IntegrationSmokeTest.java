@@ -379,11 +379,11 @@ class IntegrationSmokeTest {
         assertEquals(CursedSpiritGrade.AiTier.BOSS,    CursedSpiritGrade.SPECIAL.aiTier,
             "특급: DomainDeployGoal 포함");
 
-        // DomainDeployGoal canStart 조건: HP < SPECIAL.maxHp × 0.5 = 100f
+        // DomainDeployGoal canStart 조건: HP < SPECIAL.maxHp × 0.5 = 200f
         float threshold = CursedSpiritGrade.SPECIAL.maxHp * 0.5f;
-        assertEquals(100f, threshold, 0.001f, "특급 발동 HP 기준 = 100f");
-        assertTrue(90f < threshold, "HP=90 < 100 → canStart=true");
-        assertFalse(101f < threshold, "HP=101 >= 100 → canStart=false");
+        assertEquals(200f, threshold, 0.001f, "특급 발동 HP 기준 = 200f");
+        assertTrue(90f < threshold, "HP=90 < 200 → canStart=true");
+        assertFalse(201f < threshold, "HP=201 >= 200 → canStart=false");
     }
 
     // ── 시나리오 15: 주령 처치 → XP + 손가락 미드롭 ─────────────────────────────
@@ -489,9 +489,9 @@ class IntegrationSmokeTest {
         assertEquals(800f, domain.wallHp, 0.001f,       "wallHp=800");
         assertEquals(15f,  domain.currentRadius, 0.001f,"반경=15");
 
-        // 틱 데미지: attackDamage × 0.3 (SPECIAL = 48 × 0.3 = 14.4)
+        // 틱 데미지: attackDamage × 0.3 (SPECIAL = 38 × 0.3 = 11.4)
         float tickDmg = CursedSpiritGrade.SPECIAL.attackDamage * 0.3f;
-        assertEquals(14.4f, tickDmg, 0.01f, "특급 틱 데미지 = 48 × 0.3 = 14.4");
+        assertEquals(11.4f, tickDmg, 0.01f, "특급 틱 데미지 = 38 × 0.3 = 11.4");
 
         // 주령 사망 → collapseDomain → activeDomains 제거
         mgr.collapseDomain(npcUuid, 100L);

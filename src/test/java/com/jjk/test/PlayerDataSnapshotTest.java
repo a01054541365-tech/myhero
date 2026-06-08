@@ -86,4 +86,46 @@ class PlayerDataSnapshotTest {
             }
         }
     }
+
+    /** H-2-1: snapshot()이 null을 반환하지 않음. */
+    @Test
+    void testSnapshotNotNull() {
+        PlayerData original = PlayerData.createDefault(UUID.randomUUID());
+        assertNotNull(original.snapshot(), "snapshot()은 null을 반환해서는 안 됨");
+    }
+
+    /** H-2-1: 기본 타입 필드는 snapshot 후 독립적으로 변경 가능 — 원본에 영향 없음. */
+    @Test
+    void testPrimitiveFieldIndependence() {
+        PlayerData original = PlayerData.createDefault(UUID.randomUUID());
+        original.xp = 500L;
+        original.ceCurrent = 80f;
+        original.awakeningActive = false;
+
+        PlayerData snap = original.snapshot();
+        // snapshot 필드를 수정해도 원본이 바뀌지 않아야 함
+        snap.xp = 9999L;
+        snap.ceCurrent = 1f;
+        snap.awakeningActive = true;
+
+        assertEquals(500L, original.xp,
+                "snapshot xp 변경이 원본 xp에 영향 없어야 함");
+        assertEquals(80f, original.ceCurrent, 0.001f,
+                "snapshot ceCurrent 변경이 원본에 영향 없어야 함");
+        assertFalse(original.awakeningActive,
+                "snapshot awakeningActive 변경이 원본에 영향 없어야 함");
+    }
+
+    /** H-2-1: questProgress Map 독립성 — snapshot 후 원본 수정이 복사본에 영향 없음. */
+    @Test
+    void testQuestProgressMapIndependence() {
+        PlayerData original = PlayerData.createDefault(UUID.randomUUID());
+        original.questProgress.put("kill_count", 3);
+
+        PlayerData snap = original.snapshot();
+        original.questProgress.put("kill_count", 99);
+
+        assertEquals(3, snap.questProgress.get("kill_count"),
+                "snapshot 후 원본 questProgress 수정이 snapshot에 영향 없어야 함");
+    }
 }

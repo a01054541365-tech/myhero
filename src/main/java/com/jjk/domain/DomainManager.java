@@ -4,8 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.jjk.JJKMod;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.JjkConfig;
+import com.jjk.api.combat.IDamageSource;
 import com.jjk.audit.AuditLogger;
+import com.jjk.combat.DamageContext;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.ZoneExitS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -25,7 +28,7 @@ public class DomainManager {
 
     private static final Gson GSON = new Gson();
     private static final Set<String> CURSED_SPIRITS =
-            Set.of("mahito", "jogo", "hanami", "dagon", "sukuna");
+            Set.of("mahito", "jogo", "hanami", "dagon", "sukuna", "choso");
     private static final Set<String> SORCERERS =
             Set.of("gojo", "itadori", "megumi", "okkotsu", "nanami", "inumaki", "hakari", "higuruma");
 
@@ -68,6 +71,37 @@ public class DomainManager {
                     if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
                     JJKMod.getCombatPipeline().applyDomainDamage(owner, p, rawDamage, defenseMultiplier, world);
                 }
+            } else if ("okkotsu_true_mutual_love".equals(domain.domainId)) {
+                // 진판상애절단: 전개 20틱 후 복사 술식 필중 발동 → 즉시 종료
+                long elapsed = currentTick - domain.deployedAtTick;
+                if (elapsed < 20) continue;
+
+                ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
+                if (owner == null) { collapseDomain(domain.ownerUuid, currentTick); continue; }
+
+                PlayerData ownerData = JJKMod.getPlayerRepository().load(domain.ownerUuid);
+                if (ownerData.lastReceivedSkillId != null) {
+                    for (ServerPlayerEntity p : world.getPlayers()) {
+                        if (p.getUuid().equals(domain.ownerUuid)) continue;
+                        if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
+                        DamageContext ctx = DamageContext.builder(owner, p,
+                                        IDamageSource.NORMAL_TECHNIQUE,
+                                        (float) ownerData.lastReceivedBaseDamage)
+                                .keyId(3)
+                                .skillName(ownerData.lastReceivedSkillId)
+                                .build();
+                        JJKMod.getCombatPipeline().process(ctx);
+                    }
+                    ownerData.lastReceivedSkillId = null;
+                    JJKMod.getPlayerRepository().save(ownerData);
+                }
+
+                // ZoneExit 전송 후 영역 즉시 종료
+                world.getPlayers().stream()
+                        .filter(p -> domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius))
+                        .forEach(p -> ServerPlayNetworking.send(p, new ZoneExitS2CPacket(domain.domainId)));
+                collapseDomain(domain.ownerUuid, currentTick);
+
             } else if (domain.autoTargetAll) {
                 // autoTargetAll 매 틱 영혼 데미지 (마히토 자폐원돈과)
                 ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
@@ -113,6 +147,10 @@ public class DomainManager {
 
     public boolean deployDomain(ServerPlayerEntity owner, String domainId, BlockPos center) {
         // === Phase 1: All validations (no side effects) ===
+
+        // Step 0: 비술사(천여주박)는 영역 전개 불가
+        PlayerData ownerData0 = JJKMod.getPlayerRepository().load(owner.getUuid());
+        if ("todo".equals(ownerData0.characterId)) return false;
 
         // Step 1: banned chunk check
         ChunkPos chunkPos = new ChunkPos(center);
@@ -184,6 +222,7 @@ public class DomainManager {
                             new ZoneExitS2CPacket(removed.domainId)));
             conflictingOwnerData.cooldowns.put("skill_seal", currentTick + 120);
             JJKMod.getPlayerRepository().saveImmediate(conflictingOwnerData);
+            AdvancementTriggerManager.onDomainCollisionWin(owner);
         }
 
         // Register new domain
@@ -197,6 +236,7 @@ public class DomainManager {
         instance.ownerDamageReduction = def.ownerDamageReduction;
         instance.deployedAtTick = currentTick;
         activeDomains.put(instance.instanceId, instance);
+        AdvancementTriggerManager.onDomainDeploy(owner);
 
         // Set cooldown and save
         data.domainCooldownUntil = currentTick + def.cooldownTicks;
@@ -215,6 +255,7 @@ public class DomainManager {
      * S2C 패킷·AuditLogger·saveImmediate 없음 (MC 의존 제거).
      */
     public boolean deployDomainData(PlayerData attacker, DomainDefinition def, long tick) {
+        if ("todo".equals(attacker.characterId)) return false; // 비술사는 영역 전개 불가
         if (tick < attacker.domainCooldownUntil) return false;
         if (def == null) return false;
         float ceCost = def.isOpen ? def.ceCost * 2f : def.ceCost; // decisions §3-4

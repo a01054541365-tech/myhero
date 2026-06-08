@@ -59,7 +59,7 @@
 | `respawnHpPercent` | `0.50` | |
 | `fingerDropRate` | `0.10` | §LOCK |
 | `fingerMaxCount` | `20` | §LOCK |
-| `blackFlashBaseRate` | `1` | §LOCK — Normal 흑섬 1% (원작 0.1% 대비 ×10 상향. 5%는 Zone 과다 발동 우려로 재확정 2026-06-03) |
+| `blackFlashBaseRate` | `1` | §LOCK — Normal 발동률 0.1% (퍼센트 정수 단위) |
 | `blackFlashZoneBonus` | `10` | §LOCK |
 | `xpMultiplierGradeDiff` | `1.5` | |
 | `allowCharacterReselect` | `false` | |
@@ -350,3 +350,14 @@ Phase 3: nanami, jogo, inumaki, mahito, hakari, higuruma, sukuna (실구현)
 - TPS 멀티플레이어 부하 테스트 (실제 플레이어 참여 환경)
 - /jj reload 커맨드 (핫리로드 CLI)
 - TickDamageCap.java CAP_RATIO config 주입 개선 (pre-existing 이슈)
+
+---
+
+## STEP 4 — 2026-06-06 추가 확정
+
+| # | 항목 | 확정값 | 비고 |
+|---|---|---|---|
+| 4-1 | `awakeningHpThreshold` | **0.10** | §LOCK — 각성 발동 HP 임계 (HP 10% 이하 시 각성 트리거) |
+| 4-2 | `blackFlashBaseRate` 재확인 | **1 유지** | §LOCK — spec §3-2 Normal 0.1%와 일치. 변경 불필요 확인됨 (2026-06-06) |
+| 4-3 | `OkkotsuSkillSet.onShiftR` burstActive 세팅 | **player=null 경로에서도 세팅 필수** | burstActive=true, burstEndTick=tick+200은 CE 검증 통과 후 player 참조 없이 즉시 세팅 |
+| 4-4 | 테스트 Migrator 기대값 | **assertEquals(17, CURRENT_VERSION)** | ReleaseGateTest×2 + ISkillSetTest 수정 완료 (2026-06-06) |

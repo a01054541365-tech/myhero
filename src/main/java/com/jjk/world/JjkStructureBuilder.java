@@ -1,7 +1,6 @@
 package com.jjk.world;
 
-import com.jjk.entity.npc.NpcEntity;
-import com.jjk.entity.npc.NpcRegistry;
+import com.jjk.world.structure.NpcSpawnPoint;
 import net.minecraft.block.*;
 import net.minecraft.block.enums.BedPart;
 import net.minecraft.block.enums.DoubleBlockHalf;
@@ -17,6 +16,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 
+import java.util.List;
+
 public final class JjkStructureBuilder {
 
     private final ServerWorld world;
@@ -27,17 +28,31 @@ public final class JjkStructureBuilder {
         this.origin = origin;
     }
 
-    public void buildAll() {
+    /** 모든 구조체를 생성하고 NPC 스폰 포인트 목록을 반환. */
+    public List<NpcSpawnPoint> buildAll() {
         buildMainBuilding();
         buildAnnex();
+        buildOfficeRoom();
         buildUndergroundB1();
         buildUndergroundB2();
         buildTrainingField();
         buildDungeon();
-        placeNpcs();
         spawnTrainingDummies();
         spawnGuardStands();
         spawnYagaDolls();
+        return collectNpcSpawnPoints();
+    }
+
+    private List<NpcSpawnPoint> collectNpcSpawnPoints() {
+        return List.of(
+            new NpcSpawnPoint("ijichi",        "이치지 키요타카",  -15,  1, -12, 180f),
+            new NpcSpawnPoint("kusakabe",      "쿠사카베 아츠야",  -15,  9,   5, 270f),
+            new NpcSpawnPoint("nahobino",      "나호비노 아오이",  -10,  9,   5, 270f),
+            new NpcSpawnPoint("shoko",         "이에이리 쇼코",    -35,  1,  -8, 270f),
+            new NpcSpawnPoint("zenin_storage", "젠인 창고지기",    -35,  1,   8, 270f),
+            new NpcSpawnPoint("yaga",          "야가 마사모토",    -10, 19,   0, 180f),
+            new NpcSpawnPoint("gojo_shiyu",    "공시우",           -15,-19,   0,   0f)
+        );
     }
 
     // ── 공통 헬퍼 ──────────────────────────────────────────────────────────────
@@ -342,26 +357,24 @@ public final class JjkStructureBuilder {
         }
     }
 
-    // ── NPC 스폰 ──────────────────────────────────────────────────────────────
+    // ── 사무실 공간 (2층 일부) ────────────────────────────────────────────────
 
-    private void placeNpcs() {
-        spawnNpc(NpcRegistry.IJICHI,       -15, 1, -12, 180f);
-        spawnNpc(NpcRegistry.KUSAKABE,     -15, 9,   5, 270f);
-        spawnNpc(NpcRegistry.NAHOBINO,     -10, 9,   5, 270f);
-        spawnNpc(NpcRegistry.SHOKO,        -35, 1,  -8, 270f);
-        spawnNpc(NpcRegistry.ZENIN_STORAGE,-35, 1,   8, 270f);
-        spawnNpc(NpcRegistry.YAGA,         -10, 19,  0, 180f);
-        spawnNpc(NpcRegistry.GOJO_SHIYU,   -15, -19, 0,   0f);
-    }
-
-    private void spawnNpc(EntityType<? extends NpcEntity> type,
-                           int dx, int dy, int dz, float yaw) {
-        NpcEntity npc = type.create(world);
-        if (npc == null) return;
-        BlockPos pos = origin.add(dx, dy, dz);
-        npc.refreshPositionAndAngles(
-            pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, yaw, 0f);
-        world.spawnEntity(npc);
+    private void buildOfficeRoom() {
+        // 2층 서쪽 코너 (x=-19 ~ -11, z=-14 ~ -6)에 사무실 배치
+        fill(-19, 8, -14, -11, 8, -6, Blocks.BIRCH_PLANKS);
+        // 사무용 책상 (oak_slab + oak_trapdoor)
+        set(-18, 9, -13, Blocks.OAK_SLAB);
+        setState(-18, 10, -13, Blocks.OAK_TRAPDOOR.getDefaultState()
+            .with(Properties.HORIZONTAL_FACING, Direction.EAST)
+            .with(Properties.OPEN, true));
+        set(-14, 9, -13, Blocks.OAK_SLAB);
+        setState(-14, 10, -13, Blocks.OAK_TRAPDOOR.getDefaultState()
+            .with(Properties.HORIZONTAL_FACING, Direction.EAST)
+            .with(Properties.OPEN, true));
+        // 서가
+        fill(-19, 9, -7, -19, 12, -7, Blocks.BOOKSHELF);
+        // 조명
+        set(-15, 17, -10, Blocks.LANTERN);
     }
 
     // ── 장식 엔티티 ───────────────────────────────────────────────────────────

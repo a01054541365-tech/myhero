@@ -57,7 +57,14 @@ public class JjkConfig {
         "jjtBuilding_enabled", "jjtBuilding_centerX", "jjtBuilding_centerY",
         "jjtBuilding_centerZ", "jjtBuilding_generated",
         "nonSorcMult", "nonSorcMultExtreme",
-        "buildingsGenerated", "cursedSpiritSpawnEnabled"
+        "buildingsGenerated", "cursedSpiritSpawnEnabled",
+        "discordWebhookUrl",
+        "backupEnabled", "backupIntervalTicks", "backupKeepCount", "backupDailyKeepCount",
+        "gradeProtectionDiff", "gradeProtectionXpMultiplier",
+        "raidEventIntervalTicks", "selectionBookCommandPermission",
+        "buildingSpawnEnabled", "buildingMinDistanceBlocks",
+        "jujutsuHighTokyoCount", "detentionFacilityCount",
+        "shibuyaUndergroundCount", "nanamiOfficeCount"
     };
 
     public boolean mangaExpEnabled                 = false;
@@ -83,7 +90,7 @@ public class JjkConfig {
     public boolean allowCharacterReselect          = false;
     public int     rikaLifetimeTicks               = 200;    // §LOCK
     public int     maharagaThreshold               = 5;      // §LOCK decisions §2-1
-    public int     sealDurationTicks               = 600;    // §LOCK decisions §2-2
+    public int     sealDurationTicks               = 400;    // §LOCK decisions §2-2 (600 사용 금지 → 400으로 교체 확정 2026-05-28)
     public int     zoneDurationTicks               = 200;    // §LOCK decisions §2-3
     public float   ceRegenOutOfCombat              = 1.0f;   // decisions §2-4
     public float   ceRegenInCombat                 = 0.2f;   // decisions §2-4
@@ -140,6 +147,13 @@ public class JjkConfig {
     public boolean buildingsGenerated         = false;
     // 주령 자동 스폰 on/off
     public boolean cursedSpiritSpawnEnabled   = true;
+    // Discord 웹훅 URL (비어있으면 전송 안 함)
+    public String  discordWebhookUrl          = "";
+    // 회전식 백업 (RotatingBackup)
+    public boolean backupEnabled              = true;
+    public int     backupIntervalTicks        = 72000;
+    public int     backupKeepCount            = 24;
+    public int     backupDailyKeepCount       = 7;
     // NPC 텔레포트 좌표 [x, y, z]
     public double[] trainingRoomPos = {0.0, 64.0, 0.0};
     public double[] infirmaryPos    = {10.0, 64.0, 0.0};
@@ -170,6 +184,20 @@ public class JjkConfig {
     public int     curtainSpecialDurationTicks     = 8000;
     public int     curtainSpecialRadius            = 45;
     public int     curtainSpecialCooldownTicks     = 1200;
+
+    // 등급 보호 / 레이드 / 선택 책 권한
+    // 건물 다중 랜덤 생성 설정
+    public boolean buildingSpawnEnabled          = true;
+    public int     buildingMinDistanceBlocks     = 300;
+    public int     jujutsuHighTokyoCount         = 1;
+    public int     detentionFacilityCount        = 2;
+    public int     shibuyaUndergroundCount       = 1;
+    public int     nanamiOfficeCount             = 1;
+
+    public int    gradeProtectionDiff            = 3;
+    public float  gradeProtectionXpMultiplier    = 3.0f;
+    public int    raidEventIntervalTicks         = 144000;
+    public int    selectionBookCommandPermission = 2;
 
     public static JjkConfig load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -268,7 +296,11 @@ public class JjkConfig {
         this.curtainSpecialCePerTick         = fresh.curtainSpecialCePerTick;
         this.curtainSpecialDurationTicks     = fresh.curtainSpecialDurationTicks;
         this.curtainSpecialRadius            = fresh.curtainSpecialRadius;
-        this.curtainSpecialCooldownTicks     = fresh.curtainSpecialCooldownTicks;
+        this.curtainSpecialCooldownTicks         = fresh.curtainSpecialCooldownTicks;
+        this.gradeProtectionDiff                 = fresh.gradeProtectionDiff;
+        this.gradeProtectionXpMultiplier         = fresh.gradeProtectionXpMultiplier;
+        this.raidEventIntervalTicks              = fresh.raidEventIntervalTicks;
+        this.selectionBookCommandPermission      = fresh.selectionBookCommandPermission;
         this.burdenDecayOutOfCombat              = fresh.burdenDecayOutOfCombat;
         this.burdenDecayInCombat                 = fresh.burdenDecayInCombat;
         this.burdenSealThreshold                 = fresh.burdenSealThreshold;
@@ -287,11 +319,21 @@ public class JjkConfig {
         this.jjtBuilding_centerY                 = fresh.jjtBuilding_centerY;
         this.jjtBuilding_centerZ                 = fresh.jjtBuilding_centerZ;
         this.jjtBuilding_generated               = fresh.jjtBuilding_generated;
+        this.buildingSpawnEnabled                = fresh.buildingSpawnEnabled;
+        this.buildingMinDistanceBlocks           = fresh.buildingMinDistanceBlocks;
+        this.jujutsuHighTokyoCount               = fresh.jujutsuHighTokyoCount;
+        this.detentionFacilityCount              = fresh.detentionFacilityCount;
+        this.shibuyaUndergroundCount             = fresh.shibuyaUndergroundCount;
+        this.nanamiOfficeCount                   = fresh.nanamiOfficeCount;
         this.nonSorcMult                         = fresh.nonSorcMult;
         this.nonSorcMultExtreme                  = fresh.nonSorcMultExtreme;
         this.buildingsGenerated                  = fresh.buildingsGenerated;
         this.blackmarketPos                      = fresh.blackmarketPos;
         this.cursedSpiritSpawnEnabled            = fresh.cursedSpiritSpawnEnabled;
+        this.backupEnabled                       = fresh.backupEnabled;
+        this.backupIntervalTicks                 = fresh.backupIntervalTicks;
+        this.backupKeepCount                     = fresh.backupKeepCount;
+        this.backupDailyKeepCount                = fresh.backupDailyKeepCount;
     }
 
     // Backward-compatible no-arg load: uses Minecraft server working directory
@@ -365,6 +407,11 @@ public class JjkConfig {
     public float   cursedToolDefPenetration_inverted()  { return cursedToolDefPenetration_inverted; }
     public int     cursedToolBlackFlashBonus_soul()     { return cursedToolBlackFlashBonus_soul; }
     public int     cursedToolSealCooldown_inverted()    { return cursedToolSealCooldown_inverted; }
+
+    public int    gradeProtectionDiff()           { return gradeProtectionDiff; }
+    public float  gradeProtectionXpMultiplier()   { return gradeProtectionXpMultiplier; }
+    public int    raidEventIntervalTicks()        { return raidEventIntervalTicks; }
+    public int    selectionBookCommandPermission(){ return selectionBookCommandPermission; }
 
     public float   nonSorcMult()          { return nonSorcMult; }
     public float   nonSorcMultExtreme()   { return nonSorcMultExtreme; }

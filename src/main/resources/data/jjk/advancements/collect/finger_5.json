@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:bone"},
+    "title": {"text": "손가락 5개"},
+    "description": {"text": "스쿠나의 손가락을 5개 수집하다"},
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

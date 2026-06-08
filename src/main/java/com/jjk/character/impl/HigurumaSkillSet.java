@@ -8,27 +8,36 @@ import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
+import com.jjk.network.s2c.SealedSkillSyncS2CPacket;
+import com.jjk.network.s2c.SkillEffectS2CPacket;
+import com.jjk.trial.TrialManager;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 
 import java.util.Comparator;
 import java.util.List;
 
 public class HigurumaSkillSet implements ISkillSet {
 
+    // §LOCK: techniques.json 수치 — 변경 금지
+    private static final float BD_1 = 55f;
+
     private static final int CE_0 = 180, CD_0 = 15, ANIM_0 = 38;
-    private static final int CE_1 = 250, CD_1 = 30, ANIM_1 = 63; // 검사 논고
-    private static final int CE_2 = 180, CD_2 = 60, ANIM_2 = 64; // 증거 인멸
+    private static final int CE_1 = 160, CD_1 = 18, ANIM_1 = 38; // 심판의 일격
+    private static final int CE_2 = 80,  CD_2 = 45, ANIM_2 = 38; // 증거 강화
     private static final int CE_3 = 600, CD_3 = 90, ANIM_3 = 55;
     private static final int ANIM_4 = 39;
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
         return switch (keyId) {
             case 0 -> useSubmitEvidence(player);
-            case 1 -> useProsecutorArgument(player);
-            case 2 -> useEvidenceDestruction(player);
+            case 1 -> onShiftF(data, player, tick);
+            case 2 -> onR(data, player, tick);
             case 3 -> useJury(player);
             case 4 -> useExecutionerSword(player);
             default -> SkillResult.FAIL;
@@ -71,8 +80,8 @@ public class HigurumaSkillSet implements ISkillSet {
     public String getSkillName(int keyId) {
         return switch (keyId) {
             case 0 -> "submit_evidence";
-            case 1 -> "prosecutor_argument";
-            case 2 -> "evidence_destruction";
+            case 1 -> "culpable_hit";
+            case 2 -> "evidence_amplify";
             case 3 -> "jury";
             case 4 -> "executioner_sword";
             default -> "not_implemented";
@@ -98,6 +107,7 @@ public class HigurumaSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
+    /** Shift+F — 심판의 일격: 증거 1개 소모, 명중 시 55데미지 + 피격자 마지막 사용 스킬 봉인 */
     @Override
     public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
@@ -105,34 +115,63 @@ public class HigurumaSkillSet implements ISkillSet {
         if (data.ceCurrent < CE_1) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 10.0, 60f);
+        LivingEntity found = findAimedTarget(player, 8.0);
+        if (!(found instanceof ServerPlayerEntity targetPlayer)) return SkillResult.FAIL_NO_TARGET;
+
+        PlayerData targetData = JJKMod.getPlayerRepository().load(targetPlayer.getUuid());
+        if (TrialManager.getEvidenceCount(targetData, tick) < 1) {
+            player.sendMessage(Text.literal("§c[히구루마] 증거가 부족합니다."), false);
+            return SkillResult.FAIL_CONDITION;
+        }
+
         data.ceCurrent -= CE_1;
-        for (LivingEntity target : targets) {
-            if (target instanceof ServerPlayerEntity tp) {
-                com.jjk.data.PlayerData td = JJKMod.getPlayerRepository().load(tp.getUuid());
-                td.cooldowns.replaceAll((k, v) -> v + 60L);
-                JJKMod.getPlayerRepository().save(td);
+        TrialManager.consumeEvidence(targetData, tick);
+
+        DamageContext ctx = DamageContext.builder(player, targetPlayer, IDamageSource.NORMAL_TECHNIQUE, BD_1)
+                .skillName("culpable_hit").keyId(1).build();
+        JJKMod.getCombatPipeline().process(ctx);
+
+        String sealedSkillId = targetData.lastUsedSkillId;
+        if (sealedSkillId != null && !sealedSkillId.isEmpty()) {
+            targetData.sealedSkills.add(sealedSkillId);
+            targetData.sealExpireTick = tick + JJKMod.getConfig().sealDurationTicks;
+
+            var pkt = new SealedSkillSyncS2CPacket(targetPlayer.getUuid(), sealedSkillId, targetData.sealExpireTick);
+            for (ServerPlayerEntity p : player.getServer().getPlayerManager().getPlayerList()) {
+                ServerPlayNetworking.send(p, pkt);
             }
         }
+        JJKMod.getPlayerRepository().saveImmediate(targetData);
+
         data.cooldowns.put("1", tick + CD_1);
+        JJKMod.getPlayerRepository().save(data);
+
+        sendEffect(player, "higuruma_culpable_hit");
         broadcastAnim(player, ANIM_1);
         return SkillResult.SUCCESS;
     }
 
+    /** R — 증거 강화: 조준 대상에 증거 1개 추가 부여 + 다음 jury 판결 성공률 +30%(1회) */
     @Override
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
         if (data.ceCurrent < CE_2) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.evidenceAmplifyActive) return SkillResult.FAIL_CONDITION;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        LivingEntity found = findAimedTarget(player, 8.0);
+        if (!(found instanceof ServerPlayerEntity targetPlayer)) return SkillResult.FAIL_NO_TARGET;
 
         data.ceCurrent -= CE_2;
-        data.cooldowns.put("trial_bonus_until", tick + 60L);
+        data.evidenceAmplifyActive = true;
+        JJKMod.getTrialManager().addEvidence(player, targetPlayer);
         data.cooldowns.put("2", tick + CD_2);
-
-        if (player != null) {
-            broadcastAnim(player, ANIM_2);
-        }
         JJKMod.getPlayerRepository().save(data);
+
+        player.sendMessage(Text.literal("§e[히구루마] 증거를 강화했습니다. 다음 재판 성공률이 상승합니다."), false);
+        sendEffect(player, "higuruma_evidence_amplify");
+        broadcastAnim(player, ANIM_2);
         return SkillResult.SUCCESS;
     }
 
@@ -167,44 +206,6 @@ public class HigurumaSkillSet implements ISkillSet {
         data.hasExecutionSword = false;
         JJKMod.getPlayerRepository().saveImmediate(data);
         broadcastAnim(player, ANIM_4);
-        return SkillResult.SUCCESS;
-    }
-
-    // Shift+F — 검사 논고: 전방 대상 쿨타임 +60틱
-    private SkillResult useProsecutorArgument(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_1", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
-
-        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 10.0, 60f);
-        for (LivingEntity target : targets) {
-            if (target instanceof ServerPlayerEntity tp) {
-                com.jjk.data.PlayerData td = JJKMod.getPlayerRepository().load(tp.getUuid());
-                td.cooldowns.replaceAll((k, v) -> v + 60L);
-                JJKMod.getPlayerRepository().save(td);
-            }
-        }
-
-        JJKMod.getCEManager().consume(player, CE_1);
-        data.cooldowns.put("skill_1", tick + CD_1);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_1);
-        return SkillResult.SUCCESS;
-    }
-
-    // R — 증거 인멸: 다음 재판 성공률 +20%
-    private SkillResult useEvidenceDestruction(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        if (data.cooldowns.getOrDefault("skill_2", 0L) > tick) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
-
-        JJKMod.getCEManager().consume(player, CE_2);
-        data.cooldowns.put("trial_bonus_until", tick + 60L);
-        data.cooldowns.put("skill_2", tick + CD_2);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_2);
         return SkillResult.SUCCESS;
     }
 
@@ -274,6 +275,14 @@ public class HigurumaSkillSet implements ISkillSet {
 
     private static void broadcastAnim(ServerPlayerEntity player, int animId) {
         var pkt = new AnimationTriggerS2CPacket(player.getUuid(), (byte) animId);
+        player.getServerWorld().getPlayers().stream()
+                .filter(p -> p.squaredDistanceTo(player) <= 32 * 32)
+                .forEach(p -> ServerPlayNetworking.send(p, pkt));
+    }
+
+    private static void sendEffect(ServerPlayerEntity player, String effectType) {
+        var pos = player.getPos();
+        SkillEffectS2CPacket pkt = SkillEffectS2CPacket.of(effectType, player.getUuid(), pos.x, pos.y, pos.z);
         player.getServerWorld().getPlayers().stream()
                 .filter(p -> p.squaredDistanceTo(player) <= 32 * 32)
                 .forEach(p -> ServerPlayNetworking.send(p, pkt));

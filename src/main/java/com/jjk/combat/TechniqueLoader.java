@@ -21,11 +21,14 @@ public class TechniqueLoader {
 
     // key: "character:keyId"
     private static final Map<String, TechniqueDefinition> CACHE = new HashMap<>();
+    // key: "character:skillName" — extendedSkills (keyId 없는 확장 스킬)
+    private static final Map<String, TechniqueDefinition> EXTENDED_CACHE = new HashMap<>();
 
     private static boolean loaded = false;
 
     public static void load(Path path) {
         CACHE.clear();
+        EXTENDED_CACHE.clear();
         if (!Files.exists(path)) {
             LOGGER.warn("[JJK] techniques.json not found at {}, using defaults", path);
             loaded = false;
@@ -37,6 +40,13 @@ public class TechniqueLoader {
             for (int i = 0; i < arr.size(); i++) {
                 TechniqueDefinition def = GSON.fromJson(arr.get(i), TechniqueDefinition.class);
                 CACHE.put(def.character + ":" + def.keyId, def);
+            }
+            if (root.has("extendedSkills")) {
+                JsonArray extArr = root.getAsJsonArray("extendedSkills");
+                for (int i = 0; i < extArr.size(); i++) {
+                    TechniqueDefinition def = GSON.fromJson(extArr.get(i), TechniqueDefinition.class);
+                    EXTENDED_CACHE.put(def.character + ":" + def.skillName, def);
+                }
             }
             // characterStats 섹션 파싱
             if (root.has("characterStats")) {
@@ -63,6 +73,10 @@ public class TechniqueLoader {
 
     public static TechniqueDefinition get(String characterId, int keyId) {
         return CACHE.get(characterId + ":" + keyId);
+    }
+
+    public static TechniqueDefinition getExtended(String characterId, String skillName) {
+        return EXTENDED_CACHE.get(characterId + ":" + skillName);
     }
 
     public static java.util.List<TechniqueDefinition> getAllForCharacter(String characterId) {

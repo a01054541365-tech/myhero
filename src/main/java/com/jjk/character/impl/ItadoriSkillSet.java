@@ -1,12 +1,17 @@
 package com.jjk.character.impl;
 
 import com.jjk.JJKMod;
+import com.jjk.api.combat.IDamageSource;
 import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
+import com.jjk.combat.BlackFlashPerfectTracker;
 import com.jjk.combat.CooldownManager;
+import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
+import com.jjk.grade.GradeManager;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
+import com.jjk.network.s2c.SkillEffectS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -22,12 +27,18 @@ public class ItadoriSkillSet implements ISkillSet {
     private static final Map<UUID, Long> blackFlashFocusTicks = new HashMap<>();
 
     // key 0: divergent_fist, 1: manji_kick, 2: black_flash_focus, 3: domain_startup, 4: rct
+    // key 5 (extended): shrine
     // §6-3 이타도리 기준
     private static final int CE_0 = 80,   CD_0 = 4;    // 5→4 (§6-3 이타도리 기준)
     private static final int CE_1 = 90,   CD_1 = 6;
     private static final int CE_2 = 120,  CD_2 = 20;   // 0→120, 120→20 (§6-3 이타도리 기준)
     private static final int CE_3 = 2200, CD_3 = 300;  // 2400→2200, 480→300 (§6-3 이타도리 기준)
     private static final int CE_4 = 0,    CD_4 = 5;
+    // shrine (확장 슬롯 keyId=5) — §H-3 밸런스 확정
+    private static final int CE_SHRINE = 450, CD_SHRINE = 160, SHRINE_ANIM = 63;
+    private static final int BF_COMBO_WINDOW = 20; // 흑섬 Perfect → shrine 콤보 윈도우(틱)
+    private static final float[] SHRINE_DECAY = {1.0f, 0.90f, 0.75f}; // 3타 decay
+    private static final float SHRINE_BF_MULT = 3.0f; // 흑섬 Perfect 콤보 배율 (첫 히트만)
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -37,6 +48,7 @@ public class ItadoriSkillSet implements ISkillSet {
             case 2 -> useBlackFlashFocus(player);
             case 3 -> useDomainStartup(player);
             case 4 -> useRCT(player);
+            case 5 -> useShrine(player);
             default -> SkillResult.FAIL;
         };
     }
@@ -53,7 +65,7 @@ public class ItadoriSkillSet implements ISkillSet {
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
             case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; default -> 0;
+            case 3 -> CD_3; case 4 -> CD_4; case 5 -> CD_SHRINE; default -> 0;
         };
     }
 
@@ -61,7 +73,7 @@ public class ItadoriSkillSet implements ISkillSet {
     public int getCeCost(int keyId) {
         return switch (keyId) {
             case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> CE_4; default -> 0;
+            case 3 -> CE_3; case 4 -> CE_4; case 5 -> CE_SHRINE; default -> 0;
         };
     }
 
@@ -69,7 +81,7 @@ public class ItadoriSkillSet implements ISkillSet {
     public String getSkillName(int keyId) {
         return switch (keyId) {
             case 0 -> "divergent_fist"; case 1 -> "manji_kick"; case 2 -> "black_flash_focus";
-            case 3 -> "domain_startup"; case 4 -> "rct"; default -> "unknown";
+            case 3 -> "domain_startup"; case 4 -> "rct"; case 5 -> "shrine"; default -> "unknown";
         };
     }
 
@@ -150,6 +162,53 @@ public class ItadoriSkillSet implements ISkillSet {
         CooldownManager.set(data, cdKey(4), tick, CD_4);
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, 15);
+        return SkillResult.SUCCESS;
+    }
+
+    private SkillResult useShrine(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+
+        // 발동 조건: 준특급 이상 OR 각성 활성
+        boolean gradeOk = GradeManager.Grade.fromLabel(data.grade).rank
+                >= GradeManager.Grade.SEMI_SPECIAL.rank;
+        if (!gradeOk && !data.awakeningActive) return SkillResult.FAIL;
+
+        if (!CooldownManager.isReady(data, cdKey(5), tick)) return SkillResult.ON_COOLDOWN;
+        if (!JJKMod.getCEManager().canAfford(player, CE_SHRINE)) return SkillResult.CE_INSUFFICIENT;
+
+        // 흑섬 Perfect 콤보 윈도우 확인 (20틱 이내 흑섬 Perfect 성공 시 ×3.0, 첫 히트만)
+        float bfMult = BlackFlashPerfectTracker.isWithinWindow(player.getUuid(), tick, BF_COMBO_WINDOW)
+                ? SHRINE_BF_MULT : 1.0f;
+
+        // 3타 다단히트 — isSoulDirect=true (방어 관통), 각 히트 decay 사전 적용
+        List<LivingEntity> targets = HitValidator.getNearby(player, 4.0);
+        for (LivingEntity target : targets) {
+            for (int i = 0; i < SHRINE_DECAY.length; i++) {
+                float adjustedBase = 42f * SHRINE_DECAY[i] * (i == 0 ? bfMult : 1.0f);
+                DamageContext ctx = DamageContext.builder(player, target,
+                                IDamageSource.SOUL_DIRECT, adjustedBase)
+                        .soulDirect()
+                        .skillName("shrine")
+                        .hitIndex(0)        // decay 사전 적용 → 기본 다단 감쇠 우회
+                        .alreadyConsumedCE(true)
+                        .build();
+                JJKMod.getCombatPipeline().process(ctx);
+            }
+        }
+
+        JJKMod.getCEManager().consume(player, CE_SHRINE);
+        CooldownManager.set(data, cdKey(5), tick, CD_SHRINE);
+        JJKMod.getPlayerRepository().save(data);
+
+        Vec3d pos = player.getPos();
+        SkillEffectS2CPacket pkt = SkillEffectS2CPacket.of(
+                "itadori_shrine", player.getUuid(), pos.x, pos.y, pos.z);
+        player.getServerWorld().getPlayers().stream()
+                .filter(p -> p.squaredDistanceTo(player) <= 32 * 32)
+                .forEach(p -> ServerPlayNetworking.send(p, pkt));
+
+        broadcastAnim(player, SHRINE_ANIM);
         return SkillResult.SUCCESS;
     }
 

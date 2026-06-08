@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:nether_star"},
+    "title": {"text": "특급 술사"},
+    "description": {"text": "특급 등급에 도달하다"},
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

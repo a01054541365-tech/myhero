@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:nether_star"},
+    "title": {"text": "완벽한 흑섬 × 10"},
+    "description": {"text": "완벽한 흑섬을 10회 연속 명중시키다"},
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:combat/first_black_flash",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

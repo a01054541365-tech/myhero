@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:wither_skeleton_skull"},
+    "title": {"text": "특급 주령 처치"},
+    "description": {"text": "특급 또는 준특급 주령을 처치하다"},
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

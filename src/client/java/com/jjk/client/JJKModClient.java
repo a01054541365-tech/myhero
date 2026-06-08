@@ -28,12 +28,25 @@ import com.jjk.client.fx.ParticleThrottle;
 import com.jjk.client.fx.SkillEffectRenderer;
 import com.jjk.client.hud.BlackFlashOverlay;
 import com.jjk.client.renderer.AwakeningAuraRenderer;
+import com.jjk.client.effect.WorldAmbientEffects;
+import com.jjk.client.effect.impl.*;
+import com.jjk.client.hud.CEAuraRenderer;
+import com.jjk.client.hud.EntityHealthBarRenderer;
+import com.jjk.network.s2c.BlackFlashTimingS2CPacket;
+import com.jjk.network.s2c.CEAuraSyncS2CPacket;
 import com.jjk.network.s2c.CostumeSyncS2CPacket;
+import com.jjk.network.s2c.EntityHealthSyncS2CPacket;
+import com.jjk.network.s2c.HudSyncS2CPacket;
+import com.jjk.network.s2c.OpenCharacterSelectS2CPacket;
 import com.jjk.network.s2c.SkillEffectS2CPacket;
 import com.jjk.network.s2c.NpcOpenGuiS2CPacket;
+import com.jjk.network.s2c.SealedSkillSyncS2CPacket;
+import com.jjk.network.s2c.VerdictS2CPacket;
 import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.ShikigamiEntityTypes;
 import com.jjk.entity.npc.NpcRegistry;
+import com.jjk.entity.npc.SimpleNpcEntity;
+import net.minecraft.entity.EntityType;
 import com.jjk.network.c2s.SkillUseC2SPacket;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import com.jjk.network.s2c.AwakeningS2CPacket;
@@ -100,7 +113,7 @@ public class JJKModClient implements ClientModInitializer {
         EntityRendererRegistry.register(ShikigamiEntityTypes.RIKA, RikaEntityRenderer::new);
         EntityRendererRegistry.register(ShikigamiEntityTypes.MAHORAGA, NueEntityRenderer::new);
 
-        // ── NPC 렌더러 등록 (7종) ──────────────────────────────────
+        // ── NPC 렌더러 등록 (8종) ──────────────────────────────────
         EntityRendererRegistry.register(NpcRegistry.ZENIN_STORAGE, NpcEntityRenderer::new);
         EntityRendererRegistry.register(NpcRegistry.KUSAKABE,       NpcEntityRenderer::new);
         EntityRendererRegistry.register(NpcRegistry.SHOKO,          NpcEntityRenderer::new);
@@ -108,6 +121,10 @@ public class JJKModClient implements ClientModInitializer {
         EntityRendererRegistry.register(NpcRegistry.IJICHI,         NpcEntityRenderer::new);
         EntityRendererRegistry.register(NpcRegistry.YAGA,           NpcEntityRenderer::new);
         EntityRendererRegistry.register(NpcRegistry.NAHOBINO,       NpcEntityRenderer::new);
+        //noinspection unchecked
+        EntityRendererRegistry.register(
+            (EntityType<SimpleNpcEntity>)(EntityType<?>) NpcRegistry.TUTORIAL,
+            NpcEntityRenderer::new);
 
         // ── 주령 렌더러 등록 (5종) ──────────────────────────────────
         EntityRendererRegistry.register(CursedSpiritEntityTypes.GRADE_4, CursedSpiritEntityRenderer::new);
@@ -119,9 +136,24 @@ public class JJKModClient implements ClientModInitializer {
         // ── CE 투사체 렌더러 등록 ──────────────────────────────────
         EntityRendererRegistry.register(CursedSpiritEntityTypes.CE_PROJECTILE, CeProjectileEntityRenderer::new);
 
-        // 스킬 이펙트 렌더러 + 각성 오라 렌더러 등록
+        // 캐릭터별 이펙트 핸들러 등록 (SkillEffectRegistry)
+        CommonEffects.register();
+        GojoEffects.register();
+        ItadoriEffects.register();
+        NanamiEffects.register();
+        JogoEffects.register();
+        MahitoEffects.register();
+        HakariEffects.register();
+        InumakiEffects.register();
+        HigurumaEffects.register();
+        OkkotsuEffects.register();
+
+        // 스킬 이펙트 렌더러 + 각성 오라 렌더러 + CE 오라 렌더러 + 엔티티 HP바 + 환경 이펙트 등록
         SkillEffectRenderer.register();
         AwakeningAuraRenderer.register();
+        CEAuraRenderer.register();
+        EntityHealthBarRenderer.register();
+        WorldAmbientEffects.register();
         HudRenderCallback.EVENT.register(BlackFlashOverlay.INSTANCE::render);
 
         // 의상 렌더 레이어 — PlayerEntityRenderer에 FeatureRenderer 추가
@@ -360,5 +392,47 @@ public class JJKModClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(CostumeSyncS2CPacket.ID, (pkt, ctx) ->
             ctx.client().execute(() ->
                 CostumeClientCache.update(pkt.targetUuid(), pkt.costumeId())));
+
+        // HudSyncS2CPacket — CE/HP/등급/전투 상태 일괄 갱신
+        ClientPlayNetworking.registerGlobalReceiver(HudSyncS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() ->
+                JjkClientState.updateHudSync(
+                    pkt.cePercent(), pkt.hpPercent(), pkt.grade(),
+                    pkt.inCombat(), pkt.skillCooldownsRemaining())));
+
+        // BlackFlashTimingS2CPacket — 흑섬 Just Frame 타이밍 게이지
+        ClientPlayNetworking.registerGlobalReceiver(BlackFlashTimingS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() ->
+                JjkHudRenderer.INSTANCE.onBlackFlashTiming(
+                    pkt.show(), pkt.windowStartTick(), pkt.windowEndTick())));
+
+        // EntityHealthSyncS2CPacket — 주령 체력 바 캐시 갱신
+        ClientPlayNetworking.registerGlobalReceiver(EntityHealthSyncS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() ->
+                EntityHealthBarRenderer.onPacket(pkt)));
+
+        // OpenCharacterSelectS2CPacket — 현재 캐릭터 하이라이트 포함 선택 화면 열기
+        ClientPlayNetworking.registerGlobalReceiver(OpenCharacterSelectS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() ->
+                ctx.client().setScreen(new CharacterSelectScreen(
+                    pkt.availableCharacterIds(), pkt.currentCharacterId()))));
+
+        // CEAuraSyncS2CPacket — CE 오라 렌더러 캐시 갱신 (G-1)
+        ClientPlayNetworking.registerGlobalReceiver(CEAuraSyncS2CPacket.ID, (pkt, ctx) ->
+            ctx.client().execute(() -> CEAuraRenderer.onPacket(pkt)));
+
+        // SealedSkillSyncS2CPacket — 단일-스킬 봉인 상태 동기화 (Phase I-2)
+        ClientPlayNetworking.registerGlobalReceiver(SealedSkillSyncS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    MinecraftClient mc = ctx.client();
+                    if (mc.player == null) return;
+                    if (!pkt.targetUuid().equals(mc.player.getUuid())) return;
+                    JjkClientState.onSealedSkillSync(pkt.sealedSkillId(), pkt.expireAtTick());
+                }));
+
+        // VerdictS2CPacket — 재판 판결 통지 (Phase I-2)
+        ClientPlayNetworking.registerGlobalReceiver(VerdictS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() ->
+                        JjkHudRenderer.INSTANCE.showVerdict(pkt.guilty(), pkt.sealedSkillId())));
     }
 }

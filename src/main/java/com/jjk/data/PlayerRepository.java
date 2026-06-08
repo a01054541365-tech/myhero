@@ -11,13 +11,16 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class PlayerRepository {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("jjk-repo");
     private static final Gson GSON = new Gson();
-    private static final Type LIST_TYPE = new TypeToken<List<String>>(){}.getType();
-    private static final Type COOLDOWNS_TYPE = new TypeToken<Map<String, Long>>(){}.getType();
+    private static final Type LIST_TYPE           = new TypeToken<List<String>>(){}.getType();
+    private static final Type COOLDOWNS_TYPE      = new TypeToken<Map<String, Long>>(){}.getType();
+    private static final Type QUEST_PROGRESS_TYPE = new TypeToken<Map<String, Integer>>(){}.getType();
+    private static final Type STRING_SET_TYPE     = new TypeToken<Set<String>>(){}.getType();
 
     private Connection conn;
     private final Map<UUID, PlayerData> cache = new HashMap<>();
@@ -38,9 +41,42 @@ public class PlayerRepository {
                 st.execute("PRAGMA journal_mode=WAL");
                 st.execute("PRAGMA foreign_keys=ON");
             }
-            new Migrator().migrate(conn);
+            try {
+                new Migrator().migrate(conn);
+            } catch (SQLException ex) {
+                LOGGER.warn("[JJK] DB 마이그레이션 실패: {}", ex.getMessage());
+                com.jjk.discord.DiscordWebhook.sendAsync("[JJK] player_data.db 마이그레이션 실패: " + ex.getMessage());
+                throw ex;
+            }
+            createDomainBlockHistoryTable();
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize player_data.db", e);
+        }
+    }
+
+    // H-1-1: 영역 블록 이력 테이블 생성 (기존 player_data 테이블과 동일 DB)
+    private void createDomainBlockHistoryTable() {
+        try (Statement st = conn.createStatement()) {
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS domain_block_history (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain_id      TEXT    NOT NULL,
+                    world_key      TEXT    NOT NULL,
+                    pos_x          INTEGER NOT NULL,
+                    pos_y          INTEGER NOT NULL,
+                    pos_z          INTEGER NOT NULL,
+                    original_state TEXT    NOT NULL,
+                    changed_state  TEXT    NOT NULL,
+                    recovered      INTEGER NOT NULL DEFAULT 0,
+                    created_at     INTEGER NOT NULL
+                )
+                """);
+            st.execute("""
+                CREATE INDEX IF NOT EXISTS idx_domain_block_domain_id
+                ON domain_block_history(domain_id, recovered)
+                """);
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to create domain_block_history table", e);
         }
     }
 
@@ -87,10 +123,12 @@ public class PlayerRepository {
     }
 
     // snapshot() 후 비동기 저장. 실패 시 조용히 로그만.
+    // H-2-1 snapshot 확인 완료 — 메인 스레드에서 data.snapshot() 호출 후 복사본(snap)만 비동기 전달.
+    // 원본 data는 비동기 스레드에 노출되지 않으므로 torn-read 발생 불가.
     public CompletableFuture<Void> saveAsync(PlayerData data) {
         Objects.requireNonNull(data.uuid);
         cache.put(data.uuid, data);
-        PlayerData snap = data.snapshot();
+        PlayerData snap = data.snapshot(); // 메인 스레드에서 즉시 방어적 복사
         return CompletableFuture.runAsync(() -> {
             try {
                 upsertPlayerData(snap);
@@ -112,9 +150,44 @@ public class PlayerRepository {
         }
     }
 
+    /** /jj rollback player — 백업 DB 파일에서 특정 UUID의 PlayerData를 추출한다. 없으면 null. */
+    public PlayerData loadFromBackup(Path backupDbPath, UUID uuid) {
+        try (Connection backupConn = DriverManager.getConnection("jdbc:sqlite:" + backupDbPath.toAbsolutePath());
+             PreparedStatement ps = backupConn.prepareStatement(SELECT_PLAYER)) {
+            ps.setString(1, uuid.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                PlayerData d = mapRow(rs);
+                d.uuid = uuid;
+                return d;
+            }
+        } catch (SQLException e) {
+            LOGGER.error("loadFromBackup failed: path={} uuid={}", backupDbPath, uuid, e);
+            return null;
+        }
+    }
+
+    /** DB에 있는 전체 플레이어 데이터 로드 (SeasonManager, DiscordReporter 용). */
+    public List<PlayerData> getAllPlayerData() {
+        if (conn == null) return List.of();
+        List<PlayerData> result = new ArrayList<>();
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("SELECT * FROM player_data")) {
+            while (rs.next()) {
+                PlayerData d = mapRow(rs);
+                String uuidStr = rs.getString("uuid");
+                try { d.uuid = UUID.fromString(uuidStr); } catch (Exception ignored) {}
+                result.add(d);
+            }
+        } catch (SQLException e) {
+            LOGGER.error("getAllPlayerData failed", e);
+        }
+        return result;
+    }
+
     // ─── private ─────────────────────────────────────────────────────────────
 
-    private void flushAll() {
+    public void flushAll() {
         new ArrayList<>(cache.values()).forEach(data -> {
             PlayerData snap = data.snapshot();
             try { upsertPlayerData(snap); }
@@ -194,9 +267,50 @@ public class PlayerRepository {
         try { d.bounty            = rs.getLong("bounty"); }               catch (SQLException ignored) {}
         try { d.weeklyQuestDone   = rs.getLong("weekly_quest_done"); }    catch (SQLException ignored) {}
         try { d.costumeId         = rs.getString("costume_id"); if (d.costumeId == null) d.costumeId = "default"; } catch (SQLException ignored) {}
-        if (d.unlockedSkills == null)   d.unlockedSkills = new ArrayList<>();
-        if (d.cooldowns == null)        d.cooldowns = new HashMap<>();
-        if (d.deadShikigamiIds == null) d.deadShikigamiIds = new ArrayList<>();
+        try { d.ceControl         = rs.getFloat("ce_control"); if (d.ceControl <= 0f) d.ceControl = 1.0f; } catch (SQLException ignored) {}
+        try {
+            String qp = rs.getString("quest_progress");
+            d.questProgress = qp != null ? GSON.fromJson(qp, QUEST_PROGRESS_TYPE) : new HashMap<>();
+        } catch (SQLException ignored) {}
+        try {
+            String cdq = rs.getString("completed_daily_quests");
+            d.completedDailyQuests = cdq != null ? new HashSet<>(GSON.fromJson(cdq, LIST_TYPE)) : new HashSet<>();
+        } catch (SQLException ignored) {}
+        try {
+            String cwq = rs.getString("completed_weekly_quests");
+            d.completedWeeklyQuests = cwq != null ? new HashSet<>(GSON.fromJson(cwq, LIST_TYPE)) : new HashSet<>();
+        } catch (SQLException ignored) {}
+        try { d.lastQuestResetDay = rs.getLong("last_quest_reset_day"); } catch (SQLException ignored) {}
+        try { d.seasonXp          = rs.getInt("season_xp"); }            catch (SQLException ignored) {}
+        try { d.capturedSpiritCount        = rs.getInt("captured_spirit_count"); }                catch (SQLException ignored) {}
+        try { d.pendingBindingVowSkillId   = rs.getString("pending_binding_vow_skill_id"); }      catch (SQLException ignored) {}
+        try { d.pendingBindingVowStartTick = rs.getLong("pending_binding_vow_start_tick"); }      catch (SQLException ignored) {}
+        try { d.vowSkillUsedThisVow        = rs.getInt("vow_skill_used_this_vow") != 0; }         catch (SQLException ignored) {}
+        try { d.hasCompletedTutorial       = rs.getInt("has_completed_tutorial") != 0; }          catch (SQLException ignored) {}
+        try { d.nsBurstExpireTick          = rs.getLong("ns_burst_expire_tick"); }                catch (SQLException ignored) {}
+        try { d.attackBoostMultiplier      = rs.getFloat("attack_boost_multiplier"); }            catch (SQLException ignored) {}
+        try { d.defenseBoostMultiplier     = rs.getFloat("defense_boost_multiplier"); }           catch (SQLException ignored) {}
+        try { d.nsShieldExpireTick         = rs.getLong("ns_shield_expire_tick"); }               catch (SQLException ignored) {}
+        try { d.nsDeathPreventUsed         = rs.getInt("ns_death_prevent_used") != 0; }           catch (SQLException ignored) {}
+        try {
+            String ss = rs.getString("sealed_skills");
+            d.sealedSkills = ss != null ? new HashSet<>(GSON.fromJson(ss, LIST_TYPE)) : new HashSet<>();
+        } catch (SQLException ignored) {}
+        try { d.sealExpireTick       = rs.getLong("seal_expire_tick"); }                          catch (SQLException ignored) {}
+        try { d.lastUsedSkillId      = rs.getString("last_used_skill_id"); if (d.lastUsedSkillId == null) d.lastUsedSkillId = ""; } catch (SQLException ignored) {}
+        try { d.evidenceAmplifyActive = rs.getInt("evidence_amplify_active") != 0; }              catch (SQLException ignored) {}
+        try {
+            String aaf = rs.getString("anti_abuse_flags");
+            d.antiAbuseFlags = aaf != null ? new ArrayList<>(GSON.fromJson(aaf, LIST_TYPE)) : new ArrayList<>();
+        } catch (SQLException ignored) {}
+        try { d.quarantined = rs.getInt("quarantined") != 0; } catch (SQLException ignored) {}
+        if (d.unlockedSkills == null)        d.unlockedSkills = new ArrayList<>();
+        if (d.cooldowns == null)             d.cooldowns = new HashMap<>();
+        if (d.deadShikigamiIds == null)      d.deadShikigamiIds = new ArrayList<>();
+        if (d.questProgress == null)         d.questProgress = new HashMap<>();
+        if (d.completedDailyQuests == null)  d.completedDailyQuests = new HashSet<>();
+        if (d.completedWeeklyQuests == null) d.completedWeeklyQuests = new HashSet<>();
+        if (d.sealedSkills == null)          d.sealedSkills = new HashSet<>();
         return d;
     }
 
@@ -259,6 +373,28 @@ public class PlayerRepository {
             ps.setLong(55,   d.bounty);
             ps.setLong(56,   d.weeklyQuestDone);
             ps.setString(57, d.costumeId != null ? d.costumeId : "default");
+            ps.setFloat(58,  d.ceControl > 0f ? d.ceControl : 1.0f);
+            ps.setString(59, GSON.toJson(d.questProgress != null ? d.questProgress : new HashMap<>()));
+            ps.setString(60, GSON.toJson(d.completedDailyQuests != null ? d.completedDailyQuests : Set.of()));
+            ps.setString(61, GSON.toJson(d.completedWeeklyQuests != null ? d.completedWeeklyQuests : Set.of()));
+            ps.setLong(62,   d.lastQuestResetDay);
+            ps.setInt(63,    d.seasonXp);
+            ps.setInt(64,    d.capturedSpiritCount);
+            ps.setString(65, d.pendingBindingVowSkillId);
+            ps.setLong(66,   d.pendingBindingVowStartTick);
+            ps.setInt(67,    d.vowSkillUsedThisVow ? 1 : 0);
+            ps.setInt(68,    d.hasCompletedTutorial ? 1 : 0);
+            ps.setLong(69,   d.nsBurstExpireTick);
+            ps.setFloat(70,  d.attackBoostMultiplier);
+            ps.setFloat(71,  d.defenseBoostMultiplier);
+            ps.setLong(72,   d.nsShieldExpireTick);
+            ps.setInt(73,    d.nsDeathPreventUsed ? 1 : 0);
+            ps.setString(74, GSON.toJson(d.sealedSkills != null ? d.sealedSkills : Set.of()));
+            ps.setLong(75,   d.sealExpireTick);
+            ps.setString(76, d.lastUsedSkillId != null ? d.lastUsedSkillId : "");
+            ps.setInt(77,    d.evidenceAmplifyActive ? 1 : 0);
+            ps.setString(78, GSON.toJson(d.antiAbuseFlags != null ? d.antiAbuseFlags : List.of()));
+            ps.setInt(79,    d.quarantined ? 1 : 0);
             ps.executeUpdate();
         }
     }
@@ -365,7 +501,29 @@ public class PlayerRepository {
                 last_received_is_domain,
                 cursed_stones, mastery_reset_count, bounty,
                 weekly_quest_done,
-                costume_id
+                costume_id,
+                ce_control,
+                quest_progress,
+                completed_daily_quests,
+                completed_weekly_quests,
+                last_quest_reset_day,
+                season_xp,
+                captured_spirit_count,
+                pending_binding_vow_skill_id,
+                pending_binding_vow_start_tick,
+                vow_skill_used_this_vow,
+                has_completed_tutorial,
+                ns_burst_expire_tick,
+                attack_boost_multiplier,
+                defense_boost_multiplier,
+                ns_shield_expire_tick,
+                ns_death_prevent_used,
+                sealed_skills,
+                seal_expire_tick,
+                last_used_skill_id,
+                evidence_amplify_active,
+                anti_abuse_flags,
+                quarantined
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
                 ?,?, ?,?,?,?,
@@ -376,7 +534,13 @@ public class PlayerRepository {
                 ?,?,?, ?,?,
                 ?,?,?,?,?,
                 ?,?,?,?,
-                ?
+                ?,
+                ?,
+                ?,?,?,?,?,
+                ?,?,?,?,?,
+                ?,?,?,?,?,
+                ?,?,?,?,
+                ?,?
             )
             ON CONFLICT(uuid) DO UPDATE SET
                 character_id              = excluded.character_id,
@@ -434,6 +598,28 @@ public class PlayerRepository {
                 mastery_reset_count            = excluded.mastery_reset_count,
                 bounty                         = excluded.bounty,
                 weekly_quest_done              = excluded.weekly_quest_done,
-                costume_id                     = excluded.costume_id
+                costume_id                     = excluded.costume_id,
+                ce_control                     = excluded.ce_control,
+                quest_progress                 = excluded.quest_progress,
+                completed_daily_quests         = excluded.completed_daily_quests,
+                completed_weekly_quests        = excluded.completed_weekly_quests,
+                last_quest_reset_day           = excluded.last_quest_reset_day,
+                season_xp                      = excluded.season_xp,
+                captured_spirit_count          = excluded.captured_spirit_count,
+                pending_binding_vow_skill_id   = excluded.pending_binding_vow_skill_id,
+                pending_binding_vow_start_tick = excluded.pending_binding_vow_start_tick,
+                vow_skill_used_this_vow        = excluded.vow_skill_used_this_vow,
+                has_completed_tutorial         = excluded.has_completed_tutorial,
+                ns_burst_expire_tick           = excluded.ns_burst_expire_tick,
+                attack_boost_multiplier        = excluded.attack_boost_multiplier,
+                defense_boost_multiplier       = excluded.defense_boost_multiplier,
+                ns_shield_expire_tick          = excluded.ns_shield_expire_tick,
+                ns_death_prevent_used          = excluded.ns_death_prevent_used,
+                sealed_skills                  = excluded.sealed_skills,
+                seal_expire_tick               = excluded.seal_expire_tick,
+                last_used_skill_id             = excluded.last_used_skill_id,
+                evidence_amplify_active        = excluded.evidence_amplify_active,
+                anti_abuse_flags               = excluded.anti_abuse_flags,
+                quarantined                    = excluded.quarantined
             """;
 }

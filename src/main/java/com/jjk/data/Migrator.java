@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class Migrator {
 
-    public static final int CURRENT_VERSION = 14;
+    public static final int CURRENT_VERSION = 22;
 
     private static final String DDL_PLAYER_DATA = """
             CREATE TABLE IF NOT EXISTS player_data (
@@ -80,7 +80,16 @@ public class Migrator {
                 mastery_reset_count         INTEGER NOT NULL DEFAULT 0,
                 bounty                      INTEGER NOT NULL DEFAULT 0,
                 weekly_quest_done           INTEGER NOT NULL DEFAULT -1,
-                costume_id                  TEXT    NOT NULL DEFAULT 'default'
+                costume_id                  TEXT    NOT NULL DEFAULT 'default',
+                blood_resource              INTEGER NOT NULL DEFAULT 0,
+                character_reset_count       INTEGER NOT NULL DEFAULT 0,
+                last_character_reset_timestamp INTEGER NOT NULL DEFAULT 0,
+                has_received_selection_book INTEGER NOT NULL DEFAULT 0,
+                captured_spirit_count       INTEGER NOT NULL DEFAULT 0,
+                pending_binding_vow_skill_id TEXT,
+                pending_binding_vow_start_tick INTEGER NOT NULL DEFAULT 0,
+                vow_skill_used_this_vow     INTEGER NOT NULL DEFAULT 0,
+                has_completed_tutorial      INTEGER NOT NULL DEFAULT 0
             )""";
 
     private static final String DDL_AUDIT_LOG = """
@@ -222,6 +231,72 @@ public class Migrator {
                 // 의상 시스템 (TASK-F)
                 try (Statement st = conn.createStatement()) {
                     try { st.execute("ALTER TABLE player_data ADD COLUMN costume_id TEXT NOT NULL DEFAULT 'default'"); } catch (SQLException ignored) {}
+                }
+            }
+            case 15 -> {
+                // 쵸소 혈액 자원 (P1)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN blood_resource INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 16 -> {
+                // CE 조작 성장 수치 (P3-2)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN ce_control REAL NOT NULL DEFAULT 1.0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 17 -> {
+                // 퀘스트 진행 + 시즌 XP (P4-3, P4-7)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN quest_progress          TEXT    NOT NULL DEFAULT '{}'"); }  catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN completed_daily_quests  TEXT    NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN completed_weekly_quests TEXT    NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN last_quest_reset_day    INTEGER NOT NULL DEFAULT 0"); }    catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN season_xp              INTEGER NOT NULL DEFAULT 0"); }     catch (SQLException ignored) {}
+                }
+            }
+            case 18 -> {
+                // 캐릭터 재선택 이력 + 선택 책 지급 이력 (TASK A-1)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN character_reset_count          INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN last_character_reset_timestamp INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN has_received_selection_book    INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 19 -> {
+                // 주령 포획 + 속박 서약 패널티 + 튜토리얼 완료 (PHASE G: G-2, G-4, G-5-2)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN captured_spirit_count         INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN pending_binding_vow_skill_id  TEXT"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN pending_binding_vow_start_tick INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN vow_skill_used_this_vow       INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN has_completed_tutorial        INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 20 -> {
+                // 비술사(천여주박) 신체능력 강화 + 불굴 (PHASE H: H-6)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN ns_burst_expire_tick      INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN attack_boost_multiplier   REAL    NOT NULL DEFAULT 1.0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN defense_boost_multiplier  REAL    NOT NULL DEFAULT 1.0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN ns_shield_expire_tick     INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN ns_death_prevent_used     INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 21 -> {
+                // 히구루마 단일-스킬 봉인 + 증거 강화 (Phase I-2)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN sealed_skills           TEXT    NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN seal_expire_tick        INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN last_used_skill_id      TEXT    NOT NULL DEFAULT ''"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN evidence_amplify_active INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 22 -> {
+                // 안티치트 — 이상행동 플래그 기록 + 격리 (TASK J-2)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN anti_abuse_flags TEXT    NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN quarantined      INTEGER NOT NULL DEFAULT 0"); }   catch (SQLException ignored) {}
                 }
             }
         }

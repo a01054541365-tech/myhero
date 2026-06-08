@@ -6,16 +6,18 @@ import net.minecraft.entity.SpawnGroup;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
+import net.minecraft.entity.attribute.DefaultAttributeContainer;
 
 public final class NpcRegistry {
 
-    public static EntityType<SimpleNpcEntity> ZENIN_STORAGE;
-    public static EntityType<SimpleNpcEntity> KUSAKABE;
-    public static EntityType<SimpleNpcEntity> SHOKO;
-    public static EntityType<SimpleNpcEntity> GOJO_SHIYU;
-    public static EntityType<SimpleNpcEntity> IJICHI;
-    public static EntityType<SimpleNpcEntity> YAGA;
-    public static EntityType<SimpleNpcEntity> NAHOBINO;
+    public static EntityType<SimpleNpcEntity>   ZENIN_STORAGE;
+    public static EntityType<SimpleNpcEntity>   KUSAKABE;
+    public static EntityType<SimpleNpcEntity>   SHOKO;
+    public static EntityType<SimpleNpcEntity>   GOJO_SHIYU;
+    public static EntityType<SimpleNpcEntity>   IJICHI;
+    public static EntityType<SimpleNpcEntity>   YAGA;
+    public static EntityType<SimpleNpcEntity>   NAHOBINO;
+    public static EntityType<TutorialNpcEntity> TUTORIAL;
 
     public static void register() {
         ZENIN_STORAGE = registerNpc("zenin_storage", "젠인 창고지기");
@@ -25,6 +27,21 @@ public final class NpcRegistry {
         IJICHI        = registerNpc("ijichi",        "이치지 키요타카");
         YAGA          = registerNpc("yaga",          "야가 마사모토");
         NAHOBINO      = registerNpc("nahobino",      "나호비노 아오이");
+        TUTORIAL      = registerTutorialNpc();
+    }
+
+    private static EntityType<TutorialNpcEntity> registerTutorialNpc() {
+        EntityType<TutorialNpcEntity> type = Registry.register(
+            Registries.ENTITY_TYPE,
+            Identifier.of("jjk", "tutorial_npc"),
+            EntityType.Builder.<TutorialNpcEntity>create(
+                    TutorialNpcEntity::new, SpawnGroup.MISC)
+                .dimensions(0.6f, 1.8f)
+                .maxTrackingRange(10)
+                .build()
+        );
+        FabricDefaultAttributeRegistry.register(type, NpcEntity.createAttributes().build());
+        return type;
     }
 
     private static EntityType<SimpleNpcEntity> registerNpc(String id, String displayName) {
@@ -40,6 +57,19 @@ public final class NpcRegistry {
         );
         FabricDefaultAttributeRegistry.register(type, NpcEntity.createAttributes().build());
         return type;
+    }
+
+    public static EntityType<SimpleNpcEntity> byId(String npcId) {
+        return switch (npcId) {
+            case "zenin_storage" -> ZENIN_STORAGE;
+            case "kusakabe"      -> KUSAKABE;
+            case "shoko"         -> SHOKO;
+            case "gojo_shiyu"    -> GOJO_SHIYU;
+            case "ijichi"        -> IJICHI;
+            case "yaga"          -> YAGA;
+            case "nahobino"      -> NAHOBINO;
+            default              -> null;
+        };
     }
 
     private NpcRegistry() {}

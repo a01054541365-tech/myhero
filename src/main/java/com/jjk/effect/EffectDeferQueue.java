@@ -28,6 +28,18 @@ public class EffectDeferQueue {
     private final PriorityQueue<DeferredEffect> queue =
             new PriorityQueue<>(Comparator.comparingLong(DeferredEffect::dueTick));
 
+    // TPSGuard가 TPS 저하 시 조정하는 파티클 송출 비율 (1.0 = 정상, 0.0 = 완전 중단)
+    private float particleRate = 1.0f;
+
+    /** TPSGuard 연동 — 파티클 송출 비율 조정 (0.0 ~ 1.0). */
+    public void setParticleRate(float rate) {
+        this.particleRate = rate;
+    }
+
+    public float getParticleRate() {
+        return particleRate;
+    }
+
     public void schedule(BlockPos pos, float damage,
             int delayTicks, UUID attackerUuid, long currentTick) {
         queue.add(new DeferredEffect(currentTick + delayTicks, pos, damage, attackerUuid));

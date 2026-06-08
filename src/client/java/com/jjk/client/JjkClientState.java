@@ -5,6 +5,7 @@ import net.fabricmc.api.Environment;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collections;
 
 /** 로컬 플레이어의 서버 사이드 상태 캐시. */
 @Environment(EnvType.CLIENT)
@@ -29,10 +30,19 @@ public final class JjkClientState {
     // ── 각성 상태 ─────────────────────────────────────────────────────────────
     private static boolean awakeningActive = false;
 
+    // ── HudSyncS2CPacket 기반 추가 상태 ───────────────────────────────────────
+    private static boolean inCombat = false;
+    private static int gradeInt = 5; // 0=特級, 1=準1級, 2=1級, 3=2級, 4=3級, 5=4級
+    private static final Map<String, Integer> hudCooldowns = new HashMap<>();
+
     // ── 영역(Zone) 상태 ───────────────────────────────────────────────────────
     private static String activeDomainId = null;
     private static long   domainEnteredTick = 0L;
     private static int    activeDomainCount = 0;
+
+    // ── 단일-스킬 봉인 (SealedSkillSyncS2CPacket, Phase I-2) ─────────────────
+    private static String sealedSkillId = null;
+    private static long   sealExpireAtTick = 0L;
 
     // ── Update methods ────────────────────────────────────────────────────────
 
@@ -91,6 +101,17 @@ public final class JjkClientState {
         activeDomainCount = Math.max(0, activeDomainCount - 1);
     }
 
+    /** sealedSkillId가 빈 문자열이면 봉인 해제로 간주. */
+    public static void onSealedSkillSync(String skillId, long expireAtTick) {
+        if (skillId == null || skillId.isEmpty()) {
+            sealedSkillId = null;
+            sealExpireAtTick = 0L;
+        } else {
+            sealedSkillId = skillId;
+            sealExpireAtTick = expireAtTick;
+        }
+    }
+
     // ── Getters ───────────────────────────────────────────────────────────────
 
     public static String getCharacterId() { return characterId; }
@@ -106,4 +127,26 @@ public final class JjkClientState {
 
     public static void setAwakening(boolean active) { awakeningActive = active; }
     public static boolean isAwakening()             { return awakeningActive; }
+
+    public static String getSealedSkillId()       { return sealedSkillId; }
+    public static long   getSealExpireAtTick()    { return sealExpireAtTick; }
+    public static boolean isSkillSealed(long currentTick) {
+        return sealedSkillId != null && currentTick < sealExpireAtTick;
+    }
+
+    // ── HudSync 갱신 (HudSyncS2CPacket) ──────────────────────────────────────
+
+    public static void updateHudSync(float cePercent, float hpPercent, int newGradeInt,
+                                      boolean newInCombat, Map<String, Integer> cooldowns) {
+        ceCurrent = cePercent * ceMax;
+        gradeInt = newGradeInt;
+        inCombat = newInCombat;
+        hudCooldowns.clear();
+        if (cooldowns != null) hudCooldowns.putAll(cooldowns);
+    }
+
+    public static boolean isInCombat()                         { return inCombat; }
+    public static int getGradeInt()                            { return gradeInt; }
+    public static int getHudCooldownRemaining(String key)      { return hudCooldowns.getOrDefault(key, 0); }
+    public static Map<String, Integer> getHudCooldowns()       { return Collections.unmodifiableMap(hudCooldowns); }
 }

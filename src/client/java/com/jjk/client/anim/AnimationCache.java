@@ -27,8 +27,10 @@ public final class AnimationCache {
     /** ClientLifecycleEvents.CLIENT_STARTED 에서 호출 */
     public static void loadAll(ResourceManager manager) {
         CACHE.clear();
+        int attempted = 0;
         for (int id = 0; id <= 60; id++) {
             if (!AnimationRegistry.has(id)) continue;
+            attempted++;
             String animName = AnimationRegistry.get(id);
             Identifier resId = Identifier.of("jjk", "animations/" + animName + ".animation.json");
             Optional<Resource> resource = manager.getResource(resId);
@@ -42,7 +44,7 @@ public final class AnimationCache {
                 LOGGER.warn("[JJK] Failed to load animation: {}", animName, e);
             }
         }
-        LOGGER.info("[JJK] AnimationCache loaded {}/{} animations", CACHE.size(), CACHE.size());
+        LOGGER.info("[JJK] AnimationCache loaded {}/{} animations", CACHE.size(), attempted);
     }
 
     /** 없으면 null 반환 (예외 throw 금지) */

@@ -13,6 +13,8 @@ import com.jjk.data.PlayerData;
 import com.jjk.defense.DefenseHandler;
 import com.jjk.domain.DomainInstance;
 import com.jjk.grade.GradeManager;
+import com.jjk.item.CursedCrystalItem;
+import net.minecraft.item.ItemStack;
 import com.jjk.item.CursedToolEffect;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.network.s2c.SkillResultS2CPacket;
@@ -20,6 +22,7 @@ import com.jjk.team.TeamManager;
 import com.jjk.zone.ComboTracker;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
+import com.jjk.advancement.AdvancementTriggerManager;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.network.packet.s2c.play.BossBarS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -34,6 +37,7 @@ public class CombatPipeline {
 
     private final DamageCalculator calculator = new DamageCalculator();
     private final TickDamageCap damageCap = new TickDamageCap();
+    private final com.jjk.performance.TickBudgetMonitor tickBudget = new com.jjk.performance.TickBudgetMonitor();
 
     /**
      * §E CombatPipeline 9단계 순수 PlayerData 버전. MC 없이 테스트 가능.
@@ -87,6 +91,9 @@ public class CombatPipeline {
         boolean isBlackFlash = justFrame
                 && ComboTracker.rollBlackFlash(attacker, attacker.hpCurrent, attacker.hpMax);
         // §LOCK base × 2.5: calculatePure에서 ctx.isBlackFlash 플래그로 적용 (이중 계산 방지)
+        if (isBlackFlash && attacker.uuid != null) {
+            BlackFlashPerfectTracker.record(attacker.uuid, currentTick);
+        }
 
         awakeMgr.checkAndActivate(attacker, attacker.hpCurrent, attacker.hpMax, currentTick);
 
@@ -95,9 +102,13 @@ public class CombatPipeline {
         // 7단계: 최종 배율 clamp (DamageCalculator 내 §LOCK ×0.25~×4.0)
         DamageContext ctx;
         if (isBlackFlash) {
+            // J-2-2: 흑섬 입력 매크로 누적 5회 시 Perfect 판정 완전 차단(일반 흑섬으로 강등)
+            BlackFlashHandler bfHandler = JJKMod.getBlackFlashHandler();
+            boolean perfect = !(bfHandler != null && attacker.uuid != null
+                    && bfHandler.isDowngraded(attacker.uuid));
             ctx = DamageContext.builder(null, null,
                     com.jjk.api.combat.IDamageSource.BLACK_FLASH, baseDamage)
-                    .blackFlash().build();
+                    .blackFlash(perfect).build();
         } else {
             ctx = DamageContext.builder(null, null,
                     com.jjk.api.combat.IDamageSource.NORMAL_TECHNIQUE, baseDamage)
@@ -123,6 +134,15 @@ public class CombatPipeline {
     }
 
     public void process(DamageContext ctx) {
+        tickBudget.startTick();
+        try {
+            processInternal(ctx);
+        } finally {
+            tickBudget.usedMs("CombatPipeline.process");
+        }
+    }
+
+    private void processInternal(DamageContext ctx) {
         // §E 1단계: 입력 검증 — 팀 검증 및 characterId 소유 확인
         if (ctx.attacker != null && ctx.target instanceof ServerPlayerEntity tgt) {
             PlayerData atkData = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
@@ -326,11 +346,29 @@ public class CombatPipeline {
             targetData.awakeningActive = false;
         }
 
+        // Stage 7c: 비술사 불굴 (피해 ×0.70 + 1회 사망 방지)
+        long shieldTick = ctx.target.getWorld().getTime();
+        if (shieldTick <= targetData.nsShieldExpireTick) {
+            damage *= 0.70f;
+            if (!targetData.nsDeathPreventUsed && damage >= ctx.target.getHealth()) {
+                damage = ctx.target.getHealth() - 1.0f;
+                targetData.nsDeathPreventUsed = true;
+                JJKMod.getPlayerRepository().save(targetData);
+            }
+        }
+
         // Stage 8: apply damage to target
         DamageSource source = ctx.attacker != null
                 ? ctx.target.getDamageSources().playerAttack(ctx.attacker)
                 : ctx.target.getDamageSources().magic();
         ctx.target.damage(source, damage);
+
+        // P2-1: 속박 파훼 체크 — 선언자가 대상에게 피해를 입힌 경우
+        if (ctx.attacker != null) {
+            JJKMod.getBindingVowSystem().checkParry(
+                    ctx.attacker.getUuid(), ctx.target.getUuid(),
+                    ctx.attacker.getWorld().getTime());
+        }
 
         // Stage 8b: 마허라가 피격 카운트 (ShikigamiEntity "mahoraga" 대상)
         if (ctx.target instanceof ShikigamiEntity shikigami
@@ -367,6 +405,18 @@ public class CombatPipeline {
             ServerPlayNetworking.send(attackerPlayer,
                     new SkillResultS2CPacket(ctx.keyId, resultStr, damage));
 
+            // P2-2: RTT 급등 후 흑섬 Perfect 감지 — §100ms 클램프
+            if (ctx.isBlackFlash) {
+                int currentRtt = attackerPlayer.networkHandler.getLatency();
+                @SuppressWarnings("unused")
+                long compensatedMs = Math.min(currentRtt / 2L, 100L);
+                AntiAbuseManager aam = JJKMod.getAntiAbuseManager();
+                if (aam != null && ctx.blackFlashPerfect
+                        && aam.checkRttSpike(attackerPlayer.getUuid(), currentRtt)) {
+                    aam.flag(attackerPlayer.getUuid(), "black_flash_rtt_spike", 1);
+                }
+            }
+
             // Stage 9b: 콤보 onHit 갱신
             if (ctx.attacker != null) {
                 PlayerData atkData = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
@@ -380,9 +430,11 @@ public class CombatPipeline {
                 GradeManager gm = JJKMod.getGradeManager();
                 PlayerData atkXpData = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
                 long xpTick = ctx.attacker.getWorld().getTime();
-                gm.onDamageHit(atkXpData, attackerPlayer, xpTick);
+                int defGradeRank = GradeManager.Grade.fromLabel(targetData.grade).rank;
+                gm.onDamageHit(atkXpData, attackerPlayer, xpTick, defGradeRank);
                 if (ctx.isBlackFlash) {
                     gm.onBlackFlash(atkXpData, attackerPlayer);
+                    AdvancementTriggerManager.onBlackFlash(attackerPlayer, ctx.blackFlashPerfect);
                 }
                 if (ctx.target.getHealth() <= 0f) {
                     gm.onKill(atkXpData, targetData, attackerPlayer, xpTick);
@@ -410,6 +462,13 @@ public class CombatPipeline {
                                 JJKMod.getQuestManager().progress(
                                     atkXpData, "kill_spirit", attackerPlayer, xpTick);
                             }
+                            // 특급·준특급 처치 업적
+                            if (stonesReward >= 150L) {
+                                AdvancementTriggerManager.onSpecialGradeKill(attackerPlayer);
+                                if ("inumaki".equals(atkXpData.characterId)) {
+                                    AdvancementTriggerManager.onInumakiKillSpecialGrade(attackerPlayer);
+                                }
+                            }
                         }
                         if (stonesReward > 0L) {
                             JJKMod.getCursedStoneManager()
@@ -418,6 +477,14 @@ public class CombatPipeline {
                         if (ctx.isBlackFlash) {
                             JJKMod.getCursedStoneManager()
                                 .give(atkXpData, 10L, "black_flash", attackerPlayer);
+                            // P3-1: 흑섬 결정체 드롭 — Perfect +3개, Great +1개
+                            if (CursedCrystalItem.INSTANCE != null) {
+                                int crystals = ctx.blackFlashPerfect ? 3 : 1;
+                                ItemStack crystal = new ItemStack(CursedCrystalItem.INSTANCE, crystals);
+                                if (!attackerPlayer.getInventory().insertStack(crystal)) {
+                                    attackerPlayer.dropItem(crystal, false);
+                                }
+                            }
                         }
                         if (atkXpData.lastDamageTakenTick < atkXpData.lastAttackTick
                                 && atkXpData.lastAttackTick > 0) {

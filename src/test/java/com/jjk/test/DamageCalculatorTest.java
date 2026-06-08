@@ -7,6 +7,7 @@ import com.jjk.combat.DamageCalculator;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.TickDamageCap;
 import com.jjk.data.PlayerData;
+import com.jjk.grade.GradeManager;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -189,5 +190,117 @@ class DamageCalculatorTest {
 
         // 확정 배율 1.5 (config.awakeningMultiplier 기본값)
         assertEquals(withoutAwakening * 1.5f, withAwakening, 0.001f, "각성 배율 ×1.5 (확정)");
+    }
+
+    // ─── H-3-3: shrine 스킬 테스트 ──────────────────────────────────────────
+
+    @Test
+    void testShrineSoulDirectBypassesDefense() {
+        // shrine isSoulDirect=true → 방어 관통 (effectiveDefense=0)
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 0;
+        attacker.grade = "4급";
+
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 200; // 방어력 매우 높음
+
+        float shrineBase = 42f;
+        JjkConfig config = new JjkConfig();
+
+        DamageContext ctx = DamageContext.builder(null, null, IDamageSource.SOUL_DIRECT, shrineBase)
+                .soulDirect()
+                .skillName("shrine")
+                .build();
+        float result = calculator.calculatePure(ctx, attacker, target, shrineBase, config, 0L);
+        assertEquals(shrineBase, result, 0.001f,
+                "shrine isSoulDirect=true → defenseStat=200 무시, baseDamage=42 그대로");
+    }
+
+    @Test
+    void testShrineBfComboClampAt4x() {
+        // shrine 흑섬 콤보 첫 히트: baseDamage = 42 × 3.0 = 126
+        // 극단 스탯으로 자연 배율 >4.0 → §LOCK 클램프 4.0 적용
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 1000;  // attackMult >> 4.0 유도
+        attacker.awakeningActive = true;
+        attacker.grade = "준특급";
+
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 0;
+
+        float shrineBase = 42f * 3.0f; // bfMult=3.0, 첫 히트
+        JjkConfig config = new JjkConfig();
+        config.pveGradeMultiplier = 1.65f;
+
+        DamageContext ctx = DamageContext.builder(null, null, IDamageSource.SOUL_DIRECT, shrineBase)
+                .soulDirect()
+                .skillName("shrine")
+                .build();
+        float result = calculator.calculatePure(ctx, attacker, target, shrineBase, config, 0L);
+
+        // 자연 배율 >> 4.0 → 클램프 후 shrineBase × 4.0 = 504
+        assertTrue(result <= shrineBase * 4.0f,
+                "shrine 흑섬 콤보 + 극단 스탯은 §LOCK ×4.0 클램프 이내여야 함");
+        assertEquals(shrineBase * 4.0f, result, 0.001f,
+                "클램프 상한 4.0 × 126 = 504");
+    }
+
+    @Test
+    void testShrineMultiHitDecay() {
+        // shrine 3타 decay [1.0, 0.90, 0.75] — baseDamage에 사전 적용 후 hitIndex=0 전달
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 0;
+        attacker.grade = "4급";
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 0;
+        JjkConfig config = new JjkConfig();
+
+        float base = 42f;
+        float[] expectedBases = {base * 1.0f, base * 0.90f, base * 0.75f};
+        float[] results = new float[3];
+
+        for (int i = 0; i < 3; i++) {
+            DamageContext ctx = DamageContext.builder(null, null, IDamageSource.SOUL_DIRECT, expectedBases[i])
+                    .soulDirect()
+                    .hitIndex(0)   // 사전 decay 적용 → 기본 다단 감쇠 우회
+                    .build();
+            results[i] = calculator.calculatePure(ctx, attacker, target, expectedBases[i], config, 0L);
+        }
+
+        assertEquals(42f * 1.00f, results[0], 0.001f, "shrine 1타: decay=1.0 → 42");
+        assertEquals(42f * 0.90f, results[1], 0.001f, "shrine 2타: decay=0.90 → 37.8");
+        assertEquals(42f * 0.75f, results[2], 0.001f, "shrine 3타: decay=0.75 → 31.5");
+        assertTrue(results[0] > results[1] && results[1] > results[2],
+                "shrine 다단히트 데미지 감소 확인");
+    }
+
+    @Test
+    void testShrineGradeCheckRejectsBelow준특급() {
+        // 준특급 미만 + 각성 비활성 → shrine 발동 거부 조건 검증
+        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
+        data.awakeningActive = false;
+
+        data.grade = "4급";
+        assertFalse(GradeManager.Grade.fromLabel(data.grade).rank
+                            >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+                "4급 + 각성 비활성: shrine 거부 조건");
+
+        data.grade = "1급";
+        assertFalse(GradeManager.Grade.fromLabel(data.grade).rank
+                            >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+                "1급 + 각성 비활성: shrine 거부 조건");
+
+        // 준특급 이상 → 허용
+        data.grade = "준특급";
+        assertTrue(GradeManager.Grade.fromLabel(data.grade).rank
+                           >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+                "준특급: shrine 허용 조건");
+
+        // 4급 + 각성 활성 → 허용
+        data.grade = "4급";
+        data.awakeningActive = true;
+        assertTrue(GradeManager.Grade.fromLabel(data.grade).rank
+                           >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+                "4급 + 각성 활성: shrine 허용 조건");
     }
 }

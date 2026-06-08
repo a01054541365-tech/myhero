@@ -2,8 +2,10 @@ package com.jjk.data;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class PlayerData {
@@ -122,6 +124,16 @@ public class PlayerData {
     // === 히구루마 재판 대상 UUID (TASK-34) ===
     public String trialTargetUuid;  // null = 없음
 
+    // === 히구루마 단일-스킬 봉인 (Phase I-2) ===
+    public Set<String> sealedSkills = new HashSet<>();
+    public long sealExpireTick = 0L;
+    public String lastUsedSkillId = "";
+    public boolean evidenceAmplifyActive = false;
+
+    // === 안티치트 (TASK J-2) ===
+    public List<String> antiAbuseFlags = new ArrayList<>();
+    public boolean quarantined = false;
+
     // === 주력석 경제 시스템 ===
     public long cursedStones;       // 주력석 보유량
     public int  masteryResetCount;  // 숙련도 초기화 횟수
@@ -133,6 +145,46 @@ public class PlayerData {
     // === 의상 시스템 ===
     public String costumeId = "default";
 
+    // === 쵸소 혈액 자원 ===
+    public int bloodResource = 0;  // 0~5
+
+    // === CE 조작 성장 ===
+    public float ceControl = 1.0f;   // 상한 2.0, 숙련도 Lv.10 +0.10, 특급 달성 +0.20
+
+    // === 퀘스트 진행 (P4-3) ===
+    public Map<String, Integer> questProgress = new HashMap<>();
+    public Set<String> completedDailyQuests   = new HashSet<>();
+    public Set<String> completedWeeklyQuests  = new HashSet<>();
+    public long lastQuestResetDay             = 0L;
+
+    // === 시즌 XP (P4-7) ===
+    public int seasonXp = 0;
+
+    // === 캐릭터 재선택 이력 ===
+    public int  characterResetCount          = 0;
+    public long lastCharacterResetTimestamp  = 0L;
+
+    // === 선택 책 지급 이력 (중복 지급 방지) ===
+    public boolean hasReceivedSelectionBook  = false;
+
+    // === 주령 포획 누적 (G-2) ===
+    public int capturedSpiritCount           = 0;
+
+    // === 속박 서약 양방향 패널티 (G-4) ===
+    public String  pendingBindingVowSkillId  = null;
+    public long    pendingBindingVowStartTick= 0L;
+    public boolean vowSkillUsedThisVow       = false;
+
+    // === 튜토리얼 완료 여부 (G-5-2) ===
+    public boolean hasCompletedTutorial      = false;
+
+    // === 비술사(천여주박) 신체능력 강화 ===
+    public long  nsBurstExpireTick      = 0L;
+    public float attackBoostMultiplier  = 1.0f;
+    public float defenseBoostMultiplier = 1.0f;
+    public long  nsShieldExpireTick     = 0L;
+    public boolean nsDeathPreventUsed   = false;
+
     // === 스키마 버전 ===
     public int schemaVersion = 1;
 
@@ -143,6 +195,7 @@ public class PlayerData {
         d.bindingVowDeclaredTick  = -1L;
         d.grade                   = "4급";
         d.trialState              = "IDLE";
+        d.ceControl               = 1.0f;
         d.ceMax                   = 100.0f;
         d.ceCurrent               = 100.0f;
         d.hpMax                   = 20.0f;
@@ -219,11 +272,37 @@ public class PlayerData {
         copy.blackFlashFocusEndTick      = this.blackFlashFocusEndTick;
         copy.receivedGuideBook           = this.receivedGuideBook;
         copy.trialTargetUuid             = this.trialTargetUuid;
+        copy.sealedSkills                = new HashSet<>(this.sealedSkills);
+        copy.sealExpireTick              = this.sealExpireTick;
+        copy.lastUsedSkillId             = this.lastUsedSkillId;
+        copy.evidenceAmplifyActive       = this.evidenceAmplifyActive;
+        copy.antiAbuseFlags              = new ArrayList<>(this.antiAbuseFlags);
+        copy.quarantined                 = this.quarantined;
         copy.cursedStones                = this.cursedStones;
         copy.masteryResetCount           = this.masteryResetCount;
         copy.bounty                      = this.bounty;
         copy.weeklyQuestDone             = this.weeklyQuestDone;
         copy.costumeId                   = this.costumeId;
+        copy.bloodResource               = this.bloodResource;
+        copy.ceControl                   = this.ceControl;
+        copy.questProgress               = new HashMap<>(this.questProgress);
+        copy.completedDailyQuests        = new HashSet<>(this.completedDailyQuests);
+        copy.completedWeeklyQuests       = new HashSet<>(this.completedWeeklyQuests);
+        copy.lastQuestResetDay           = this.lastQuestResetDay;
+        copy.seasonXp                    = this.seasonXp;
+        copy.characterResetCount         = this.characterResetCount;
+        copy.lastCharacterResetTimestamp = this.lastCharacterResetTimestamp;
+        copy.hasReceivedSelectionBook    = this.hasReceivedSelectionBook;
+        copy.capturedSpiritCount         = this.capturedSpiritCount;
+        copy.pendingBindingVowSkillId    = this.pendingBindingVowSkillId;
+        copy.pendingBindingVowStartTick  = this.pendingBindingVowStartTick;
+        copy.vowSkillUsedThisVow         = this.vowSkillUsedThisVow;
+        copy.hasCompletedTutorial        = this.hasCompletedTutorial;
+        copy.nsBurstExpireTick           = this.nsBurstExpireTick;
+        copy.attackBoostMultiplier       = this.attackBoostMultiplier;
+        copy.defenseBoostMultiplier      = this.defenseBoostMultiplier;
+        copy.nsShieldExpireTick          = this.nsShieldExpireTick;
+        copy.nsDeathPreventUsed          = this.nsDeathPreventUsed;
         copy.schemaVersion               = this.schemaVersion;
         return copy;
     }

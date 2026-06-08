@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:book"},
+    "title": {"text": "주술사 입문"},
+    "description": {"text": "주술회전의 세계에 발을 들이다"},
+    "frame": "task",
+    "show_toast": false,
+    "announce_to_chat": false,
+    "background": "minecraft:textures/block/stone.png"
+  },
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

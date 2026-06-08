@@ -1,12 +1,19 @@
 package com.jjk.character;
 
 import com.jjk.JJKMod;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
+import com.jjk.item.JJKItems;
+import com.jjk.network.s2c.OpenCharacterSelectS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Identifier;
+
+import java.util.ArrayList;
 import java.util.Map;
 
 public class CharacterCommandService {
@@ -24,10 +31,38 @@ public class CharacterCommandService {
         OK, DUPLICATE_BLOCKED, GRADE_INSUFFICIENT, ALREADY_SELECTED, RESELECT_DISABLED
     }
 
+    /**
+     * 신규 플레이어 접속 처리. 선택 책 미지급 시 책 지급 + 캐릭터 선택 화면 전송.
+     * @return true if selection screen was sent (caller should not send CharacterInfo/CharacterSelect)
+     */
+    public boolean handleJoin(ServerPlayerEntity player) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        if (data.hasReceivedSelectionBook) {
+            return false;
+        }
+
+        if (JJKItems.CHARACTER_SELECTION_BOOK != null) {
+            ItemStack book = new ItemStack(JJKItems.CHARACTER_SELECTION_BOOK);
+            if (!player.getInventory().insertStack(book)) {
+                player.dropItem(book, false);
+            }
+        }
+        data.hasReceivedSelectionBook = true;
+
+        ServerPlayNetworking.send(player, new OpenCharacterSelectS2CPacket(
+                new ArrayList<>(CharacterRegistry.ids()),
+                data.characterId != null ? data.characterId : ""));
+
+        JJKMod.getPlayerRepository().saveImmediate(data);
+        return true;
+    }
+
     public SelectResult select(ServerPlayerEntity player, String characterId) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
 
-        if (data.characterId != null && !JJKMod.getConfig().allowCharacterReselect) {
+        boolean isReselect = (data.characterId != null);
+
+        if (isReselect && !JJKMod.getConfig().allowCharacterReselect) {
             return SelectResult.RESELECT_DISABLED;
         }
 
@@ -35,38 +70,52 @@ public class CharacterCommandService {
             return SelectResult.DUPLICATE_BLOCKED;
         }
 
-        // grade check (§26-2): skip on first selection (characterId == null)
         CharacterRegistry.CharacterMeta meta = CharacterRegistry.get(characterId);
-        if (data.characterId != null) {
+
+        // grade check (§26-2): skip on first selection (characterId == null)
+        if (isReselect) {
             int requiredRank = GRADE_ORDER.getOrDefault(meta.defaultGrade(), 0);
-            int playerRank = GRADE_ORDER.getOrDefault(data.grade, 0);
+            int playerRank   = GRADE_ORDER.getOrDefault(data.grade, 0);
             if (playerRank < requiredRank) {
                 return SelectResult.GRADE_INSUFFICIENT;
             }
+            // 재선택 시 전체 초기화
+            data.grade                       = "4급";
+            data.xp                          = 0;
+            data.mastery                     = 0;
+            data.unlockedSkills.clear();
+            data.cooldowns.clear();
+            data.characterResetCount        += 1;
+            data.lastCharacterResetTimestamp = System.currentTimeMillis();
+            data.domainCooldownUntil         = 0L;
+            data.awakeningCooldownUntil      = 0L;
+            data.jackpotCooldownUntil        = 0L;
+            data.curtainCooldownUntil        = 0L;
+        } else {
+            data.grade = meta.defaultGrade();
         }
 
         data.characterId = characterId;
-        data.grade = meta.defaultGrade();
+        AdvancementTriggerManager.onCharacterTried(player, characterId);
 
         CharacterRegistry.CharacterStats stats = CharacterRegistry.getStats(characterId);
         if (stats != null) {
-            data.ceMax      = stats.maxCe();
-            data.ceCurrent  = stats.maxCe();
-            data.hpMax      = stats.hp();
-            data.hpCurrent  = stats.hp();
-            data.attackStat = stats.attack();
+            data.ceMax       = stats.maxCe();
+            data.ceCurrent   = stats.maxCe();
+            data.hpMax       = stats.hp();
+            data.hpCurrent   = stats.hp();
+            data.attackStat  = stats.attack();
             data.defenseStat = stats.defense();
         } else {
-            data.ceMax = meta.ceMax();
+            data.ceMax     = meta.ceMax();
             data.ceCurrent = meta.ceMax();
-            data.hpMax = 20f;
+            data.hpMax     = 20f;
             data.hpCurrent = 20f;
         }
         player.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(data.hpMax);
         player.setHealth(data.hpMax);
 
         if ("itadori".equals(characterId)) {
-            // 이타도리 점프력 버프 유지 (체력은 stats에서 이미 설정)
             var jumpAttr = player.getAttributeInstance(EntityAttributes.GENERIC_JUMP_STRENGTH);
             if (jumpAttr != null) {
                 jumpAttr.removeModifier(ITADORI_JUMP_MODIFIER_ID);

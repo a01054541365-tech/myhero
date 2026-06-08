@@ -5,6 +5,9 @@ import com.jjk.api.skill.SkillResult;
 import com.jjk.data.PlayerData;
 import com.jjk.economy.CursedStoneManager;
 import com.jjk.grade.GradeManager.Grade;
+import com.jjk.grade.MasterySystem;
+import com.jjk.item.CursedCrystalItem;
+import com.jjk.item.CursedToolItem;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.network.c2s.NpcServiceC2SPacket;
 import net.minecraft.component.DataComponentTypes;
@@ -48,9 +51,11 @@ public final class ZeninService {
                                       CursedStoneManager csm) {
         if (csm == null) return SkillResult.FAIL;
         return switch (packet.action()) {
-            case "buy"      -> buy(packet.param(), data, player, csm);
-            case "appraise" -> appraise(data, player, csm);
-            default         -> SkillResult.FAIL;
+            case "buy"          -> buy(packet.param(), data, player, csm);
+            case "appraise"     -> appraise(data, player, csm);
+            case "crystal_buy"  -> crystalBuy(packet.param(), data, player);
+            case "enhance"      -> enhanceTool(data, player);
+            default             -> SkillResult.FAIL;
         };
     }
 
@@ -93,6 +98,139 @@ public final class ZeninService {
             return SkillResult.SUCCESS;
         }
         return SkillResult.FAIL;
+    }
+
+    // ─── 결정체 교환 (P3-1) ───────────────────────────────────────────────────
+
+    private static final Map<String, Integer> CRYSTAL_PRICES = Map.of(
+        "mastery_xp",      50,
+        "grade_xp",        80,
+        "finger_tracker", 150
+    );
+
+    private static SkillResult crystalBuy(String itemId, PlayerData data,
+                                           ServerPlayerEntity player) {
+        if (itemId == null) return SkillResult.FAIL;
+        Integer cost = CRYSTAL_PRICES.get(itemId);
+        if (cost == null) return SkillResult.FAIL;
+
+        if (countCrystals(player) < cost) {
+            if (player != null) {
+                player.sendMessage(
+                    Text.literal("[JJK] CE 결정체가 부족합니다. (필요: " + cost + "개)"), true);
+            }
+            return SkillResult.CE_INSUFFICIENT;
+        }
+        consumeCrystals(player, cost);
+
+        return switch (itemId) {
+            case "mastery_xp" -> {
+                MasterySystem.awardMastery(data, 100, player);
+                if (player != null) player.sendMessage(
+                    Text.literal("[JJK] 숙련도 +100 지급."), true);
+                yield SkillResult.SUCCESS;
+            }
+            case "grade_xp" -> {
+                if (JJKMod.getGradeManager() != null) {
+                    JJKMod.getGradeManager().addXp(data, 200, player);
+                }
+                if (player != null) player.sendMessage(
+                    Text.literal("[JJK] 등급 경험치 +200 지급."), true);
+                yield SkillResult.SUCCESS;
+            }
+            case "finger_tracker" -> {
+                ItemStack tracker = createFingerTracker();
+                if (player != null && !player.getInventory().insertStack(tracker)) {
+                    player.dropItem(tracker, false);
+                }
+                yield SkillResult.SUCCESS;
+            }
+            default -> SkillResult.FAIL;
+        };
+    }
+
+    private static ItemStack createFingerTracker() {
+        ItemStack stack = new ItemStack(Items.COMPASS);
+        NbtCompound nbt = new NbtCompound();
+        nbt.putString("jjk_type", "finger_tracker");
+        stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+        stack.set(DataComponentTypes.CUSTOM_NAME,
+            Text.literal("스쿠나 손가락 추적기").styled(s -> s.withColor(0xAA00AA).withItalic(false)));
+        return stack;
+    }
+
+    // ─── 주구 강화 (P3-3) ────────────────────────────────────────────────────
+
+    private static final int ENHANCE_CRYSTAL_COST = 20;
+    private static final int ENHANCE_MAX_LEVEL    = 3;
+
+    private static SkillResult enhanceTool(PlayerData data, ServerPlayerEntity player) {
+        if (player == null) return SkillResult.FAIL;
+        ItemStack held = player.getMainHandStack();
+        if (!(held.getItem() instanceof CursedToolItem tool)) {
+            player.sendMessage(Text.literal("[JJK] 주구를 손에 들어야 합니다."), true);
+            return SkillResult.FAIL;
+        }
+
+        NbtComponent customData = held.get(DataComponentTypes.CUSTOM_DATA);
+        int level = customData != null ? customData.copyNbt().getInt("enhance_level") : 0;
+        if (level >= ENHANCE_MAX_LEVEL) {
+            player.sendMessage(Text.literal("[JJK] 이미 최대 강화 단계(+" + ENHANCE_MAX_LEVEL + ")입니다."), true);
+            return SkillResult.FAIL;
+        }
+        if (countCrystals(player) < ENHANCE_CRYSTAL_COST) {
+            player.sendMessage(
+                Text.literal("[JJK] CE 결정체 " + ENHANCE_CRYSTAL_COST + "개가 필요합니다."), true);
+            return SkillResult.CE_INSUFFICIENT;
+        }
+        consumeCrystals(player, ENHANCE_CRYSTAL_COST);
+
+        int newLevel = level + 1;
+        NbtCompound nbt = customData != null ? customData.copyNbt() : new NbtCompound();
+        nbt.putInt("enhance_level", newLevel);
+        held.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt));
+        held.set(DataComponentTypes.CUSTOM_NAME,
+            Text.literal("+" + newLevel + " " + getToolDisplayName(tool.getToolId()))
+                .styled(s -> s.withColor(0xFFAA00).withItalic(false)));
+
+        player.sendMessage(Text.literal("[JJK] 주구 강화 완료! +" + newLevel), false);
+        return SkillResult.SUCCESS;
+    }
+
+    private static String getToolDisplayName(String toolId) {
+        return switch (toolId) {
+            case "cursed_dagger"    -> "저주받은 단검";
+            case "thousand_spear"   -> "千본 선";
+            case "playful_cloud"    -> "遊雲";
+            case "inverted_spear"   -> "천역모의 창";
+            case "split_soul_blade" -> "魂裂 도";
+            default                 -> toolId;
+        };
+    }
+
+    // ─── 결정체 인벤토리 유틸 ────────────────────────────────────────────────
+
+    private static int countCrystals(ServerPlayerEntity player) {
+        if (player == null || CursedCrystalItem.INSTANCE == null) return 0;
+        int total = 0;
+        for (int i = 0; i < player.getInventory().size(); i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (stack.getItem() == CursedCrystalItem.INSTANCE) total += stack.getCount();
+        }
+        return total;
+    }
+
+    private static void consumeCrystals(ServerPlayerEntity player, int amount) {
+        if (player == null || CursedCrystalItem.INSTANCE == null) return;
+        int remaining = amount;
+        for (int i = 0; i < player.getInventory().size() && remaining > 0; i++) {
+            ItemStack stack = player.getInventory().getStack(i);
+            if (stack.getItem() == CursedCrystalItem.INSTANCE) {
+                int take = Math.min(remaining, stack.getCount());
+                stack.decrement(take);
+                remaining -= take;
+            }
+        }
     }
 
     static ItemStack createItem(String itemId) {

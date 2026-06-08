@@ -1,5 +1,6 @@
 package com.jjk.client.hud;
 
+import com.jjk.client.JjkClientState;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
@@ -19,6 +20,15 @@ public class JjkHudRenderer {
     private float lastDamage = 0f;
     private int damageDisplayTicks = 0;
 
+    // 흑섬 Just Frame 타이밍 게이지 (BlackFlashTimingS2CPacket 수신 시 갱신)
+    private boolean showTimingGauge = false;
+    private long timingWindowStart = 0L;
+    private long timingWindowEnd = 0L;
+
+    // 히구루마 재판 판결 안내 (VerdictS2CPacket 수신 시 갱신, Phase I-2)
+    private Text verdictMessage = null;
+    private int  verdictDisplayTicks = 0;
+
     private final CEBarRenderer       ceBar        = new CEBarRenderer();
     private final SkillCooldownHUD    cooldownHud  = new SkillCooldownHUD();
     private final DomainIndicator     domainIndicator = new DomainIndicator();
@@ -35,9 +45,15 @@ public class JjkHudRenderer {
         domainIndicator.tick(worldTick);
         domainIndicator.render(context, client);
         renderChantingBar(context, client);
+        renderTimingGauge(context, client);
+        renderSealIndicator(context, client, worldTick);
         if (damageDisplayTicks > 0) {
             renderDamageNumber(context, client);
             damageDisplayTicks--;
+        }
+        if (verdictDisplayTicks > 0) {
+            renderVerdictMessage(context, client);
+            verdictDisplayTicks--;
         }
     }
 
@@ -104,6 +120,69 @@ public class JjkHudRenderer {
             screenW / 2, screenH / 2 - 30,
             0xFFFF4444
         );
+    }
+
+    private void renderTimingGauge(DrawContext context, MinecraftClient client) {
+        if (!showTimingGauge || client.world == null) return;
+        long currentTick = client.world.getTime();
+        long windowLen = timingWindowEnd - timingWindowStart;
+        if (windowLen <= 0L || currentTick >= timingWindowEnd) {
+            showTimingGauge = false;
+            return;
+        }
+        float progress = (float)(timingWindowEnd - currentTick) / windowLen;
+        int sw = client.getWindow().getScaledWidth();
+        int sh = client.getWindow().getScaledHeight();
+        int barW = 120;
+        int barH = 8;
+        int x = (sw - barW) / 2;
+        int y = sh / 2 + 30;
+        context.fill(x - 1, y - 1, x + barW + 1, y + barH + 1, 0xAA000000);
+        int fillW = (int)(barW * progress);
+        if (fillW > 0) context.fill(x, y, x + fillW, y + barH, 0xFF00E5FF);
+        context.drawCenteredTextWithShadow(client.textRenderer,
+            Text.literal("§b흑섬 Just Frame!"), sw / 2, y - 12, 0xFFFFFF);
+    }
+
+    /** 단일-스킬 봉인 표시 — 화면 상단 중앙에 봉인된 스킬 ID와 남은 시간(초) 표시 */
+    private void renderSealIndicator(DrawContext context, MinecraftClient client, long worldTick) {
+        if (!JjkClientState.isSkillSealed(worldTick)) return;
+        int remainTicks = (int) Math.max(0, JjkClientState.getSealExpireAtTick() - worldTick);
+        int remainSec = (remainTicks + 19) / 20;
+        int screenW = client.getWindow().getScaledWidth();
+
+        context.drawCenteredTextWithShadow(
+            client.textRenderer,
+            Text.literal("§c[봉인] " + JjkClientState.getSealedSkillId() + " (" + remainSec + "s)"),
+            screenW / 2, 4,
+            0xFFFF5555
+        );
+    }
+
+    private void renderVerdictMessage(DrawContext context, MinecraftClient client) {
+        if (verdictMessage == null) return;
+        int screenW = client.getWindow().getScaledWidth();
+        int screenH = client.getWindow().getScaledHeight();
+        context.drawCenteredTextWithShadow(
+            client.textRenderer,
+            verdictMessage,
+            screenW / 2, screenH / 2 - 50,
+            0xFFFFFFFF
+        );
+    }
+
+    /** 재판 판결 통지 — 2초(40틱) 동안 화면 중앙에 표시. */
+    public void showVerdict(boolean guilty, String sealedSkillId) {
+        this.verdictMessage = guilty
+                ? Text.literal("§c유죄 판결! " + sealedSkillId + " 술식이 봉인됩니다.")
+                : Text.literal("§a무죄 판결.");
+        this.verdictDisplayTicks = 40;
+    }
+
+    public void onBlackFlashTiming(boolean show, int startTick, int endTick) {
+        showTimingGauge = show;
+        timingWindowStart = startTick;
+        timingWindowEnd = endTick;
     }
 
     public void updateChanting(boolean chanting, int chantTicks) {

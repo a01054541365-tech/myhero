@@ -159,6 +159,7 @@ public class DamageCalculator {
         float burstBonus = (attacker != null && attacker.burstActive) ? 1.30f : 1.0f;
         int attackStat = attacker != null ? attacker.attackStat : 0;
         float attackMult = 1f + Math.min(attackStat * burstBonus, 120f) / 100f;
+        if (attacker != null) attackMult *= attacker.attackBoostMultiplier;
 
         // 스쿠나 손가락 보너스: 1개당 fingerStatBonusPercent% (기본 5%)
         if (attacker != null && "sukuna".equals(attacker.characterId) && attacker.fingerCount > 0) {
@@ -196,7 +197,7 @@ public class DamageCalculator {
         // §4-4: 방어 처리 (defenseMultiplier < 1.0 = 방어 관통)
         float effectiveDefense = (ctx != null && ctx.isSoulDirect)
                 ? 0f
-                : (target != null ? target.defenseStat : 0f)
+                : (target != null ? target.defenseStat * target.defenseBoostMultiplier : 0f)
                   * (ctx != null ? ctx.defenseMultiplier : 1.0f);
         float effectiveDamage = Math.max(0f, rawDamage - effectiveDefense);
 

@@ -2,6 +2,7 @@ package com.jjk.grade;
 
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.combat.TechniqueLoader;
 import com.jjk.data.PlayerData;
@@ -79,6 +80,12 @@ public class GradeManager {
                                ServerPlayerEntity player) {
         data.grade = to.label;
 
+        // 특급 달성 시 ceControl +0.20 (P3-2)
+        if (to == Grade.SPECIAL) {
+            data.ceControl = Math.min(data.ceControl + 0.20f, 2.0f);
+            if (player != null) AdvancementTriggerManager.onGradeReach(player, 0);
+        }
+
         // 등급 상승 주력석 지급
         if (player != null && JJKMod.getCursedStoneManager() != null) {
             long stoneReward = switch (to) {
@@ -129,6 +136,11 @@ public class GradeManager {
         }
     }
 
+    /** 관리자 setgrade 등에서 해당 등급까지 모든 스킬을 해금할 때 사용. */
+    public void applyGradeUnlocks(PlayerData data, String grade) {
+        unlockSkillsForGrade(data, grade);
+    }
+
     private void unlockSkillsForGrade(PlayerData data, String newGrade) {
         if (data.characterId == null) return;
         TechniqueLoader.getAllForCharacter(data.characterId).stream()
@@ -160,20 +172,29 @@ public class GradeManager {
 
     // ─── 전투 XP 이벤트 헬퍼 ──────────────────────────────────────────────────
 
-    public void onDamageHit(PlayerData attacker, ServerPlayerEntity player, long tick) {
+    /**
+     * 전투 XP 이벤트. defenderGradeRank로 등급 보호 보너스 적용.
+     * G-5-1: gradeDiff >= config.gradeProtectionDiff 시 XP × gradeProtectionXpMultiplier.
+     */
+    public void onDamageHit(PlayerData attacker, ServerPlayerEntity player, long tick, int defenderGradeRank) {
         if (JJKMod.getInstance() == null) return;
         JjkConfig cfg = JJKMod.getConfig();
         UUID uuid = attacker.uuid;
         long start = combatStartTick.getOrDefault(uuid, tick);
         if (tick - start > 200) {
-            // 새 전투 세션 리셋
             combatXpAccum.put(uuid, 0);
             combatStartTick.put(uuid, tick);
         }
         int acc = combatXpAccum.getOrDefault(uuid, 0);
         if (acc < cfg.xpOnDamageCapPerCombat()) {
-            addXp(attacker, cfg.xpOnDamagePerHit(), player);
-            combatXpAccum.put(uuid, acc + cfg.xpOnDamagePerHit());
+            int xpAmount = cfg.xpOnDamagePerHit();
+            int attackerGradeRank = Grade.fromLabel(attacker.grade).rank;
+            int gradeDiff = Math.abs(attackerGradeRank - defenderGradeRank);
+            if (gradeDiff >= cfg.gradeProtectionDiff()) {
+                xpAmount = (int)(xpAmount * cfg.gradeProtectionXpMultiplier());
+            }
+            addXp(attacker, xpAmount, player);
+            combatXpAccum.put(uuid, acc + xpAmount);
         }
     }
 

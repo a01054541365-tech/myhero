@@ -9,9 +9,11 @@ import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
+import com.jjk.network.s2c.SkillEffectS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.Comparator;
 import java.util.List;
@@ -23,12 +25,18 @@ public class InumakiSkillSet implements ISkillSet {
 
     private static final int CE_F  = 120, CD_F  = 10, ANIM_F  = 50;
     private static final int CE_SF = 280, CD_SF = 24, ANIM_SF = 51;
+    private static final int CE_R  = 200, CD_R  = 35, ANIM_R  = 65;
     private static final int CE_SR = 240, CD_SR = 30, ANIM_SR = 52;
     private static final int CE_V  = 150, CD_V  = 18, ANIM_V  = 53;
+
+    private static final double SCATTER_RADIUS = 6.0;
+    private static final double SCATTER_KNOCKBACK = 1.8;
+    private static final double SCATTER_LIFT = 0.4;
 
     // 부담 수치 — spec §6-9 명시값
     private static final float BURDEN_F  = 15f;
     private static final float BURDEN_SF = 30f;
+    private static final float BURDEN_R  = 20f;
     private static final float BURDEN_SR = 25f;
     private static final float BURDEN_V  = 10f;
 
@@ -53,21 +61,21 @@ public class InumakiSkillSet implements ISkillSet {
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> CD_F; case 1 -> CD_SF; case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
+            case 0 -> CD_F; case 1 -> CD_SF; case 2 -> CD_R; case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> CE_F; case 1 -> CE_SF; case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
+            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R; case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
         };
     }
 
     @Override
     public String getSkillName(int keyId) {
         return switch (keyId) {
-            case 0 -> "!멈춰"; case 1 -> "!터져"; case 3 -> "!잠들어"; case 4 -> "!달려";
+            case 0 -> "!멈춰"; case 1 -> "!터져"; case 2 -> "!흩어져"; case 3 -> "!잠들어"; case 4 -> "!달려";
             default -> "not_implemented";
         };
     }
@@ -129,9 +137,42 @@ public class InumakiSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
+    /** R — !흩어져: 반경 6블록 내 적 전원 외부 방향 넉백 (군중 제어, 부담 소모형) */
     @Override
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
-        return SkillResult.NOT_IMPLEMENTED;
+        if (BurdenManager.isSealed(data, tick)) return SkillResult.FAIL_SKILL_SEALED;
+        if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
+        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (player == null) return SkillResult.FAIL_NO_TARGET;
+
+        List<LivingEntity> targets = HitValidator.getNearby(player, SCATTER_RADIUS);
+        if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
+
+        data.ceCurrent -= CE_R;
+
+        for (LivingEntity target : targets) {
+            if (target instanceof ServerPlayerEntity tp) {
+                PlayerData td = JJKMod.getPlayerRepository().load(tp.getUuid());
+                if (JJKMod.getTeamManager().isSameTeam(data, td)) continue;
+            }
+            Vec3d dir = target.getPos().subtract(player.getPos()).normalize();
+            target.addVelocity(dir.x * SCATTER_KNOCKBACK, SCATTER_LIFT, dir.z * SCATTER_KNOCKBACK);
+            target.velocityModified = true;
+        }
+
+        BurdenManager.addBurden(data, BURDEN_R, tick, JJKMod.getConfig());
+        data.cooldowns.put("2", tick + CD_R);
+        JJKMod.getPlayerRepository().save(data);
+
+        Vec3d pos = player.getPos();
+        SkillEffectS2CPacket pkt = SkillEffectS2CPacket.of(
+                "inumaki_scatter", player.getUuid(), pos.x, pos.y, pos.z);
+        player.getServerWorld().getPlayers().stream()
+                .filter(p -> p.squaredDistanceTo(player) <= 32 * 32)
+                .forEach(p -> ServerPlayNetworking.send(p, pkt));
+
+        broadcastAnim(player, ANIM_R);
+        return SkillResult.SUCCESS;
     }
 
     /** Shift+R — !잠들어: 전방 10블록 단일 대상, status_sleep 100틱 */

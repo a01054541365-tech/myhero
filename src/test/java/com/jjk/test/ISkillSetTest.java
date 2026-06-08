@@ -156,15 +156,9 @@ class ISkillSetTest {
         // ceCurrent=100 < 각 CE → FAIL_CE_INSUFFICIENT ≠ NOT_IMPLEMENTED
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onF(data, null, 0L));
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftF(data, null, 0L));
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L));
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onShiftR(data, null, 0L));
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, skill.onV(data, null, 0L));
-    }
-
-    @Test
-    void testInumakiRNotImplemented() {
-        InumakiSkillSet skill = new InumakiSkillSet();
-        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
-        assertEquals(SkillResult.NOT_IMPLEMENTED, skill.onR(data, null, 0L));
     }
 
     @Test
@@ -174,6 +168,27 @@ class ISkillSetTest {
         data.cooldowns.put("skill_seal", Long.MAX_VALUE);
         assertEquals(SkillResult.FAIL_SKILL_SEALED, skill.onF(data, null, 0L));
         assertEquals(SkillResult.FAIL_SKILL_SEALED, skill.onShiftF(data, null, 0L));
+        assertEquals(SkillResult.FAIL_SKILL_SEALED, skill.onR(data, null, 0L));
+    }
+
+    @Test
+    void testInumakiScatterKnockback() {
+        InumakiSkillSet skill = new InumakiSkillSet();
+        PlayerData data = PlayerData.createDefault(UUID.randomUUID());
+        data.characterId = "inumaki";
+        data.ceCurrent = 1000f;
+        // player == null → 타겟 조회 불가, FAIL_NO_TARGET (CE/쿨타임/봉인 검증 통과 확인용)
+        assertEquals(SkillResult.FAIL_NO_TARGET, skill.onR(data, null, 0L));
+        assertEquals(1000f, data.ceCurrent, 0.001f, "타겟 없으면 CE 미소모");
+    }
+
+    @Disabled("ServerWorld·LivingEntity 실엔티티 필요 — 단위 테스트 환경에서 getNearby/addVelocity 검증 불가 (testWeaknessZone과 동일 사유)")
+    @Test
+    void testInumakiScatterEntityInteraction() {
+        // 실서버 통합 테스트 대상:
+        //   1. CE 200 소모, 부담 +20 (타격 성공 시)
+        //   2. 같은 진영 엔티티 넉백 제외 (TeamManager.isSameTeam)
+        //   3. 반경 6블록 초과 엔티티 영향 없음 (HitValidator.getNearby 박스 범위)
     }
 
     @Test
@@ -384,7 +399,7 @@ class ISkillSetTest {
 
     @Test
     void testMigratorCurrentVersion() {
-        assertEquals(13, Migrator.CURRENT_VERSION);
+        assertEquals(22, Migrator.CURRENT_VERSION);
     }
 
     @Test

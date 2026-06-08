@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:blaze_powder"},
+    "title": {"text": "흑섬"},
+    "description": {"text": "처음으로 흑섬을 명중시키다"},
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "display": {
+    "icon": {"id": "minecraft:enchanted_book"},
+    "title": {"text": "술식 완전 숙달"},
+    "description": {"text": "술식 숙련도를 최대 수준에 도달시키다"},
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true
+  },
+  "parent": "jjk:root",
+  "criteria": {
+    "impossible": {
+      "trigger": "minecraft:impossible"
+    }
+  }
+}

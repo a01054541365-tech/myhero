@@ -3,6 +3,8 @@ package com.jjk.entity;
 import com.jjk.JJKMod;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.ai.CursedSpiritGoals;
+import com.jjk.item.CursedCrystalItem;
+import com.jjk.item.CursedToolRegistry;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.*;
@@ -12,6 +14,7 @@ import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.World;
@@ -31,12 +34,26 @@ public class CursedSpiritEntity extends HostileEntity {
                                World world, CursedSpiritGrade grade) {
         super(type, world);
         this.grade = grade;
+        initGoalsAfterGrade();
     }
 
     @Override
     public void tick() {
         super.tick();
-        if (getWorld().isClient || age % 4 != 0) return;
+        if (getWorld().isClient) return;
+
+        // 격노 타이머 감소 (G-2)
+        if (enragedTicksRemaining > 0) {
+            enragedTicksRemaining--;
+            if (enragedTicksRemaining == 0) {
+                EntityAttributeInstance attack = getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE);
+                EntityAttributeInstance speed  = getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+                if (attack != null) attack.setBaseValue(grade.attackDamage);
+                if (speed  != null) speed.setBaseValue(grade.movementSpeed);
+            }
+        }
+
+        if (age % 4 != 0) return;
 
         // HP 50% 속도 부스트 (4급/3급)
         if (!speedBoosted
@@ -105,6 +122,13 @@ public class CursedSpiritEntity extends HostileEntity {
 
     @Override
     protected void initGoals() {
+        // grade는 super() 반환 후에야 세팅되므로, 부모 생성자 호출 시점에는 항상 null.
+        // 실제 goal 등록은 initGoalsAfterGrade()에서 수행.
+        if (this.grade == null) return;
+        initGoalsAfterGrade();
+    }
+
+    private void initGoalsAfterGrade() {
         goalSelector.add(1, new SwimGoal(this));
         goalSelector.add(2, new MeleeAttackGoal(this, 1.0, true));
         goalSelector.add(7, new WanderAroundFarGoal(this, 1.0));
@@ -145,6 +169,17 @@ public class CursedSpiritEntity extends HostileEntity {
         }
     }
 
+    // G-2: 포획 실패 시 격노 상태 부여 (durationTicks 동안 공격력 1.5×, 속도 1.3×)
+    private int enragedTicksRemaining = 0;
+
+    public void setEnraged(int durationTicks) {
+        enragedTicksRemaining = durationTicks;
+        EntityAttributeInstance attack = getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE);
+        EntityAttributeInstance speed  = getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        if (attack != null) attack.setBaseValue(grade.attackDamage * 1.5f);
+        if (speed  != null) speed.setBaseValue(grade.movementSpeed * 1.3f);
+    }
+
     @Override
     public void onDeath(DamageSource source) {
         super.onDeath(source);
@@ -152,6 +187,22 @@ public class CursedSpiritEntity extends HostileEntity {
         if (source.getAttacker() instanceof ServerPlayerEntity killer) {
             PlayerData killerData = JJKMod.getPlayerRepository().load(killer.getUuid());
             JJKMod.getGradeManager().addXp(killerData, grade.xpDrop, killer);
+
+            // P3-1: CE 결정체 드롭
+            if (CursedCrystalItem.INSTANCE != null) {
+                int crystals = getCrystalDrop(grade);
+                if (crystals > 0) {
+                    ItemStack crystal = new ItemStack(CursedCrystalItem.INSTANCE, crystals);
+                    if (!killer.getInventory().insertStack(crystal)) {
+                        killer.dropItem(crystal, false);
+                    }
+                }
+            }
+
+            // P3-3: 주구 드롭
+            if (getWorld() instanceof ServerWorld sw) {
+                tryDropCursedTool(grade, killer, sw);
+            }
         }
         // 4급/3급 사망 시 반경 3블록 폭발 데미지 (baseDamage=6)
         if ((grade == CursedSpiritGrade.GRADE_4 || grade == CursedSpiritGrade.GRADE_3)
@@ -168,4 +219,60 @@ public class CursedSpiritEntity extends HostileEntity {
     protected int getXpToDrop() { return grade.xpDrop; }
 
     public CursedSpiritGrade getGrade() { return grade; }
+
+    // ─── 드롭 헬퍼 ────────────────────────────────────────────────────────────
+
+    private static int getCrystalDrop(CursedSpiritGrade g) {
+        return switch (g) {
+            case GRADE_4      -> 1;
+            case GRADE_3      -> 3;
+            case GRADE_2      -> 7;
+            case GRADE_1      -> 15;
+            case SEMI_SPECIAL -> 30;
+            case SPECIAL      -> 60;
+        };
+    }
+
+    private static void tryDropCursedTool(CursedSpiritGrade g,
+                                           ServerPlayerEntity killer,
+                                           ServerWorld sw) {
+        float rate = switch (g) {
+            case GRADE_4      -> 0.05f;
+            case GRADE_3      -> 0.10f;
+            case GRADE_2      -> 0.15f;
+            case GRADE_1      -> 0.20f;
+            case SEMI_SPECIAL -> 0.30f;
+            case SPECIAL      -> 0.50f;
+        };
+        if (sw.getRandom().nextFloat() >= rate) return;
+        ItemStack tool = selectRandomTool(g, sw);
+        if (!tool.isEmpty()) {
+            if (!killer.getInventory().insertStack(tool)) {
+                killer.dropItem(tool, false);
+            }
+        }
+    }
+
+    private static ItemStack selectRandomTool(CursedSpiritGrade g, ServerWorld sw) {
+        if (CursedToolRegistry.CURSED_DAGGER == null) return ItemStack.EMPTY;
+        return switch (g) {
+            case GRADE_4 -> new ItemStack(CursedToolRegistry.CURSED_DAGGER);
+            case GRADE_3, GRADE_2 -> sw.getRandom().nextBoolean()
+                    ? new ItemStack(CursedToolRegistry.CURSED_DAGGER)
+                    : (CursedToolRegistry.THOUSAND_SPEAR != null
+                        ? new ItemStack(CursedToolRegistry.THOUSAND_SPEAR)
+                        : new ItemStack(CursedToolRegistry.CURSED_DAGGER));
+            case GRADE_1, SEMI_SPECIAL, SPECIAL -> {
+                var pool = new net.minecraft.item.Item[]{
+                    CursedToolRegistry.CURSED_DAGGER,
+                    CursedToolRegistry.THOUSAND_SPEAR,
+                    CursedToolRegistry.PLAYFUL_CLOUD,
+                    CursedToolRegistry.INVERTED_SPEAR,
+                    CursedToolRegistry.SPLIT_SOUL_BLADE
+                };
+                int roll = sw.getRandom().nextInt(pool.length);
+                yield pool[roll] != null ? new ItemStack(pool[roll]) : ItemStack.EMPTY;
+            }
+        };
+    }
 }

@@ -67,6 +67,28 @@ public class AuditLogger {
         });
     }
 
+    /** /jj audit 명령용 — 플레이어의 최근 감사로그 항목을 최신순으로 조회. */
+    public java.util.List<String> getRecentEvents(UUID playerUuid, int limit) {
+        String sql = "SELECT timestamp, event_type, detail FROM audit_log " +
+                "WHERE player_uuid = ? ORDER BY id DESC LIMIT ?";
+        java.util.List<String> result = new java.util.ArrayList<>();
+        synchronized (conn) {
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, playerUuid.toString());
+                ps.setInt(2, limit);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        result.add(String.format("[tick %d] %s — %s",
+                                rs.getLong("timestamp"), rs.getString("event_type"), rs.getString("detail")));
+                    }
+                }
+            } catch (SQLException e) {
+                LOGGER.error("AuditLogger.getRecentEvents failed: player={}", playerUuid, e);
+            }
+        }
+        return result;
+    }
+
     public void close() {
         try {
             if (conn != null && !conn.isClosed()) conn.close();

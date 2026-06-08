@@ -1,11 +1,14 @@
 package com.jjk.mixin;
 
 import com.jjk.JJKMod;
+import com.jjk.character.impl.NonSorcererSkillSet;
 import com.jjk.data.PlayerData;
 import com.jjk.grade.GradeManager;
 import net.minecraft.util.math.Vec3d;
 import com.jjk.network.s2c.AwakeningS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.entity.attribute.EntityAttributeInstance;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -38,6 +41,23 @@ public class ServerPlayerEntityMixin {
         if (data.burstActive && tickCount >= data.burstEndTick) {
             data.burstActive = false;
             ServerPlayNetworking.send(player, new AwakeningS2CPacket(false));
+            JJKMod.getPlayerRepository().save(data);
+        }
+        // 비술사 천여주박각성 만료 (§H-6: 600틱)
+        if (data.nsBurstExpireTick > 0L && tickCount >= data.nsBurstExpireTick) {
+            data.nsBurstExpireTick = 0L;
+            data.attackBoostMultiplier = 1.0f;
+            data.defenseBoostMultiplier = 1.0f;
+            EntityAttributeInstance speedAttr = player.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+            if (speedAttr != null) {
+                speedAttr.removeModifier(NonSorcererSkillSet.BURST_SPEED_MODIFIER_ID);
+            }
+            JJKMod.getPlayerRepository().save(data);
+        }
+        // 비술사 불굴 만료 (§H-6: 100틱)
+        if (data.nsShieldExpireTick > 0L && tickCount >= data.nsShieldExpireTick) {
+            data.nsShieldExpireTick = 0L;
+            data.nsDeathPreventUsed = false;
             JJKMod.getPlayerRepository().save(data);
         }
         // 반전술식 자기 치유: 1급 이상 또는 숙련도 7 이상 조건

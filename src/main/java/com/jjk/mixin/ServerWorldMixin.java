@@ -29,5 +29,6 @@ public class ServerWorldMixin {
         JJKMod.getEffectDeferQueue().tickWorld(world.getTime());
         JJKMod.getCurtainManager().tickCurtains(world, world.getTime());
         JJKMod.getDungeonManager().tickDungeons(world, world.getTime());
+        JJKMod.getTickScheduler().runServerTick(world.getServer(), world.getTime());
     }
 }

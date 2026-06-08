@@ -1,5 +1,6 @@
 package com.jjk.client.fx;
 
+import com.jjk.client.effect.SkillEffectRegistry;
 import com.jjk.client.hud.BlackFlashOverlay;
 import com.jjk.network.s2c.SkillEffectS2CPacket;
 import net.fabricmc.api.EnvType;
@@ -24,8 +25,12 @@ public final class SkillEffectRenderer {
 
     private static void handle(SkillEffectS2CPacket pkt, MinecraftClient mc) {
         if (mc.world == null) return;
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
 
+        // 1차: SkillEffectRegistry에 등록된 핸들러
+        if (SkillEffectRegistry.dispatch(pkt, mc)) return;
+
+        // 2차: 기존 폴백 switch (이전 effectType 문자열 호환)
+        double x = pkt.x(), y = pkt.y(), z = pkt.z();
         try {
             switch (pkt.effectType()) {
                 case "GOJO_BLUE_PULL"     -> spawnSphere(mc.world, ParticleTypes.DRAGON_BREATH, x, y, z, 3.0, 24);
@@ -80,7 +85,6 @@ public final class SkillEffectRenderer {
     private static void spawnExplosion(ClientWorld world, double x, double y, double z) {
         if (ParticleThrottle.canSpawn())
             world.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
-        // 주변 8개
         for (int i = 0; i < 8; i++) {
             if (!ParticleThrottle.canSpawn()) return;
             double angle = i * Math.PI / 4;

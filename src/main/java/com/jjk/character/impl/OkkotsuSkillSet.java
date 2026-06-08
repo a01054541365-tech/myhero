@@ -12,7 +12,6 @@ import com.jjk.data.PlayerData;
 import com.jjk.entity.RikaEntity;
 import com.jjk.entity.ShikigamiEntityTypes;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
-import com.jjk.network.s2c.AwakeningS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -23,16 +22,15 @@ import java.util.List;
 // §6-5 옷코츠 유타 스킬셋
 public class OkkotsuSkillSet implements ISkillSet {
 
-    // key 0: rika_summon, 1: sword_slash, 2: copy_technique, 3: rika_burst, 4: reverse_cursed_technique
+    // key 0: rika_summon, 1: sword_slash, 2: copy_technique, 3: okkotsu_true_mutual_love, 4: rct
     // CE/CD 수치: jjk_spec_v5.md §6-5
     private static final int CE_0 = 260,  CD_0 = 30,  ANIM_0 = 50;
-    private static final int CE_1 = 180,  CD_1 = 12,  ANIM_1 = 40;  // sword_slash animId §6-5
+    private static final int CE_1 = 180,  CD_1 = 12,  ANIM_1 = 40;
     private static final int CE_2 = 300,  CD_2 = 45,  ANIM_2 = 52;
-    private static final int CE_3 = 1100, CD_3 = 60,  ANIM_3 = 53;
+    private static final int CE_3 = 3000, CD_3 = 480, ANIM_3 = 41;  // 진판상애절단 영역
     private static final int CD_4 = 8;   // RCT: 업프런트 CE 없음, 드레인 방식
 
     private static final float SWORD_SLASH_DAMAGE = 60f;
-    private static final float BURST_DURATION_TICKS = 200f;  // 10초
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -40,7 +38,7 @@ public class OkkotsuSkillSet implements ISkillSet {
             case 0 -> useRikaSummon(player);
             case 1 -> useSwordSlash(player);
             case 2 -> useCopyTechnique(player);
-            case 3 -> useRikaBurst(player);
+            case 3 -> useTrueMutualLove(player);
             case 4 -> useRCT(player);
             default -> SkillResult.FAIL;
         };
@@ -75,7 +73,7 @@ public class OkkotsuSkillSet implements ISkillSet {
     public String getSkillName(int keyId) {
         return switch (keyId) {
             case 0 -> "rika_summon"; case 1 -> "sword_slash"; case 2 -> "copy_technique";
-            case 3 -> "rika_burst"; case 4 -> "reverse_cursed_technique"; default -> "unknown";
+            case 3 -> "okkotsu_true_mutual_love"; case 4 -> "reverse_cursed_technique"; default -> "unknown";
         };
     }
 
@@ -196,19 +194,23 @@ public class OkkotsuSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // ─── key 3: 주력해방 ──────────────────────────────────────────────────────────
-    private SkillResult useRikaBurst(ServerPlayerEntity player) {
+    // ─── key 3: 진판상애절단 영역 전개 — 복사 술식 필중 발동 후 종료 ──────────────
+    private SkillResult useTrueMutualLove(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(3), tick)) return SkillResult.ON_COOLDOWN;
         if (!JJKMod.getCEManager().canAfford(player, CE_3)) return SkillResult.CE_INSUFFICIENT;
+        if (data.lastReceivedSkillId == null) return SkillResult.FAIL_CONDITION;
 
-        data.burstActive = true;
-        data.burstEndTick = tick + (long) BURST_DURATION_TICKS;
-        JJKMod.getCEManager().consume(player, CE_3);
-        CooldownManager.set(data, cdKey(3), tick, CD_3);
-        JJKMod.getPlayerRepository().save(data);
-        ServerPlayNetworking.send(player, new AwakeningS2CPacket(true));
+        // deployDomain이 CE 차감 + domainCooldownUntil + saveImmediate 처리
+        if (!JJKMod.getDomainManager().deployDomain(player, "okkotsu_true_mutual_love", player.getBlockPos()))
+            return SkillResult.FAIL_CONDITION;
+
+        // deployDomain 이후 freshLoad로 CooldownManager 설정 (CE double-deduction 방지)
+        PlayerData fresh = JJKMod.getPlayerRepository().load(player.getUuid());
+        CooldownManager.set(fresh, cdKey(3), tick, CD_3);
+        JJKMod.getPlayerRepository().save(fresh);
+        broadcastAnim(player, ANIM_3);
         return SkillResult.SUCCESS;
     }
 
@@ -256,12 +258,11 @@ public class OkkotsuSkillSet implements ISkillSet {
     @Override public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick)      { return player == null ? SkillResult.SUCCESS : useCopyTechnique(player); }
     @Override public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (player == null) {
-            // 순수 PlayerData 경로 (테스트용): data 직접 세팅
             data.burstActive = true;
-            data.burstEndTick = tick + (long) BURST_DURATION_TICKS;
+            data.burstEndTick = tick + 200;
             return SkillResult.SUCCESS;
         }
-        return useRikaBurst(player);
+        return useTrueMutualLove(player);
     }
     @Override public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick)      { return player == null ? SkillResult.SUCCESS : useRCT(player); }
 }

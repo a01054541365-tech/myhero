@@ -30,13 +30,21 @@ public class CharacterSelectScreen extends Screen {
         CHARACTER_NAMES.put("nanami",   "나나미 켄토");
         CHARACTER_NAMES.put("higuruma", "히구루마 히로미");
         CHARACTER_NAMES.put("sukuna",   "료멘 스쿠나");
+        CHARACTER_NAMES.put("choso",    "초소");
     }
 
     private final List<String> availableCharacters;
+    private final String currentCharacterId; // null = 미선택
 
-    public CharacterSelectScreen(List<String> availableCharacters) {
+    public CharacterSelectScreen(List<String> availableCharacters, String currentCharacterId) {
         super(Text.literal("캐릭터 선택"));
         this.availableCharacters = availableCharacters;
+        this.currentCharacterId = currentCharacterId;
+    }
+
+    // CharacterSelectS2CPacket 핸들러 등 기존 호출 지점 호환
+    public CharacterSelectScreen(List<String> availableCharacters) {
+        this(availableCharacters, null);
     }
 
     @Override
@@ -54,6 +62,9 @@ public class CharacterSelectScreen extends Screen {
             int x = startX + col * (btnW + gap);
             int y = startY + row * (btnH + gap);
             String label = CHARACTER_NAMES.getOrDefault(charId, charId);
+            if (charId.equals(currentCharacterId)) {
+                label = "§e★ " + label; // 현재 선택 캐릭터 강조
+            }
             addDrawableChild(ButtonWidget.builder(
                 Text.literal(label),
                 btn -> selectCharacter(charId)
@@ -74,6 +85,14 @@ public class CharacterSelectScreen extends Screen {
     }
 
     private void selectCharacter(String charId) {
+        if (charId.equals(currentCharacterId)) {
+            // 재선택 경고 — 서버에 전송하지 않음
+            if (client != null && client.player != null) {
+                client.player.sendMessage(
+                    Text.literal("§6[JJK] 이미 선택된 캐릭터입니다. Esc로 닫거나 다른 캐릭터를 선택하세요."), true);
+            }
+            return;
+        }
         ClientPlayNetworking.send(new CharacterSelectC2SPacket(charId));
         close();
     }

@@ -54,6 +54,16 @@ public record SkillUseC2SPacket(UUID playerUuid, byte keyId, UUID targetUuid)
             }
             PlayerData data = JJKMod.getPlayerRepository().load(ctx.player().getUuid());
             if (data.characterId == null) return;
+            // J-2-3: 격리된 플레이어는 스킬 발동 전면 차단
+            if (data.quarantined) {
+                if (JJKMod.getAuditLogger() != null) {
+                    JJKMod.getAuditLogger().logEvent("QUARANTINE_BLOCK",
+                            ctx.player().getUuid(), "{\"keyId\":" + keyIdInt + "}", 0L);
+                }
+                ServerPlayNetworking.send(ctx.player(),
+                        new SkillResultS2CPacket(keyIdInt, SkillResult.FAIL_QUARANTINED.name(), 0f));
+                return;
+            }
             // 천여주박: CE 0 시 스킬 사용 불가
             if (!JJKMod.getCEManager().canUseSkill(data)) {
                 ServerPlayNetworking.send(ctx.player(),
@@ -62,8 +72,19 @@ public record SkillUseC2SPacket(UUID playerUuid, byte keyId, UUID targetUuid)
             }
             ISkillSet skillSet = SkillRegistry.get(data.characterId);
             if (skillSet == null) return;
+            String skillName = skillSet.getSkillName(keyIdInt);
+            long tick = ctx.player().getWorld().getTime();
+            if (data.sealExpireTick > tick && data.sealedSkills.contains(skillName)) {
+                ServerPlayNetworking.send(ctx.player(),
+                        new SkillResultS2CPacket(keyIdInt, SkillResult.FAIL_SKILL_SEALED.name(), 0f));
+                return;
+            }
             SkillResult result = skillSet.use(ctx.player(), keyIdInt);
             if (result == SkillResult.SUCCESS) {
+                PlayerData fresh = JJKMod.getPlayerRepository().load(ctx.player().getUuid());
+                fresh.lastUsedSkillId = skillName;
+                JJKMod.getPlayerRepository().save(fresh);
+
                 int cdTicks = skillSet.getCooldownTicks(keyIdInt);
                 if (cdTicks > 0) {
                     ServerPlayNetworking.send(ctx.player(),

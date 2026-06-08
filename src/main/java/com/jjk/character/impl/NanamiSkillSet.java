@@ -1,6 +1,7 @@
 package com.jjk.character.impl;
 
 import com.jjk.JJKMod;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.api.combat.IDamageSource;
 import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
@@ -130,6 +131,13 @@ public class NanamiSkillSet implements ISkillSet {
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd)
                 .skillName("십획주법").keyId(0).build();
         JJKMod.getCombatPipeline().process(ctx);
+
+        // 7:3 약점 명중 업적 누적
+        if (isWeakness) {
+            long cnt = data.cooldowns.getOrDefault("adv_nanami_ratio", 0L) + 1L;
+            data.cooldowns.put("adv_nanami_ratio", cnt);
+            AdvancementTriggerManager.onNanamiRatioHit(player, (int) cnt);
+        }
 
         // 쿨타임 세팅 + 저장 + 애니메이션
         data.cooldowns.put("0", tick + CD_F);

@@ -1,6 +1,7 @@
 package com.jjk.character.impl;
 
 import com.jjk.JJKMod;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.api.combat.IDamageSource;
 import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
@@ -18,6 +19,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class HakariSkillSet implements ISkillSet {
 
@@ -34,6 +36,10 @@ public class HakariSkillSet implements ISkillSet {
     private static final int JACKPOT_ODDS = 239;
     // ???????묅뫀???(??λ뻻??30??= 600??
     private static final int POST_JACKPOT_CD = 600;
+
+    // 동시 잭팟 상한 (P2-3): TPS 보호
+    private static final AtomicInteger activeJackpots = new AtomicInteger(0);
+    private static final int MAX_CONCURRENT_JACKPOTS = 2;
 
     private static final Random RANDOM = new Random();
 
@@ -94,7 +100,22 @@ public class HakariSkillSet implements ISkillSet {
 
         data.ceCurrent -= CE_F;
         boolean jackpot = JackpotStateMachine.tryJackpot(data, tick, JJKMod.getConfig());
-        if (!jackpot) data.ceCurrent += CE_F;
+        if (jackpot) {
+            if (activeJackpots.get() >= MAX_CONCURRENT_JACKPOTS) {
+                data.jackpotActive = false;
+                data.jackpotEndTick = 0L;
+                jackpot = false;
+            } else {
+                activeJackpots.incrementAndGet();
+                long streak = data.cooldowns.getOrDefault("adv_jackpot_streak", 0L) + 1L;
+                data.cooldowns.put("adv_jackpot_streak", streak);
+                if (player != null) AdvancementTriggerManager.onHakariJackpotStreak(player, (int) streak);
+            }
+        }
+        if (!jackpot) {
+            data.ceCurrent += CE_F;
+            data.cooldowns.put("adv_jackpot_streak", 0L);
+        }
         data.cooldowns.put("0", tick + 20);
         ServerPlayNetworking.send(player,
                 new SkillResultS2CPacket(0, jackpot ? "jackpot_success" : "jackpot_fail", 0f));
@@ -185,8 +206,14 @@ public class HakariSkillSet implements ISkillSet {
 
         boolean canJackpot = (tick - data.lastJackpotAttemptTick) >= POST_JACKPOT_CD;
         boolean jackpot = canJackpot && RANDOM.nextInt(JACKPOT_ODDS) == 0;
+        if (jackpot && activeJackpots.get() >= MAX_CONCURRENT_JACKPOTS) {
+            player.sendMessage(
+                    net.minecraft.text.Text.literal("[JJK] 현재 잭팟이 최대 동시 발동 중입니다."), true);
+            jackpot = false;
+        }
         if (jackpot) {
             // 吏쟊OCK: jackpotDurationTicks??config?癒?퐣筌???뚯벉, ?꾨뗀諭???롫굡?꾨뗀逾?疫뀀뜆?
+            activeJackpots.incrementAndGet();
             int duration = JJKMod.getConfig().jackpotDurationTicks;
             data.jackpotActive = true;
             data.jackpotEndTick = tick + duration;
@@ -343,6 +370,7 @@ public class HakariSkillSet implements ISkillSet {
             data.jackpotActive = false;
             data.jackpotEndTick = 0L;
             data.lastJackpotAttemptTick = currentTick;
+            activeJackpots.updateAndGet(v -> Math.max(0, v - 1));
             JJKMod.getPlayerRepository().save(data);
         }
     }

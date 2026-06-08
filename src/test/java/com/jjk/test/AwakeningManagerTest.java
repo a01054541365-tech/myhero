@@ -9,23 +9,23 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-// §LOCK: 160틱 / 2400틱. HP 임계(awakeningHpThreshold=0.05) 및 배율(awakeningMultiplier=1.5)은 config 참조.
+// §LOCK: 160틱 / 2400틱. HP 임계(awakeningHpThreshold=0.10) 및 배율(awakeningMultiplier=1.5)은 config 참조.
 class AwakeningManagerTest {
 
     private final AwakeningManager mgr = new AwakeningManager(new JjkConfig());
 
     @Test
     void testActivationThreshold() {
-        // HP 4.5% (< 5%) → 각성 발동
+        // HP 4.5% (< 10%) → 각성 발동
         PlayerData data1 = PlayerData.createDefault(UUID.randomUUID());
         float maxHp = 20f;
         mgr.checkAndActivate(data1, maxHp * 0.045f, maxHp, 0L);
         assertTrue(data1.awakeningActive, "HP 4.5% → 각성 발동해야 한다");
 
-        // HP 5.5% (> 5%) → 미발동
+        // HP 11% (> 10%) → 미발동
         PlayerData data2 = PlayerData.createDefault(UUID.randomUUID());
-        mgr.checkAndActivate(data2, maxHp * 0.055f, maxHp, 0L);
-        assertFalse(data2.awakeningActive, "HP 5.5% → 각성 미발동해야 한다");
+        mgr.checkAndActivate(data2, maxHp * 0.11f, maxHp, 0L);
+        assertFalse(data2.awakeningActive, "HP 11% → 각성 미발동해야 한다");
     }
 
     @Test

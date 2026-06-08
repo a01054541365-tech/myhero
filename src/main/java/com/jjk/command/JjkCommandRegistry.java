@@ -4,16 +4,22 @@ import com.jjk.JJKMod;
 import com.jjk.burden.BurdenManager;
 import com.jjk.dungeon.DungeonManager;
 import com.jjk.character.CharacterCommandService;
+import com.jjk.item.CursedCrystalItem;
+import com.jjk.item.JJKItems;
 import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.CursedSpiritEntity;
 import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.CursedSpiritGrade;
+import com.jjk.entity.JJKEntities;
+import com.jjk.entity.cursed.*;
 import com.jjk.grade.GradeManager;
 import com.jjk.item.CursedToolItem;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.item.GuideBookItem;
 import com.jjk.network.s2c.CharacterSelectS2CPacket;
+import com.jjk.team.TeamManager;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -30,6 +36,7 @@ import net.minecraft.util.math.BlockPos;
 
 import java.nio.file.Path;
 import java.util.Set;
+import java.util.UUID;
 
 public final class JjkCommandRegistry {
 
@@ -84,6 +91,34 @@ public final class JjkCommandRegistry {
     private static final Set<String> VALID_GRADES =
         Set.of("4급", "3급", "2급", "1급", "준특급", "특급");
 
+    private static int spawnCursed(ServerCommandSource src, String entityId, int count) {
+        ServerPlayerEntity player = src.getPlayer();
+        if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+        if (!(player.getWorld() instanceof ServerWorld world)) return 0;
+        BlockPos pos = player.getBlockPos();
+        for (int i = 0; i < count; i++) {
+            net.minecraft.entity.mob.HostileEntity entity = switch (entityId) {
+                case "muki"     -> JJKEntities.MUKI     != null ? JJKEntities.MUKI.create(world)     : null;
+                case "kotsibaku"-> JJKEntities.KOTSIBAKU != null ? JJKEntities.KOTSIBAKU.create(world) : null;
+                case "homuraku" -> JJKEntities.HOMURAKU  != null ? JJKEntities.HOMURAKU.create(world)  : null;
+                case "juugo"    -> JJKEntities.JUUGO_NPC != null ? JJKEntities.JUUGO_NPC.create(world) : null;
+                case "jogo"     -> JJKEntities.JOGO_NPC  != null ? JJKEntities.JOGO_NPC.create(world)  : null;
+                case "hannami"  -> JJKEntities.HANNAMI_NPC != null ? JJKEntities.HANNAMI_NPC.create(world) : null;
+                default -> null;
+            };
+            if (entity == null) {
+                src.sendError(Text.literal("[JJK] 알 수 없는 엔티티ID: " + entityId));
+                return 0;
+            }
+            entity.refreshPositionAndAngles(
+                pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0f, 0f);
+            world.spawnEntity(entity);
+        }
+        src.sendFeedback(() -> Text.literal(
+            "[JJK] 주령 소환: " + entityId + " ×" + count + " @ " + pos.toShortString()), true);
+        return 1;
+    }
+
     private static int showStatus(ServerCommandSource src, PlayerData data, String name) {
         String char_ = data.characterId != null ? data.characterId : "미선택";
         String grade = data.grade != null ? data.grade : "-";
@@ -95,9 +130,185 @@ public final class JjkCommandRegistry {
         src.sendFeedback(() -> Text.literal(
             "HP: " + (int)data.hpCurrent + " / " + (int)data.hpMax), false);
         src.sendFeedback(() -> Text.literal("숙련도: " + data.mastery), false);
+        src.sendFeedback(() -> Text.literal("주력 조작: " + String.format("%.2f", data.ceControl)), false);
         src.sendFeedback(() -> Text.literal("손가락: " + data.fingerCount), false);
         src.sendFeedback(() -> Text.literal("==========================="), false);
         return 1;
+    }
+
+    private static int printGradeInfo(ServerCommandSource src, PlayerData data, String name) {
+        String charId = data.characterId != null ? data.characterId : "미선택";
+        String grade  = data.grade != null ? data.grade : "-";
+        int mastery   = data.mastery;
+        src.sendFeedback(() -> Text.literal(
+            "[JJK] " + name + " | 캐릭터: " + charId + " | 등급: " + grade
+            + " | 숙련도: 평균 Lv." + mastery), false);
+        return 1;
+    }
+
+    private static int giveSelectionBook(ServerCommandSource src, ServerPlayerEntity target) {
+        if (JJKItems.CHARACTER_SELECTION_BOOK == null) {
+            src.sendError(Text.literal("[JJK] 선택 책 아이템 미등록"));
+            return 0;
+        }
+        net.minecraft.item.ItemStack book = new net.minecraft.item.ItemStack(JJKItems.CHARACTER_SELECTION_BOOK);
+        if (!target.getInventory().insertStack(book)) {
+            target.dropItem(book, false);
+        }
+        final String tName = target.getName().getString();
+        src.sendFeedback(() -> Text.literal("[JJK] 캐릭터 선택 책 지급 → " + tName), true);
+        return 1;
+    }
+
+    // /jj rollback player <player> <backupFile> — 백업 DB에서 PlayerData 추출 복원 (OP 2)
+    private static int rollbackPlayer(ServerCommandSource src, ServerPlayerEntity target, String backupFile) {
+        net.minecraft.server.MinecraftServer server = src.getServer();
+        Path backupPath = com.jjk.data.backup.RotatingBackup.backupDir(server).resolve(backupFile);
+        if (!java.nio.file.Files.exists(backupPath)) {
+            src.sendError(Text.literal("[JJK] 백업 파일을 찾을 수 없습니다: " + backupFile));
+            return 0;
+        }
+
+        com.jjk.data.PlayerRepository repo = JJKMod.getPlayerRepository();
+        PlayerData restored = repo.loadFromBackup(backupPath, target.getUuid());
+        if (restored == null) {
+            src.sendError(Text.literal("[JJK] 백업 파일에 해당 플레이어 데이터가 없습니다: " + target.getName().getString()));
+            return 0;
+        }
+
+        // 복원 전: 현재 player_data.db 전체를 .bak으로 저장 (덮어쓰기 방지)
+        try {
+            Path dbPath = server.getSavePath(net.minecraft.util.WorldSavePath.ROOT).resolve("jjk").resolve("player_data.db");
+            Path dir = com.jjk.data.backup.RotatingBackup.backupDir(server);
+            java.nio.file.Files.createDirectories(dir);
+            String ts = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+            Path preRollback = dir.resolve("pre_rollback_" + target.getUuid() + "_" + ts + ".db.bak");
+            java.nio.file.Files.copy(dbPath, preRollback, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.io.IOException e) {
+            src.sendError(Text.literal("[JJK] 복원 전 백업 실패 — 작업을 중단합니다: " + e.getMessage()));
+            return 0;
+        }
+
+        long tick = target.getWorld().getTime();
+        repo.saveImmediate(restored);
+
+        target.networkHandler.disconnect(Text.literal("[JJK] 관리자에 의해 데이터가 복원되었습니다. 다시 접속해 주세요."));
+
+        if (JJKMod.getAuditLogger() != null) {
+            JJKMod.getAuditLogger().logEvent("admin_cmd", target.getUuid(),
+                    "{\"event\":\"rollback_player\",\"backupFile\":\"" + backupFile
+                            + "\",\"by\":\"" + src.getName() + "\"}", tick);
+        }
+        com.jjk.discord.DiscordWebhook.sendAsync("[JJK 롤백] " + target.getName().getString()
+                + " 의 데이터를 백업 '" + backupFile + "' 로 복원했습니다. (실행자: " + src.getName() + ")");
+
+        final String name = target.getName().getString();
+        src.sendFeedback(() -> Text.literal("[JJK] " + name + " 데이터를 '" + backupFile
+                + "'에서 복원하고 강제 퇴장시켰습니다."), true);
+        return 1;
+    }
+
+    // /jj rollback domain <domainId> — 미복구 블록 전체 즉시 복구 (OP 2)
+    private static int rollbackDomain(ServerCommandSource src, String domainId) {
+        net.minecraft.server.MinecraftServer server = src.getServer();
+        com.jjk.domain.DomainBlockQueue queue = JJKMod.getDomainBlockQueue();
+        if (queue == null) {
+            src.sendError(Text.literal("[JJK] 영역 블록 큐가 초기화되지 않았습니다."));
+            return 0;
+        }
+        int restored = queue.rollbackDomain(server, domainId);
+
+        UUID actor = actorUuid(src);
+        if (JJKMod.getAuditLogger() != null) {
+            JJKMod.getAuditLogger().logEvent("admin_cmd", actor,
+                    "{\"event\":\"rollback_domain\",\"domainId\":\"" + domainId
+                            + "\",\"restored\":" + restored + ",\"by\":\"" + src.getName() + "\"}", 0L);
+        }
+        com.jjk.discord.DiscordWebhook.sendAsync("[JJK 롤백] 영역 '" + domainId + "' 미복구 블록 "
+                + restored + "개 복구 완료 (실행자: " + src.getName() + ")");
+
+        src.sendFeedback(() -> Text.literal("[JJK] 영역 '" + domainId + "' 미복구 블록 " + restored + "개를 복구했습니다."), true);
+        return 1;
+    }
+
+    // /jj rollback chunk <x> <z> — 지정 청크의 미복구 블록 즉시 복구 (OP 2)
+    private static int rollbackChunk(ServerCommandSource src, int chunkX, int chunkZ) {
+        ServerPlayerEntity player = src.getPlayer();
+        if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+        if (!(player.getWorld() instanceof ServerWorld world)) return 0;
+
+        com.jjk.domain.DomainBlockQueue queue = JJKMod.getDomainBlockQueue();
+        if (queue == null) {
+            src.sendError(Text.literal("[JJK] 영역 블록 큐가 초기화되지 않았습니다."));
+            return 0;
+        }
+        int restored = queue.rollbackChunk(world, chunkX, chunkZ);
+        if (restored < 0) {
+            src.sendError(Text.literal("청크가 로드되지 않았습니다. 해당 위치로 이동 후 재시도."));
+            return 0;
+        }
+
+        UUID actor = actorUuid(src);
+        if (JJKMod.getAuditLogger() != null) {
+            JJKMod.getAuditLogger().logEvent("admin_cmd", actor,
+                    "{\"event\":\"rollback_chunk\",\"chunkX\":" + chunkX + ",\"chunkZ\":" + chunkZ
+                            + ",\"restored\":" + restored + ",\"by\":\"" + src.getName() + "\"}", world.getTime());
+        }
+        com.jjk.discord.DiscordWebhook.sendAsync("[JJK 롤백] 청크 (" + chunkX + ", " + chunkZ + ") 미복구 블록 "
+                + restored + "개 복구 완료 (실행자: " + src.getName() + ")");
+
+        src.sendFeedback(() -> Text.literal("[JJK] 청크 (" + chunkX + ", " + chunkZ + ") 미복구 블록 "
+                + restored + "개를 복구했습니다."), true);
+        return 1;
+    }
+
+    // audit_log.player_uuid는 NOT NULL — 콘솔 실행 시 시스템 플레이스홀더 UUID 사용
+    private static UUID actorUuid(ServerCommandSource src) {
+        ServerPlayerEntity p = src.getPlayer();
+        return p != null ? p.getUuid() : new UUID(0L, 0L);
+    }
+
+    // /jj listbackups — run/backups/jjk/ 백업 파일 목록 (최근 10개, 크기·생성시각) (OP 2)
+    private static int listBackups(ServerCommandSource src) {
+        net.minecraft.server.MinecraftServer server = src.getServer();
+        Path dir = com.jjk.data.backup.RotatingBackup.backupDir(server);
+        if (!java.nio.file.Files.isDirectory(dir)) {
+            src.sendFeedback(() -> Text.literal("[JJK] 백업 디렉터리가 없습니다: " + dir), false);
+            return 1;
+        }
+
+        java.time.format.DateTimeFormatter fmt =
+                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        try (java.util.stream.Stream<Path> stream = java.nio.file.Files.list(dir)) {
+            java.util.List<Path> files = stream
+                    .filter(java.nio.file.Files::isRegularFile)
+                    .sorted(java.util.Comparator.comparing((Path p) -> {
+                        try { return java.nio.file.Files.getLastModifiedTime(p); }
+                        catch (java.io.IOException e) { return java.nio.file.attribute.FileTime.fromMillis(0L); }
+                    }).reversed())
+                    .limit(10)
+                    .toList();
+
+            if (files.isEmpty()) {
+                src.sendFeedback(() -> Text.literal("[JJK] 백업 파일이 없습니다."), false);
+                return 1;
+            }
+
+            src.sendFeedback(() -> Text.literal("=== [JJK] 최근 백업 파일 (최대 10개) ==="), false);
+            for (Path p : files) {
+                long size = java.nio.file.Files.size(p);
+                String created = java.time.LocalDateTime.ofInstant(
+                        java.nio.file.Files.getLastModifiedTime(p).toInstant(),
+                        java.time.ZoneId.systemDefault()).format(fmt);
+                final String line = String.format("  %s — %,d bytes — %s",
+                        p.getFileName().toString(), size, created);
+                src.sendFeedback(() -> Text.literal(line), false);
+            }
+            return 1;
+        } catch (java.io.IOException e) {
+            src.sendError(Text.literal("[JJK] 백업 목록 조회 실패: " + e.getMessage()));
+            return 0;
+        }
     }
 
     private static int doResetCooldowns(ServerCommandSource src, PlayerData data) {
@@ -436,6 +647,61 @@ public final class JjkCommandRegistry {
                         })
                     )
 
+                    // /jj economy — CE 결정체 보유량 / give (P3-1)
+                    .then(CommandManager.literal("economy")
+                        // /jj economy — 자신의 결정체 수량 확인
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) {
+                                src.sendError(Text.literal("플레이어만 사용 가능합니다."));
+                                return 0;
+                            }
+                            int count = 0;
+                            if (CursedCrystalItem.INSTANCE != null) {
+                                for (int i = 0; i < player.getInventory().size(); i++) {
+                                    net.minecraft.item.ItemStack s = player.getInventory().getStack(i);
+                                    if (s.getItem() == CursedCrystalItem.INSTANCE) count += s.getCount();
+                                }
+                            }
+                            final int crystals = count;
+                            PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+                            src.sendFeedback(() -> Text.literal(
+                                "[JJK] CE 결정체: " + crystals + "개 | 주력석: " + data.cursedStones), false);
+                            return 1;
+                        })
+                        // /jj economy give <player> <amount> — OP 2
+                        .then(CommandManager.literal("give")
+                            .requires(src -> src.hasPermissionLevel(2))
+                            .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .then(CommandManager.argument("amount",
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 9999))
+                                    .executes(ctx -> {
+                                        ServerCommandSource src = ctx.getSource();
+                                        ServerPlayerEntity target =
+                                            EntityArgumentType.getPlayer(ctx, "target");
+                                        int amount = com.mojang.brigadier.arguments.IntegerArgumentType
+                                            .getInteger(ctx, "amount");
+                                        if (CursedCrystalItem.INSTANCE == null) {
+                                            src.sendError(Text.literal("[JJK] 아이템 미등록"));
+                                            return 0;
+                                        }
+                                        net.minecraft.item.ItemStack crystal =
+                                            new net.minecraft.item.ItemStack(
+                                                CursedCrystalItem.INSTANCE, amount);
+                                        if (!target.getInventory().insertStack(crystal)) {
+                                            target.dropItem(crystal, false);
+                                        }
+                                        final String tName = target.getName().getString();
+                                        src.sendFeedback(() -> Text.literal(
+                                            "[JJK] CE 결정체 " + amount + "개 → " + tName), true);
+                                        return 1;
+                                    })
+                                )
+                            )
+                        )
+                    )
+
                     // /jj top — 등급 랭킹 상위 5명 (플레이어 권한)
                     .then(CommandManager.literal("top")
                         .executes(ctx -> {
@@ -488,6 +754,24 @@ public final class JjkCommandRegistry {
                         )
                     )
 
+                    // /jj grade [player] — 등급·캐릭터·숙련도 조회 (레벨 0)
+                    .then(CommandManager.literal("grade")
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                            PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+                            return printGradeInfo(src, data, player.getName().getString());
+                        })
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                return printGradeInfo(ctx.getSource(), data, target.getName().getString());
+                            })
+                        )
+                    )
+
                     // /jj setgrade <target> <grade> — 등급 강제 설정 (OP 2)
                     .then(CommandManager.literal("setgrade")
                         .requires(src -> src.hasPermissionLevel(2))
@@ -509,13 +793,231 @@ public final class JjkCommandRegistry {
                                     }
                                     PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
                                     data.grade = grade;
+                                    JJKMod.getGradeManager().applyGradeUnlocks(data, grade);
                                     JJKMod.getPlayerRepository().saveImmediate(data);
+                                    if (JJKMod.getAuditLogger() != null) {
+                                        JJKMod.getAuditLogger().logEvent("admin_setgrade", target.getUuid(),
+                                            "{\"grade\":\"" + grade + "\",\"by\":\"" + src.getName() + "\"}",
+                                            target.getWorld().getTime());
+                                    }
                                     final String tName = target.getName().getString();
                                     src.sendFeedback(() -> Text.literal(
                                         "[JJK] " + tName + " 등급 → " + grade), true);
                                     return 1;
                                 })
                             )
+                        )
+                    )
+
+                    // /jj givebook [player] — 캐릭터 선택 책 지급 (OP 2)
+                    .then(CommandManager.literal("givebook")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                            return giveSelectionBook(src, player);
+                        })
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                return giveSelectionBook(src, target);
+                            })
+                        )
+                    )
+
+                    // /jj chat faction <message> / /jj chat all <message>
+                    .then(CommandManager.literal("chat")
+                        .then(CommandManager.literal("faction")
+                            .then(CommandManager.argument("message", StringArgumentType.greedyString())
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity player = src.getPlayer();
+                                    if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                    String message = StringArgumentType.getString(ctx, "message");
+                                    PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+                                    TeamManager.Team myTeam = TeamManager.getTeam(data.characterId);
+                                    String teamLabel = switch (myTeam) {
+                                        case JUJUTSU_SORCERER -> "주술사";
+                                        case CURSED_SPIRIT    -> "주령";
+                                        default               -> "일반";
+                                    };
+                                    String formatted = "[" + teamLabel + "] " + player.getName().getString() + ": " + message;
+                                    player.getServer().getPlayerManager().getPlayerList().stream()
+                                        .filter(p -> {
+                                            PlayerData pd = JJKMod.getPlayerRepository().load(p.getUuid());
+                                            return TeamManager.getTeam(pd.characterId) == myTeam;
+                                        })
+                                        .forEach(p -> p.sendMessage(Text.literal(formatted), false));
+                                    return 1;
+                                })
+                            )
+                        )
+                        .then(CommandManager.literal("all")
+                            .then(CommandManager.argument("message", StringArgumentType.greedyString())
+                                .executes(ctx -> {
+                                    ServerCommandSource src = ctx.getSource();
+                                    ServerPlayerEntity player = src.getPlayer();
+                                    if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                    String message = StringArgumentType.getString(ctx, "message");
+                                    String formatted = "[전체] " + player.getName().getString() + ": " + message;
+                                    player.getServer().getPlayerManager().broadcast(Text.literal(formatted), false);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj spawncursed <entityId> [count] — 명칭 주령 소환 (OP 2)
+                    .then(CommandManager.literal("spawncursed")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("entityId", StringArgumentType.word())
+                            .suggests((ctx, builder) -> {
+                                java.util.stream.Stream.of(
+                                    "muki", "kotsibaku", "homuraku",
+                                    "juugo", "jogo", "hannami")
+                                    .forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(ctx -> spawnCursed(
+                                ctx.getSource(),
+                                StringArgumentType.getString(ctx, "entityId"), 1))
+                            .then(CommandManager.argument("count",
+                                    IntegerArgumentType.integer(1, 5))
+                                .executes(ctx -> spawnCursed(
+                                    ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "entityId"),
+                                    IntegerArgumentType.getInteger(ctx, "count"))))
+                        )
+                    )
+
+                    // /jj db migrate — SQLite 상태 확인 (OP 4)
+                    .then(CommandManager.literal("db")
+                        .requires(src -> src.hasPermissionLevel(4))
+                        .then(CommandManager.literal("migrate")
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                src.sendFeedback(() -> Text.literal(
+                                    "[JJK] 데이터베이스는 이미 SQLite를 사용하고 있습니다. (schemaVersion=" +
+                                    com.jjk.data.Migrator.CURRENT_VERSION + ")"), true);
+                                return 1;
+                            })
+                        )
+                    )
+
+                    // /jj rollback player|domain|chunk — OP 2: 데이터·블록 롤백
+                    .then(CommandManager.literal("rollback")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("player")
+                            .then(CommandManager.argument("target", EntityArgumentType.player())
+                                .then(CommandManager.argument("backupFile", StringArgumentType.string())
+                                    .executes(ctx -> rollbackPlayer(
+                                        ctx.getSource(),
+                                        EntityArgumentType.getPlayer(ctx, "target"),
+                                        StringArgumentType.getString(ctx, "backupFile")))
+                                )
+                            )
+                        )
+                        .then(CommandManager.literal("domain")
+                            .then(CommandManager.argument("domainId", StringArgumentType.word())
+                                .executes(ctx -> rollbackDomain(
+                                    ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "domainId")))
+                            )
+                        )
+                        .then(CommandManager.literal("chunk")
+                            .then(CommandManager.argument("x", IntegerArgumentType.integer())
+                                .then(CommandManager.argument("z", IntegerArgumentType.integer())
+                                    .executes(ctx -> rollbackChunk(
+                                        ctx.getSource(),
+                                        IntegerArgumentType.getInteger(ctx, "x"),
+                                        IntegerArgumentType.getInteger(ctx, "z")))
+                                )
+                            )
+                        )
+                    )
+
+                    // /jj listbackups — OP 2: run/backups/jjk/ 최근 백업 목록
+                    .then(CommandManager.literal("listbackups")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .executes(ctx -> listBackups(ctx.getSource()))
+                    )
+
+                    // /jj audit <player> — OP 2: antiAbuseFlags + 최근 감사로그 10개
+                    .then(CommandManager.literal("audit")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+
+                                src.sendFeedback(() -> Text.literal("=== [JJK] 감사 — " + target.getName().getString() + " ==="), false);
+                                src.sendFeedback(() -> Text.literal("격리 상태: " + (data.quarantined ? "예" : "아니오")), false);
+                                if (data.antiAbuseFlags.isEmpty()) {
+                                    src.sendFeedback(() -> Text.literal("이상행동 플래그: 없음"), false);
+                                } else {
+                                    src.sendFeedback(() -> Text.literal("이상행동 플래그 (" + data.antiAbuseFlags.size() + "):"), false);
+                                    for (String flag : data.antiAbuseFlags) {
+                                        src.sendFeedback(() -> Text.literal("  - " + flag), false);
+                                    }
+                                }
+
+                                src.sendFeedback(() -> Text.literal("최근 감사로그:"), false);
+                                if (JJKMod.getAuditLogger() != null) {
+                                    var events = JJKMod.getAuditLogger().getRecentEvents(target.getUuid(), 10);
+                                    if (events.isEmpty()) {
+                                        src.sendFeedback(() -> Text.literal("  (기록 없음)"), false);
+                                    } else {
+                                        for (String event : events) {
+                                            src.sendFeedback(() -> Text.literal("  " + event), false);
+                                        }
+                                    }
+                                }
+                                src.sendFeedback(() -> Text.literal("==========================="), false);
+                                return 1;
+                            })
+                        )
+                    )
+
+                    // /jj quarantine <player> — OP 2: 스킬 발동 전면 차단
+                    .then(CommandManager.literal("quarantine")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                data.quarantined = true;
+                                JJKMod.getPlayerRepository().saveImmediate(data);
+                                if (JJKMod.getAuditLogger() != null) {
+                                    JJKMod.getAuditLogger().logEvent("admin_cmd", target.getUuid(),
+                                            "{\"event\":\"quarantine\",\"by\":\"" + src.getName() + "\"}", 0L);
+                                }
+                                src.sendFeedback(() -> Text.literal("[JJK] " + target.getName().getString() + " 격리 처리 — 스킬 발동이 차단됩니다."), true);
+                                return 1;
+                            })
+                        )
+                    )
+
+                    // /jj unquarantine <player> — OP 2: 격리 해제
+                    .then(CommandManager.literal("unquarantine")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+                                PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+                                data.quarantined = false;
+                                JJKMod.getPlayerRepository().saveImmediate(data);
+                                if (JJKMod.getAuditLogger() != null) {
+                                    JJKMod.getAuditLogger().logEvent("admin_cmd", target.getUuid(),
+                                            "{\"event\":\"unquarantine\",\"by\":\"" + src.getName() + "\"}", 0L);
+                                }
+                                src.sendFeedback(() -> Text.literal("[JJK] " + target.getName().getString() + " 격리 해제 완료."), true);
+                                return 1;
+                            })
                         )
                     )
             )

@@ -18,7 +18,7 @@ public class TeamManager implements ITeamProvider {
     private static final Set<String> CURSED_SPIRITS =
             Set.of("mahito", "jogo", "hanami", "dagon", "sukuna");
     private static final Set<String> SORCERERS =
-            Set.of("gojo", "itadori", "megumi", "okkotsu", "nanami", "inumaki", "hakari", "higuruma");
+            Set.of("gojo", "itadori", "megumi", "okkotsu", "nanami", "inumaki", "hakari", "higuruma", "todo");
 
     @Override
     public TeamType getTeam(ServerPlayerEntity player) {

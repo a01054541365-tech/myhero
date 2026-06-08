@@ -43,8 +43,8 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion() {
-        assertEquals(13, Migrator.CURRENT_VERSION,
-            "Migrator.CURRENT_VERSION = 13 (case 10~13 포함)");
+        assertEquals(22, Migrator.CURRENT_VERSION,
+            "Migrator.CURRENT_VERSION = 22 (case 14~22 포함)");
     }
 
     @Test
@@ -281,28 +281,28 @@ class ReleaseGateTest {
     @Test
     void gate_animationRegistryCount_final() {
         int count = 0;
-        for (int i = 0; i <= 64; i++) {
+        for (int i = 0; i <= 65; i++) {
             if (AnimationRegistry.has(i)) count++;
         }
-        assertEquals(65, count, "AnimationRegistry animId 0~64 = 65개");
+        assertEquals(66, count, "AnimationRegistry animId 0~65 = 66개");
     }
 
     @Test
     void gate_allAnimIdsContiguous_final() {
         List<Integer> missing = new ArrayList<>();
-        for (int i = 0; i <= 64; i++) {
+        for (int i = 0; i <= 65; i++) {
             if (!AnimationRegistry.has(i)) missing.add(i);
         }
         assertTrue(missing.isEmpty(), "누락된 animId: " + missing);
     }
 
     @Test
-    void gate_notImplemented_onlyInumakiR() {
+    void gate_notImplemented_none() {
         PlayerData inumakiData = PlayerData.createDefault(java.util.UUID.randomUUID());
         inumakiData.characterId = "inumaki";
-        assertEquals(SkillResult.NOT_IMPLEMENTED,
+        assertNotEquals(SkillResult.NOT_IMPLEMENTED,
             new InumakiSkillSet().onR(inumakiData, null, 0L),
-            "이누마키 R = NOT_IMPLEMENTED");
+            "이누마키 R 구현 완료");
 
         PlayerData higuData = PlayerData.createDefault(java.util.UUID.randomUUID());
         higuData.characterId = "higuruma";
@@ -316,13 +316,13 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion_final() {
-        assertEquals(13, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 13");
+        assertEquals(22, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 22");
     }
 
     @Test
     void gate_skillSet_notImplementedCount() {
-        assertEquals(1, countNotImplemented(),
-            "NOT_IMPLEMENTED 잔존 키 수 = 1 (이누마키 R만)");
+        assertEquals(0, countNotImplemented(),
+            "NOT_IMPLEMENTED 잔존 키 수 = 0 (전 캐릭터 구현 완료)");
     }
 
     private static PlayerData createTestData(String characterId) {

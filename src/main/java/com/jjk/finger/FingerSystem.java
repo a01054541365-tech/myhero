@@ -2,6 +2,7 @@ package com.jjk.finger;
 
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
+import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.audit.AuditLogger;
 import com.jjk.data.PlayerData;
 import com.jjk.event.FullRevivalEvents;
@@ -104,13 +105,10 @@ public class FingerSystem {
         return 0f;
     }
 
+    // log10(count+1) / log10(21) — count=20 시 정확히 1.0, count=0 시 0.0
     public float getFingerAtkBonus(int count) {
-        if (count >= 20) return 0.30f;
-        if (count >= 16) return 0.20f;
-        if (count >= 11) return 0.15f;
-        if (count >= 6)  return 0.10f;
-        if (count >= 1)  return 0.05f;
-        return 0f;
+        if (count <= 0) return 0f;
+        return 0.30f * (float) (Math.log10(count + 1) / Math.log10(21));
     }
 
     /**
@@ -146,6 +144,7 @@ public class FingerSystem {
             if (killer != null) {
                 ServerPlayNetworking.send(killer,
                     new FingerDropS2CPacket(killerData.fingerCount, maxReached));
+                AdvancementTriggerManager.onFingerCollect(killer, killerData.fingerCount);
             }
             if (maxReached) {
                 FullRevivalEvents.trigger(killerUuid, server);
@@ -154,12 +153,8 @@ public class FingerSystem {
     }
 
     public float getFingerSkillDmgBonus(int count) {
-        if (count >= 20) return 0.25f;
-        if (count >= 16) return 0.15f;
-        if (count >= 11) return 0.10f;
-        if (count >= 6)  return 0.06f;
-        if (count >= 1)  return 0.03f;
-        return 0f;
+        if (count <= 0) return 0f;
+        return 0.25f * (float) (Math.log10(count + 1) / Math.log10(21));
     }
 
 }

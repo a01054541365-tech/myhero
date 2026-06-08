@@ -18,5 +18,6 @@ public enum SkillResult {
     FAIL_SKILL_SEALED,
     FAIL_NO_TARGET,
     FAIL_CONDITION,
+    FAIL_QUARANTINED,
     NOT_IMPLEMENTED
 }

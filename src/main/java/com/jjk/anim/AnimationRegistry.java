@@ -78,6 +78,7 @@ public final class AnimationRegistry {
         m.put(62, "nanami_ten_puncture");
         m.put(63, "higuruma_argument");
         m.put(64, "higuruma_evidence");
+        m.put(65, "inumaki_r_scatter");
         return m;
     }
 
