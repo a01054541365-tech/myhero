@@ -2,7 +2,6 @@ package com.jjk.entity.npc;
 
 import com.jjk.JJKMod;
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager.Grade;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.item.CursedToolItem;
 import com.jjk.network.s2c.NpcOpenGuiS2CPacket;
@@ -31,7 +30,7 @@ public class SimpleNpcEntity extends NpcEntity {
 
     private static String buildPayload(String npcId, PlayerData data,
                                         ServerPlayerEntity player) {
-        int gradeRank = Grade.fromLabel(data.grade).rank;
+        int gradeRank = data.grade != null ? data.grade.ordinal() : 0;
         int today = (int)(System.currentTimeMillis() / 86400000L);
         return switch (npcId) {
             case "zenin_storage" -> String.format(

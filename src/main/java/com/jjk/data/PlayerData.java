@@ -13,7 +13,7 @@ public class PlayerData {
     // === 기본 정보 ===
     public UUID uuid;
     public String characterId;
-    public String grade;
+    public Grade grade;
     public long xp;
     public int mastery;
 
@@ -118,6 +118,9 @@ public class PlayerData {
     // === 이타도리 흑섬 집중 ===
     public long blackFlashFocusEndTick; // 0 = 비활성, 양수 = 버프 만료 틱
 
+    // === 흑섬 연속 발동 쿨다운 (구현 C-2) ===
+    public long blackFlashCooldownUntil;
+
     // === 가이드북 수령 여부 (TASK-32) ===
     public boolean receivedGuideBook;
 
@@ -193,7 +196,7 @@ public class PlayerData {
         d.uuid                    = uuid;
         d.schemaVersion           = 1;
         d.bindingVowDeclaredTick  = -1L;
-        d.grade                   = "4급";
+        d.grade                   = Grade.GRADE_4;
         d.trialState              = "IDLE";
         d.ceControl               = 1.0f;
         d.ceMax                   = 100.0f;
@@ -270,6 +273,7 @@ public class PlayerData {
         copy.lastDamageTakenTick         = this.lastDamageTakenTick;
         copy.maharagaCounter             = this.maharagaCounter;
         copy.blackFlashFocusEndTick      = this.blackFlashFocusEndTick;
+        copy.blackFlashCooldownUntil     = this.blackFlashCooldownUntil;
         copy.receivedGuideBook           = this.receivedGuideBook;
         copy.trialTargetUuid             = this.trialTargetUuid;
         copy.sealedSkills                = new HashSet<>(this.sealedSkills);

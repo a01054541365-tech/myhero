@@ -56,7 +56,7 @@ class MigratorTest {
         PlayerData loaded = repo.load(uuid);
         assertEquals(1,    loaded.schemaVersion,          "schemaVersion");
         assertEquals(-1L,  loaded.bindingVowDeclaredTick, "bindingVowDeclaredTick");
-        assertEquals("4급",  loaded.grade,                "grade");
+        assertEquals(com.jjk.data.Grade.GRADE_4, loaded.grade, "grade");
         assertEquals("IDLE", loaded.trialState,           "trialState");
     }
 

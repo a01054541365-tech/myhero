@@ -1,6 +1,7 @@
 package com.jjk.test;
 
 import com.jjk.JjkConfig;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
 import com.jjk.grade.GradeManager;
 import com.jjk.item.CursedToolEffect;
@@ -62,7 +63,7 @@ class CursedToolItemTest {
         CursedToolEffect invertedEffect = CursedToolRegistry.getEffect("inverted_spear");
         // inverted_spear requires SPECIAL(rank=5)
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
-        data.grade = "4급";
+        data.grade = Grade.GRADE_4;
         assertFalse(CursedToolItem.isEligible(data, invertedEffect),
             "4급 플레이어는 천역모 장착 불가");
     }
@@ -72,7 +73,7 @@ class CursedToolItemTest {
     void specialGrade_eligible_for_invertedSpear() {
         CursedToolEffect invertedEffect = CursedToolRegistry.getEffect("inverted_spear");
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
-        data.grade = "특급";
+        data.grade = Grade.SPECIAL;
         assertTrue(CursedToolItem.isEligible(data, invertedEffect),
             "특급 플레이어는 천역모 장착 가능");
         // 누구나 사용 가능한 저주 단검

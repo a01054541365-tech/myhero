@@ -57,6 +57,7 @@ import com.jjk.network.s2c.ChantingStateS2CPacket;
 import com.jjk.network.s2c.CurtainEnterS2CPacket;
 import com.jjk.network.s2c.CurtainExitS2CPacket;
 import com.jjk.network.s2c.FingerDropS2CPacket;
+import com.jjk.network.s2c.DomainDeployFailS2CPacket;
 import com.jjk.network.s2c.RespawnS2CPacket;
 import com.jjk.network.s2c.SkillResultS2CPacket;
 import com.jjk.network.s2c.ZoneEnterS2CPacket;
@@ -434,5 +435,20 @@ public class JJKModClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(VerdictS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() ->
                         JjkHudRenderer.INSTANCE.showVerdict(pkt.guilty(), pkt.sealedSkillId())));
+
+        // DomainDeployFailS2CPacket — 영역 전개 실패 사유 알림
+        ClientPlayNetworking.registerGlobalReceiver(DomainDeployFailS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    MinecraftClient mc = ctx.client();
+                    if (mc.player == null) return;
+                    String msg = switch (pkt.reason()) {
+                        case CE_INSUFFICIENT    -> "§c영역 전개 실패: CE 부족";
+                        case ON_COOLDOWN        -> "§c영역 전개 실패: 쿨타임 중";
+                        case BANNED_CHUNK       -> "§c영역 전개 실패: 사용 불가 지역";
+                        case DOMAIN_ALREADY_ACTIVE -> "§c영역 전개 실패: 이미 활성 중";
+                        case CLASH_LOST         -> "§c영역 전개 실패: 충돌 패배";
+                    };
+                    mc.player.sendMessage(Text.literal(msg), true);
+                }));
     }
 }

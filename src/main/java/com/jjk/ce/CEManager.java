@@ -22,6 +22,7 @@ public class CEManager {
         CERegenRule rule = pool.getRule(data.characterId);
         float rate = rule.regenPerTick(data, currentTick, config);
 
+        float before = data.ceCurrent;
         data.ceCurrent = Math.min(data.ceCurrent + rate, data.ceMax);
 
         // §6-2 고죠 무한 유지비: 30/s = 1.5/틱, CE 부족 시 자동 해제
@@ -54,7 +55,9 @@ public class CEManager {
             data.tenShadowsActive = false;
         }
 
-        JJKMod.getPlayerRepository().save(data);
+        if (data.ceCurrent != before) {
+            JJKMod.getPlayerRepository().save(data);
+        }
     }
 
     /** CE 0이면 스킬 사용 불가. */

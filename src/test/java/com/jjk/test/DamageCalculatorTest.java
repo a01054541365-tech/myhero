@@ -6,8 +6,8 @@ import com.jjk.combat.CombatPipeline;
 import com.jjk.combat.DamageCalculator;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.TickDamageCap;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -55,7 +55,7 @@ class DamageCalculatorTest {
     void testSoulDirectBypassesDefense() {
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 100;
@@ -79,7 +79,7 @@ class DamageCalculatorTest {
         // Zone 페널티(×0.5)가 있어도 배율은 §LOCK 하한 0.25 이상
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
         attacker.zonePenaltyUntilTick = Long.MAX_VALUE;  // zone penalty 활성
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
@@ -101,7 +101,7 @@ class DamageCalculatorTest {
         attacker.attackStat = 1000;
         attacker.burstActive = true;
         attacker.awakeningActive = true;
-        attacker.grade = "특급";
+        attacker.grade = Grade.SPECIAL;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 0;
@@ -122,7 +122,7 @@ class DamageCalculatorTest {
         // §LOCK: 흑섬 base × 2.5
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 0;
@@ -174,7 +174,7 @@ class DamageCalculatorTest {
         // 각성 활성 → conditionMultiplier에 ×1.25 포함
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 0;
@@ -199,7 +199,7 @@ class DamageCalculatorTest {
         // shrine isSoulDirect=true → 방어 관통 (effectiveDefense=0)
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 200; // 방어력 매우 높음
@@ -223,7 +223,7 @@ class DamageCalculatorTest {
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 1000;  // attackMult >> 4.0 유도
         attacker.awakeningActive = true;
-        attacker.grade = "준특급";
+        attacker.grade = Grade.SEMI_SPECIAL;
 
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 0;
@@ -250,7 +250,7 @@ class DamageCalculatorTest {
         // shrine 3타 decay [1.0, 0.90, 0.75] — baseDamage에 사전 적용 후 hitIndex=0 전달
         PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
         attacker.attackStat = 0;
-        attacker.grade = "4급";
+        attacker.grade = Grade.GRADE_4;
         PlayerData target = PlayerData.createDefault(UUID.randomUUID());
         target.defenseStat = 0;
         JjkConfig config = new JjkConfig();
@@ -280,27 +280,23 @@ class DamageCalculatorTest {
         PlayerData data = PlayerData.createDefault(UUID.randomUUID());
         data.awakeningActive = false;
 
-        data.grade = "4급";
-        assertFalse(GradeManager.Grade.fromLabel(data.grade).rank
-                            >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+        data.grade = Grade.GRADE_4;
+        assertFalse(data.grade.ordinal() >= Grade.SEMI_SPECIAL.ordinal() || data.awakeningActive,
                 "4급 + 각성 비활성: shrine 거부 조건");
 
-        data.grade = "1급";
-        assertFalse(GradeManager.Grade.fromLabel(data.grade).rank
-                            >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+        data.grade = Grade.GRADE_1;
+        assertFalse(data.grade.ordinal() >= Grade.SEMI_SPECIAL.ordinal() || data.awakeningActive,
                 "1급 + 각성 비활성: shrine 거부 조건");
 
         // 준특급 이상 → 허용
-        data.grade = "준특급";
-        assertTrue(GradeManager.Grade.fromLabel(data.grade).rank
-                           >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+        data.grade = Grade.SEMI_SPECIAL;
+        assertTrue(data.grade.ordinal() >= Grade.SEMI_SPECIAL.ordinal() || data.awakeningActive,
                 "준특급: shrine 허용 조건");
 
         // 4급 + 각성 활성 → 허용
-        data.grade = "4급";
+        data.grade = Grade.GRADE_4;
         data.awakeningActive = true;
-        assertTrue(GradeManager.Grade.fromLabel(data.grade).rank
-                           >= GradeManager.Grade.SEMI_SPECIAL.rank || data.awakeningActive,
+        assertTrue(data.grade.ordinal() >= Grade.SEMI_SPECIAL.ordinal() || data.awakeningActive,
                 "4급 + 각성 활성: shrine 허용 조건");
     }
 }

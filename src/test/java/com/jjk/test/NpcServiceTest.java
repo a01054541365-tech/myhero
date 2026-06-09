@@ -2,6 +2,7 @@ package com.jjk.test;
 
 import com.jjk.JJKMod;
 import com.jjk.api.skill.SkillResult;
+import com.jjk.data.Grade;
 import com.jjk.data.Migrator;
 import com.jjk.data.PlayerData;
 import com.jjk.data.PlayerRepository;
@@ -34,14 +35,14 @@ class NpcServiceTest {
     private PlayerData makeSorcerer(String grade) {
         PlayerData d = PlayerData.createDefault(UUID.randomUUID());
         d.characterId = "itadori";
-        d.grade = grade;
+        d.grade = Grade.fromKey(grade);
         return d;
     }
 
     private PlayerData makeSpirit(String grade) {
         PlayerData d = PlayerData.createDefault(UUID.randomUUID());
         d.characterId = "mahito";
-        d.grade = grade;
+        d.grade = Grade.fromKey(grade);
         return d;
     }
 

@@ -43,8 +43,8 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion() {
-        assertEquals(22, Migrator.CURRENT_VERSION,
-            "Migrator.CURRENT_VERSION = 22 (case 14~22 포함)");
+        assertEquals(23, Migrator.CURRENT_VERSION,
+            "Migrator.CURRENT_VERSION = 23 (case 14~23 포함)");
     }
 
     @Test
@@ -111,7 +111,7 @@ class ReleaseGateTest {
         PlayerData loaded = repo.load(d.uuid);
 
         assertEquals(-1L, loaded.bindingVowDeclaredTick, "bindingVowDeclaredTick 기본값 §LOCK");
-        assertEquals("4급",  loaded.grade,                "grade 기본값");
+        assertEquals(com.jjk.data.Grade.GRADE_4, loaded.grade, "grade 기본값");
         assertFalse(loaded.receivedGuideBook,             "receivedGuideBook 기본값 false");
         assertNull(loaded.trialTargetUuid,                "trialTargetUuid 기본값 null");
         assertFalse(loaded.chanting,                      "chanting 기본값 false");
@@ -316,7 +316,7 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion_final() {
-        assertEquals(22, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 22");
+        assertEquals(23, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 23");
     }
 
     @Test

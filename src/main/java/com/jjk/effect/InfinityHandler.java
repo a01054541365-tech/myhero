@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-// ?얜똾釉??怨밴묶????뺤쒔 ????????λ뜃由?遺얜┷???紐껋컭筌뤴뫀???袁⑹뒠 ?怨밴묶.
+// 무한(Infinity) 명중 무효화 판정 처리 — CombatPipeline 6단계(방어·저항 처리)에서 호출
 public class InfinityHandler {
 
     private final Map<UUID, Boolean> infinityState = new HashMap<>();

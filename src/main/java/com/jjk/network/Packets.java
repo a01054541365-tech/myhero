@@ -41,6 +41,7 @@ public class Packets {
         PayloadTypeRegistry.playS2C().register(CharacterSelectS2CPacket.ID, CharacterSelectS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(CharacterConfirmS2CPacket.ID, CharacterConfirmS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(CharacterSelectFailS2CPacket.ID, CharacterSelectFailS2CPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(DomainDeployFailS2CPacket.ID, DomainDeployFailS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(RespawnS2CPacket.ID, RespawnS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(AnimationTriggerS2CPacket.ID, AnimationTriggerS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(CurtainEnterS2CPacket.ID, CurtainEnterS2CPacket.CODEC);

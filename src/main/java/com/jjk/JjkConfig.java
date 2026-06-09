@@ -24,7 +24,7 @@ public class JjkConfig {
         "bindingVowTimeoutTicks", "domainBannedChunks", "jackpotDurationTicks",
         "jackpotDurationMinTicks", "jackpotDurationMaxTicks", "respawnDelayTicks",
         "respawnLocation", "respawnCePercent", "respawnHpPercent", "fingerDropRate",
-        "fingerMaxCount", "blackFlashBaseRate", "blackFlashZoneBonus",
+        "fingerMaxCount", "blackFlashBaseRate", "blackFlashZoneBonus", "blackFlashCooldownTicks",
         "xpMultiplierGradeDiff", "allowCharacterReselect", "rikaLifetimeTicks",
         "maharagaThreshold", "sealDurationTicks", "zoneDurationTicks",
         "ceRegenOutOfCombat", "ceRegenInCombat",
@@ -64,7 +64,8 @@ public class JjkConfig {
         "raidEventIntervalTicks", "selectionBookCommandPermission",
         "buildingSpawnEnabled", "buildingMinDistanceBlocks",
         "jujutsuHighTokyoCount", "detentionFacilityCount",
-        "shibuyaUndergroundCount", "nanamiOfficeCount"
+        "shibuyaUndergroundCount", "nanamiOfficeCount",
+        "unlimitedVoidCeDrainRatio", "rikaMeleeDamage"
     };
 
     public boolean mangaExpEnabled                 = false;
@@ -86,6 +87,7 @@ public class JjkConfig {
     public int     fingerMaxCount                  = 20;     // §LOCK
     public int     blackFlashBaseRate              = 5;      // §LOCK
     public int     blackFlashZoneBonus             = 10;     // §LOCK
+    public int     blackFlashCooldownTicks         = 40;     // 흑섬 연속 발동 쿨다운 (2초). §LOCK 아님, 운영자 조정 가능.
     public float   xpMultiplierGradeDiff           = 1.5f;
     public boolean allowCharacterReselect          = false;
     public int     rikaLifetimeTicks               = 200;    // §LOCK
@@ -199,6 +201,9 @@ public class JjkConfig {
     public int    raidEventIntervalTicks         = 144000;
     public int    selectionBookCommandPermission = 2;
 
+    public float  unlimitedVoidCeDrainRatio      = 0.02f;  // 무량공처 내부 매 틱 CE 강제 소진 비율 (ceMax 대비)
+    public int    rikaMeleeDamage                = 20;     // 리카 근접 공격 데미지
+
     public static JjkConfig load(Path configPath) {
         if (!Files.exists(configPath)) {
             LOGGER.warn("[JJK] config.json not found at {}, using defaults", configPath);
@@ -239,6 +244,7 @@ public class JjkConfig {
         this.fingerMaxCount                   = fresh.fingerMaxCount;
         this.blackFlashBaseRate               = fresh.blackFlashBaseRate;
         this.blackFlashZoneBonus              = fresh.blackFlashZoneBonus;
+        this.blackFlashCooldownTicks          = fresh.blackFlashCooldownTicks;
         this.xpMultiplierGradeDiff            = fresh.xpMultiplierGradeDiff;
         this.allowCharacterReselect           = fresh.allowCharacterReselect;
         this.rikaLifetimeTicks                = fresh.rikaLifetimeTicks;
@@ -301,6 +307,8 @@ public class JjkConfig {
         this.gradeProtectionXpMultiplier         = fresh.gradeProtectionXpMultiplier;
         this.raidEventIntervalTicks              = fresh.raidEventIntervalTicks;
         this.selectionBookCommandPermission      = fresh.selectionBookCommandPermission;
+        this.unlimitedVoidCeDrainRatio           = fresh.unlimitedVoidCeDrainRatio;
+        this.rikaMeleeDamage                     = fresh.rikaMeleeDamage;
         this.burdenDecayOutOfCombat              = fresh.burdenDecayOutOfCombat;
         this.burdenDecayInCombat                 = fresh.burdenDecayInCombat;
         this.burdenSealThreshold                 = fresh.burdenSealThreshold;
@@ -347,6 +355,7 @@ public class JjkConfig {
     public int   getShadowMarkerLifetimeTicks()  { return shadowMarkerLifetimeTicks; }
     public float getPveGradeMultiplier()         { return pveGradeMultiplier; }
     public int   blackFlashBaseRate()            { return blackFlashBaseRate; }
+    public int   blackFlashCooldownTicks()       { return blackFlashCooldownTicks; }
     public int   blackFlashLowHpBonus()          { return blackFlashLowHpBonus; }
     public int   blackFlashZoneBonus()           { return blackFlashZoneBonus; }
     public int   blackFlashZoneAtkBonus()        { return blackFlashZoneAtkBonus; }
@@ -412,6 +421,9 @@ public class JjkConfig {
     public float  gradeProtectionXpMultiplier()   { return gradeProtectionXpMultiplier; }
     public int    raidEventIntervalTicks()        { return raidEventIntervalTicks; }
     public int    selectionBookCommandPermission(){ return selectionBookCommandPermission; }
+
+    public float  unlimitedVoidCeDrainRatio()     { return unlimitedVoidCeDrainRatio; }
+    public int    rikaMeleeDamage()               { return rikaMeleeDamage; }
 
     public float   nonSorcMult()          { return nonSorcMult; }
     public float   nonSorcMultExtreme()   { return nonSorcMultExtreme; }

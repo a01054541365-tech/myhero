@@ -63,7 +63,6 @@ import com.jjk.zone.ComboTracker;
 import com.jjk.zone.ZoneStateManager;
 
 import java.nio.file.Path;
-import java.util.Set;
 
 public class JJKMod implements ModInitializer {
 
@@ -362,7 +361,8 @@ public class JJKMod implements ModInitializer {
                                 new CharacterSelectS2CPacket(new java.util.ArrayList<>(CharacterRegistry.ids())));
                         } else {
                             ServerPlayNetworking.send(joinedPlayer,
-                                new CharacterInfoS2CPacket(data.characterId, data.grade,
+                                new CharacterInfoS2CPacket(data.characterId,
+                                    data.grade != null ? data.grade.display : "4급",
                                     data.ceMax, data.ceCurrent));
                         }
                     }

@@ -74,8 +74,8 @@ public class TeamManager implements ITeamProvider {
     // 등급 차이 2 이상 전투 시 XP 배율 적용
     public static float getXpMultiplier(PlayerData attacker, PlayerData target, JjkConfig config) {
         int[] GRADE_ORDER = {0, 0, 0, 0, 0, 0}; // placeholder — grade string→int mapping
-        int aGrade = gradeToInt(attacker.grade);
-        int tGrade = gradeToInt(target.grade);
+        int aGrade = attacker.grade != null ? attacker.grade.ordinal() : 0;
+        int tGrade = target.grade != null ? target.grade.ordinal() : 0;
         if (Math.abs(aGrade - tGrade) >= 2) return (float) config.xpMultiplierGradeDiff;
         return 1.0f;
     }

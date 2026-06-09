@@ -1,19 +1,16 @@
 package com.jjk.command;
 
 import com.jjk.JJKMod;
-import com.jjk.burden.BurdenManager;
-import com.jjk.dungeon.DungeonManager;
 import com.jjk.character.CharacterCommandService;
 import com.jjk.item.CursedCrystalItem;
 import com.jjk.item.JJKItems;
 import com.jjk.character.CharacterRegistry;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.CursedSpiritEntity;
 import com.jjk.entity.CursedSpiritEntityTypes;
-import com.jjk.entity.CursedSpiritGrade;
 import com.jjk.entity.JJKEntities;
 import com.jjk.entity.cursed.*;
-import com.jjk.grade.GradeManager;
 import com.jjk.item.CursedToolItem;
 import com.jjk.item.CursedToolRegistry;
 import com.jjk.item.GuideBookItem;
@@ -121,7 +118,7 @@ public final class JjkCommandRegistry {
 
     private static int showStatus(ServerCommandSource src, PlayerData data, String name) {
         String char_ = data.characterId != null ? data.characterId : "미선택";
-        String grade = data.grade != null ? data.grade : "-";
+        String grade = data.grade != null ? data.grade.display : "-";
         src.sendFeedback(() -> Text.literal("=== [JJK] " + name + " 상태 ==="), false);
         src.sendFeedback(() -> Text.literal("캐릭터: " + char_), false);
         src.sendFeedback(() -> Text.literal("등급: " + grade), false);
@@ -138,7 +135,7 @@ public final class JjkCommandRegistry {
 
     private static int printGradeInfo(ServerCommandSource src, PlayerData data, String name) {
         String charId = data.characterId != null ? data.characterId : "미선택";
-        String grade  = data.grade != null ? data.grade : "-";
+        String grade  = data.grade != null ? data.grade.display : "-";
         int mastery   = data.mastery;
         src.sendFeedback(() -> Text.literal(
             "[JJK] " + name + " | 캐릭터: " + charId + " | 등급: " + grade
@@ -394,7 +391,7 @@ public final class JjkCommandRegistry {
                             long tick = player.getWorld().getTime();
 
                             String charDisplay = data.characterId != null ? data.characterId : "미선택";
-                            String gradeDisplay = data.grade != null ? data.grade : "-";
+                            String gradeDisplay = data.grade != null ? data.grade.display : "-";
                             src.sendFeedback(() -> Text.literal(
                                     "[JJK] 캐릭터: " + charDisplay + " | 등급: " + gradeDisplay), false);
                             src.sendFeedback(() -> Text.literal(
@@ -792,7 +789,7 @@ public final class JjkCommandRegistry {
                                         return 0;
                                     }
                                     PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
-                                    data.grade = grade;
+                                    data.grade = Grade.fromKey(grade);
                                     JJKMod.getGradeManager().applyGradeUnlocks(data, grade);
                                     JJKMod.getPlayerRepository().saveImmediate(data);
                                     if (JJKMod.getAuditLogger() != null) {

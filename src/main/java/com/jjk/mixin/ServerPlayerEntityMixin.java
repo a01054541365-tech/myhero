@@ -3,9 +3,9 @@ package com.jjk.mixin;
 import com.jjk.JJKMod;
 import com.jjk.character.impl.NonSorcererSkillSet;
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager;
 import net.minecraft.util.math.Vec3d;
 import com.jjk.network.s2c.AwakeningS2CPacket;
+import com.jjk.network.s2c.SkillResultS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -63,17 +63,19 @@ public class ServerPlayerEntityMixin {
         // 반전술식 자기 치유: 1급 이상 또는 숙련도 7 이상 조건
         if (data.healingActive && ("okkotsu".equals(data.characterId)
                 || "itadori".equals(data.characterId))) {
-            boolean eligible = GradeManager.Grade.fromLabel(data.grade).rank
-                    >= GradeManager.Grade.GRADE_1.rank
+            boolean eligible = (data.grade != null
+                    && data.grade.ordinal() >= com.jjk.data.Grade.GRADE_1.ordinal())
                     || data.mastery >= 7;
             if (!eligible) {
                 data.healingActive = false;
+                ServerPlayNetworking.send(player, new SkillResultS2CPacket(4, "healing_deactivated", 0f));
                 JJKMod.getPlayerRepository().save(data);
             } else {
                 float healPerTick = JJKMod.getConfig().reverseHealSelfPerTick();   // 0.3
                 float ceDrain     = data.ceMax * JJKMod.getConfig().reverseCeDrainSelfRatio(); // × 0.008
                 if (!JJKMod.getCEManager().consumeCE(data, ceDrain)) {
                     data.healingActive = false;
+                    ServerPlayNetworking.send(player, new SkillResultS2CPacket(4, "healing_deactivated", 0f));
                 } else {
                     data.hpCurrent = Math.min(data.hpCurrent + healPerTick, data.hpMax);
                 }

@@ -65,7 +65,7 @@ public final class ZeninService {
         if (price == null) return SkillResult.FAIL;
 
         Integer gradeReq = GRADE_REQS.get(itemId);
-        if (gradeReq != null && Grade.fromLabel(data.grade).rank < gradeReq) {
+        if (gradeReq != null && (data.grade == null || data.grade.ordinal() < gradeReq)) {
             return SkillResult.FAIL;
         }
 

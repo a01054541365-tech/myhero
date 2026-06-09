@@ -3,8 +3,8 @@ package com.jjk.npc;
 import com.jjk.JJKMod;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.data.PlayerData;
-import com.jjk.economy.CursedStoneManager;
 import com.jjk.grade.GradeManager.Grade;
+import com.jjk.economy.CursedStoneManager;
 import com.jjk.network.c2s.NpcServiceC2SPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 
@@ -36,7 +36,7 @@ public final class NahovinoService {
                                           String bonusKey, int maxCount,
                                           int bonusPerTrain, int requiredGrade,
                                           CursedStoneManager csm) {
-        if (Grade.fromLabel(data.grade).rank < requiredGrade) {
+        if (data.grade == null || data.grade.ordinal() < requiredGrade) {
             return SkillResult.FAIL;
         }
 
@@ -59,7 +59,7 @@ public final class NahovinoService {
 
     private static SkillResult resetStats(PlayerData data, ServerPlayerEntity player,
                                            CursedStoneManager csm) {
-        if (Grade.fromLabel(data.grade).rank < Grade.SPECIAL.rank) {
+        if (data.grade == null || data.grade != com.jjk.data.Grade.SPECIAL) {
             return SkillResult.FAIL;
         }
         if (!csm.spend(data, 3000L, "stat_reset", player)) {

@@ -9,6 +9,7 @@ import com.jjk.awakening.AwakeningManager;
 import com.jjk.burden.BurdenManager;
 import com.jjk.character.impl.NanamiSkillSet;
 import com.jjk.combat.CombatPipeline;
+import com.jjk.data.Grade;
 import com.jjk.data.Migrator;
 import com.jjk.data.PlayerData;
 import com.jjk.data.PlayerRepository;
@@ -152,13 +153,13 @@ class IntegrationSmokeTest {
     @Test
     void scenario5_domainConflict() {
         PlayerData sorcerer = newPlayer("gojo");
-        sorcerer.grade = "special_grade";
+        sorcerer.grade = Grade.SPECIAL;
         sorcerer.mastery = 80;
         sorcerer.ceCurrent = 500f;
         sorcerer.ceMax = 500f;
 
         PlayerData spirit = newPlayer("mahito");
-        spirit.grade = "grade_2";
+        spirit.grade = Grade.GRADE_2;
         spirit.mastery = 40;
         spirit.ceCurrent = 300f;
         spirit.ceMax = 500f;
@@ -290,7 +291,7 @@ class IntegrationSmokeTest {
         mgr.addDomainDefForTest("cursed_spirit_domain", def);
 
         boolean deployed = mgr.deployNpcDomain(
-            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L);
+            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L, "minecraft:overworld");
         assertTrue(deployed, "특급 주령 영역 전개 성공");
 
         DomainInstance domain = mgr.getActiveDomain(npcUuid);
@@ -301,7 +302,7 @@ class IntegrationSmokeTest {
 
         // 1200틱 쿨타임 내 재전개 불가
         boolean redeployed = mgr.deployNpcDomain(
-            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 1L);
+            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 1L, "minecraft:overworld");
         assertFalse(redeployed, "이미 활성 영역이 있으면 재전개 불가");
     }
 
@@ -342,13 +343,13 @@ class IntegrationSmokeTest {
 
         // 4급 플레이어 + 천역모(특급 전용) → 장착 불가 → NONE
         PlayerData grade4 = newPlayer("itadori");
-        grade4.grade = "4급";
+        grade4.grade = Grade.GRADE_4;
         assertFalse(CursedToolItem.isEligible(grade4, inverted),
             "4급 + 천역모 → 등급 미달, getActiveEffect=NONE");
 
         // 특급 플레이어 + 천역모 → defPenetration 0.15 적용
         PlayerData special = newPlayer("gojo");
-        special.grade = "특급";
+        special.grade = Grade.SPECIAL;
         assertTrue(CursedToolItem.isEligible(special, inverted),
             "특급 + 천역모 → 장착 가능");
         float defMult = 1.0f - inverted.defPenetration(); // 1.0 - 0.15 = 0.85
@@ -479,7 +480,7 @@ class IntegrationSmokeTest {
 
         // deployNpcDomain 성공 → activeDomains 등록
         boolean deployed = mgr.deployNpcDomain(
-            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L);
+            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L, "minecraft:overworld");
         assertTrue(deployed, "NPC 영역 전개 성공");
 
         DomainInstance domain = mgr.getActiveDomain(npcUuid);
@@ -498,9 +499,9 @@ class IntegrationSmokeTest {
         assertNull(mgr.getActiveDomain(npcUuid), "사망 후 영역 제거 확인");
 
         // 금지 청크 → 전개 불가
-        config.domainBannedChunks.add("0,0");
+        config.domainBannedChunks.add("minecraft:overworld:0,0");
         boolean bannedResult = mgr.deployNpcDomain(
-            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L);
+            npcUuid, new Vec3d(0, 64, 0), "cursed_spirit_domain", 0L, "minecraft:overworld");
         assertFalse(bannedResult, "금지 청크(0,0) → deployNpcDomain false");
         config.domainBannedChunks.clear(); // 다른 테스트 영향 없도록
     }

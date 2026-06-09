@@ -14,7 +14,7 @@ public class DomainPriorityCalculator {
      * wallHpRatio: wallHp/1500 (개방형=0)
      */
     public static float calculate(PlayerData owner, DomainInstance domain) {
-        float gradeNorm  = gradeToValue(owner.grade) / 6f;
+        float gradeNorm  = (owner.grade != null ? owner.grade.ordinal() + 1 : 1) / 6f;
         float ceInvested = owner.ceMax > 0 ? owner.ceCurrent / owner.ceMax : 0f;
         float masteryNorm = owner.mastery / 100f;
         float wallHpRatio = domain.isOpen ? 0f : (domain.wallHp / 1500f);

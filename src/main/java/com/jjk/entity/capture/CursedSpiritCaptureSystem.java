@@ -4,7 +4,6 @@ import com.jjk.JJKMod;
 import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.data.PlayerData;
 import com.jjk.entity.CursedSpiritEntity;
-import com.jjk.grade.GradeManager;
 import com.jjk.item.CursedCrystalItem;
 import net.minecraft.entity.Entity;
 import net.minecraft.item.ItemStack;
@@ -48,7 +47,7 @@ public final class CursedSpiritCaptureSystem {
         }
 
         // 성공 확률 계산
-        int gradeRank = GradeManager.Grade.fromLabel(data.grade).rank;
+        int gradeRank = data.grade != null ? data.grade.ordinal() : 0;
         int mastery = data.mastery;
         int chance = gradeRank * 15 + mastery * 5;  // %
         chance = Math.max(5, Math.min(95, chance));

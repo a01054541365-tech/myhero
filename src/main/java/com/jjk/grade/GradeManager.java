@@ -66,7 +66,7 @@ public class GradeManager {
 
     private void checkAndPromote(PlayerData data, ServerPlayerEntity player) {
         while (true) {
-            Grade current = Grade.fromLabel(data.grade);
+            Grade current = Grade.fromLabel(data.grade != null ? data.grade.display : "4급");
             Grade next = current.next();
             if (next == null) break;
             int threshold = getXpThreshold(current);
@@ -78,7 +78,7 @@ public class GradeManager {
 
     private void promoteGrade(PlayerData data, Grade from, Grade to,
                                ServerPlayerEntity player) {
-        data.grade = to.label;
+        data.grade = com.jjk.data.Grade.fromKey(to.label);
 
         // 특급 달성 시 ceControl +0.20 (P3-2)
         if (to == Grade.SPECIAL) {
@@ -132,7 +132,9 @@ public class GradeManager {
         if (player != null) {
             player.sendMessage(Text.literal("[JJK] 등급 상승! " + from.label + " → " + to.label), false);
             ServerPlayNetworking.send(player,
-                    new CharacterInfoS2CPacket(data.characterId, data.grade, data.ceMax, data.ceCurrent));
+                    new CharacterInfoS2CPacket(data.characterId,
+                            data.grade != null ? data.grade.display : "4급",
+                            data.ceMax, data.ceCurrent));
         }
     }
 
@@ -188,7 +190,7 @@ public class GradeManager {
         int acc = combatXpAccum.getOrDefault(uuid, 0);
         if (acc < cfg.xpOnDamageCapPerCombat()) {
             int xpAmount = cfg.xpOnDamagePerHit();
-            int attackerGradeRank = Grade.fromLabel(attacker.grade).rank;
+            int attackerGradeRank = attacker.grade != null ? attacker.grade.ordinal() : 0;
             int gradeDiff = Math.abs(attackerGradeRank - defenderGradeRank);
             if (gradeDiff >= cfg.gradeProtectionDiff()) {
                 xpAmount = (int)(xpAmount * cfg.gradeProtectionXpMultiplier());

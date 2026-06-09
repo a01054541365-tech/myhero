@@ -1,5 +1,6 @@
 package com.jjk.test;
 
+import com.jjk.data.Grade;
 import com.jjk.data.Migrator;
 import com.jjk.data.PlayerData;
 import com.jjk.data.PlayerRepository;
@@ -33,7 +34,7 @@ class RollbackCommandTest {
             PlayerRepository setup = new PlayerRepository(conn);
             PlayerData d = PlayerData.createDefault(uuid);
             d.characterId = "itadori";
-            d.grade = "1급";
+            d.grade = Grade.GRADE_1;
             setup.saveImmediate(d);
         }
 
@@ -43,7 +44,7 @@ class RollbackCommandTest {
         assertNotNull(restored, "백업 파일에서 PlayerData를 추출해야 함");
         assertEquals(uuid, restored.uuid, "UUID가 요청한 값과 일치해야 함");
         assertEquals("itadori", restored.characterId, "characterId가 백업 값과 일치해야 함");
-        assertEquals("1급", restored.grade, "grade가 백업 값과 일치해야 함");
+        assertEquals(com.jjk.data.Grade.GRADE_1, restored.grade, "grade가 백업 값과 일치해야 함");
     }
 
     @Test

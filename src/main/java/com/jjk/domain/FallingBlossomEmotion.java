@@ -1,23 +1,20 @@
 package com.jjk.domain;
 
 import com.jjk.JJKMod;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
 import net.minecraft.server.network.ServerPlayerEntity;
 
-import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class FallingBlossomEmotion {
-
-    private static final Set<String> GRADE_1_OR_HIGHER =
-            Set.of("grade_1", "semi_grade_1", "special_grade");
 
     public static boolean tryActivate(ServerPlayerEntity caster,
             ServerPlayerEntity target, long currentTick) {
         PlayerData data = JJKMod.getPlayerRepository().load(caster.getUuid());
 
         // 조건 1: 시전자 등급 1급 이상
-        if (!GRADE_1_OR_HIGHER.contains(data.grade)) return false;
+        if (data.grade == null || data.grade.ordinal() < Grade.GRADE_1.ordinal()) return false;
 
         // 조건 2: 간이영역 활성 상태
         if (!data.simpleBarrierActive) return false;

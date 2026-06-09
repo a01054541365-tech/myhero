@@ -9,7 +9,6 @@ import com.jjk.combat.CooldownManager;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import com.jjk.network.s2c.SkillEffectS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -170,8 +169,8 @@ public class ItadoriSkillSet implements ISkillSet {
         long tick = player.getWorld().getTime();
 
         // 발동 조건: 준특급 이상 OR 각성 활성
-        boolean gradeOk = GradeManager.Grade.fromLabel(data.grade).rank
-                >= GradeManager.Grade.SEMI_SPECIAL.rank;
+        boolean gradeOk = data.grade != null
+                && data.grade.ordinal() >= com.jjk.data.Grade.SEMI_SPECIAL.ordinal();
         if (!gradeOk && !data.awakeningActive) return SkillResult.FAIL;
 
         if (!CooldownManager.isReady(data, cdKey(5), tick)) return SkillResult.ON_COOLDOWN;

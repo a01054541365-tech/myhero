@@ -1,7 +1,6 @@
 package com.jjk.item;
 
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager;
 import net.minecraft.item.Item;
 
 public class CursedToolItem extends Item {
@@ -22,6 +21,6 @@ public class CursedToolItem extends Item {
 
     /** 순수 로직 헬퍼 — MC 컨텍스트 없이 테스트 가능 */
     public static boolean isEligible(PlayerData data, CursedToolEffect effect) {
-        return GradeManager.Grade.fromLabel(data.grade).rank >= effect.requiredGrade();
+        return data.grade != null && data.grade.ordinal() >= effect.requiredGrade();
     }
 }

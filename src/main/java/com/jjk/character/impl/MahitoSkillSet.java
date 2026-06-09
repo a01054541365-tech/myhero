@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 public class MahitoSkillSet implements ISkillSet {
 
-    // 吏쟊OCK: techniques.json ??륂뒄 ???袁⑹벥 癰궰野?疫뀀뜆?
+    // §LOCK: techniques.json 기준 baseDamage 값 — 임의 변경 금지
     private static final float BD_F  = 26f;
     private static final float BD_SF = 48f;
     private static final float BD_SR = 52f;
@@ -173,7 +173,7 @@ public class MahitoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // F ??idle_transfiguration: 域뱀눘??1.5?됰뗀以? isSoulDirect=true
+    // F — idle_transfiguration: 근접 1.5칸, isSoulDirect=true
     private SkillResult useIdleTransfiguration(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
@@ -198,7 +198,7 @@ public class MahitoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // SF ??polymorphic_soul_isomer: 3筌??브쑴肉? MultiHitDampener ??.0/??.85/??.70
+    // SF — polymorphic_soul_isomer: 최대 3타, MultiHitDampener 1.0/0.85/0.70
     private SkillResult usePolymorphicSoulIsomer(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
@@ -232,7 +232,7 @@ public class MahitoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // R ??soul_defense: 80??soul_resist 甕곌쑵遊?(isSoulDirect ?怨?筌왖 50% 揶쏅Ŋ??
+    // R — soul_defense: 80틱 soul_resist 부여 (isSoulDirect 피격 시 데미지 50% 감소)
     private SkillResult useSoulDefense(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
@@ -248,7 +248,7 @@ public class MahitoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // SR ??blade_transfiguration: ?袁④컩 90??arc 2?됰뗀以? isSoulDirect=true
+    // SR — blade_transfiguration: 전방 90도 arc 2칸, isSoulDirect=true
     private SkillResult useBladeTransfiguration(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();

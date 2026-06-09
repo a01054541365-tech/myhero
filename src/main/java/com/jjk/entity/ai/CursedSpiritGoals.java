@@ -160,7 +160,8 @@ public final class CursedSpiritGoals {
                 spirit.getUuid(),
                 spirit.getPos(),
                 "cursed_spirit_domain",
-                currentTick);
+                currentTick,
+                sw.getRegistryKey().getValue().toString());
 
             if (!deployed) {
                 // 전개 실패 시 CE 폭발 fallback

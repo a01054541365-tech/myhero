@@ -59,3 +59,13 @@ backup.bat
 build_output.txt
 
 code/.obsidian/community-plugins.json
+
+# secrets / local config
+.env
+.env.*
+local.properties
+
+# editor temp files
+*.tmp
+*.bak
+*.orig

@@ -3,7 +3,6 @@ package com.jjk.defense;
 import com.jjk.JJKMod;
 import com.jjk.combat.DamageContext;
 import com.jjk.data.PlayerData;
-import com.jjk.grade.GradeManager;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -29,8 +28,8 @@ public final class DefenseHandler {
         if (!target.fallingBlossomActive) return damage;
         if (ctx == null || !ctx.nKeyApplied) return damage;
 
-        boolean eligible = GradeManager.Grade.fromLabel(target.grade).rank
-                >= GradeManager.Grade.GRADE_1.rank;
+        boolean eligible = target.grade != null
+                && target.grade.ordinal() >= com.jjk.data.Grade.GRADE_1.ordinal();
         if (!eligible || !target.simpleBarrierActive) return damage;
 
         float blockChance = JJKMod.getConfig().fallingBlossomSureHitBlock(); // 0.80

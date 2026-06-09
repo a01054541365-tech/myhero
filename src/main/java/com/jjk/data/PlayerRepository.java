@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 public class PlayerRepository {
 
@@ -212,7 +211,7 @@ public class PlayerRepository {
     private PlayerData mapRow(ResultSet rs) throws SQLException {
         PlayerData d = new PlayerData();
         d.characterId            = rs.getString("character_id");
-        d.grade                  = rs.getString("grade");
+        d.grade                  = Grade.fromKey(rs.getString("grade"));
         d.xp                     = rs.getLong("xp");
         d.mastery                = rs.getInt("mastery");
         d.ceCurrent              = rs.getFloat("ce_current");
@@ -304,6 +303,7 @@ public class PlayerRepository {
             d.antiAbuseFlags = aaf != null ? new ArrayList<>(GSON.fromJson(aaf, LIST_TYPE)) : new ArrayList<>();
         } catch (SQLException ignored) {}
         try { d.quarantined = rs.getInt("quarantined") != 0; } catch (SQLException ignored) {}
+        try { d.blackFlashCooldownUntil = rs.getLong("black_flash_cooldown_until"); } catch (SQLException ignored) {}
         if (d.unlockedSkills == null)        d.unlockedSkills = new ArrayList<>();
         if (d.cooldowns == null)             d.cooldowns = new HashMap<>();
         if (d.deadShikigamiIds == null)      d.deadShikigamiIds = new ArrayList<>();
@@ -318,7 +318,7 @@ public class PlayerRepository {
         try (PreparedStatement ps = conn.prepareStatement(UPSERT_PLAYER)) {
             ps.setString(1,  d.uuid.toString());
             ps.setString(2,  d.characterId);
-            ps.setString(3,  d.grade != null ? d.grade : "4급");
+            ps.setString(3,  d.grade != null ? d.grade.key : "4급");
             ps.setLong(4,    d.xp);
             ps.setInt(5,     d.mastery);
             ps.setFloat(6,   d.ceCurrent);
@@ -395,6 +395,7 @@ public class PlayerRepository {
             ps.setInt(77,    d.evidenceAmplifyActive ? 1 : 0);
             ps.setString(78, GSON.toJson(d.antiAbuseFlags != null ? d.antiAbuseFlags : List.of()));
             ps.setInt(79,    d.quarantined ? 1 : 0);
+            ps.setLong(80,   d.blackFlashCooldownUntil);
             ps.executeUpdate();
         }
     }
@@ -523,7 +524,8 @@ public class PlayerRepository {
                 last_used_skill_id,
                 evidence_amplify_active,
                 anti_abuse_flags,
-                quarantined
+                quarantined,
+                black_flash_cooldown_until
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
                 ?,?, ?,?,?,?,
@@ -540,7 +542,8 @@ public class PlayerRepository {
                 ?,?,?,?,?,
                 ?,?,?,?,?,
                 ?,?,?,?,
-                ?,?
+                ?,?,
+                ?
             )
             ON CONFLICT(uuid) DO UPDATE SET
                 character_id              = excluded.character_id,
@@ -620,6 +623,7 @@ public class PlayerRepository {
                 last_used_skill_id             = excluded.last_used_skill_id,
                 evidence_amplify_active        = excluded.evidence_amplify_active,
                 anti_abuse_flags               = excluded.anti_abuse_flags,
-                quarantined                    = excluded.quarantined
+                quarantined                    = excluded.quarantined,
+                black_flash_cooldown_until     = excluded.black_flash_cooldown_until
             """;
 }

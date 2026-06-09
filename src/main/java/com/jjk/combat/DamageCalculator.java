@@ -170,7 +170,7 @@ public class DamageCalculator {
         // §4-2: gradeMultiplier — PvP(ServerPlayerEntity + gradePvpScaling) 이외는 pveGradeMultiplier 적용
         boolean isPvP = ctx != null && ctx.target instanceof ServerPlayerEntity;
         float gradeMult = (isPvP && config.gradePvpScaling)
-                ? gradeToMultiplier(attacker != null ? attacker.grade : null)
+                ? (attacker != null && attacker.grade != null ? attacker.grade.multiplier : 1.0f)
                 : config.pveGradeMultiplier;
 
         // §4-3: conditionMultiplier

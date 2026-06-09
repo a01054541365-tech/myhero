@@ -7,7 +7,7 @@ import com.jjk.network.s2c.AwakeningS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 
-// 吏쟊OCK: HP 30% / 160??/ 2400??????륂뒄 癰궰野???AwakeningManagerTest????ｍ뜞 ??륁젟
+// §LOCK: HP 30% / 160틱 / 2400틱 — 변경 시 AwakeningManagerTest 깨짐, 절대 수정 금지
 public class AwakeningManager {
 
     private static final int AWAKENING_DURATION_TICKS = 160;

@@ -7,9 +7,9 @@ import com.jjk.JJKMod;
 import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.JjkConfig;
 import com.jjk.api.combat.IDamageSource;
-import com.jjk.audit.AuditLogger;
 import com.jjk.combat.DamageContext;
 import com.jjk.data.PlayerData;
+import com.jjk.network.s2c.DomainDeployFailS2CPacket;
 import com.jjk.network.s2c.ZoneExitS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -102,6 +102,22 @@ public class DomainManager {
                         .forEach(p -> ServerPlayNetworking.send(p, new ZoneExitS2CPacket(domain.domainId)));
                 collapseDomain(domain.ownerUuid, currentTick);
 
+            } else if ("gojo_unlimited_void".equals(domain.domainId) && domain.sureHitActive) {
+                // 무량공처: 내부 플레이어(소유자 제외) 매 틱 CE 강제 소진, 고갈 시 1초 기절
+                for (ServerPlayerEntity p : world.getPlayers()) {
+                    if (p.getUuid().equals(domain.ownerUuid)) continue;
+                    if (!domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius)) continue;
+                    PlayerData pData = JJKMod.getPlayerRepository().load(p.getUuid());
+                    float beforeCe = pData.ceCurrent;
+                    pData.ceCurrent -= pData.ceMax * config.unlimitedVoidCeDrainRatio();
+                    pData.ceCurrent = Math.max(0f, pData.ceCurrent);
+                    if (pData.ceCurrent <= 0f) {
+                        pData.cooldowns.put("status_stun", currentTick + 20L);
+                    }
+                    if (pData.ceCurrent != beforeCe) {
+                        JJKMod.getPlayerRepository().save(pData);
+                    }
+                }
             } else if (domain.autoTargetAll) {
                 // autoTargetAll 매 틱 영혼 데미지 (마히토 자폐원돈과)
                 ServerPlayerEntity owner = world.getServer().getPlayerManager().getPlayer(domain.ownerUuid);
@@ -152,11 +168,20 @@ public class DomainManager {
         PlayerData ownerData0 = JJKMod.getPlayerRepository().load(owner.getUuid());
         if ("todo".equals(ownerData0.characterId)) return false;
 
+        // Step 0b: 이미 본인 영역 활성 중이면 중복 전개 불가
+        if (hasActiveDomain(owner.getUuid())) {
+            ServerPlayNetworking.send(owner, new DomainDeployFailS2CPacket(DomainDeployFailS2CPacket.FailReason.DOMAIN_ALREADY_ACTIVE));
+            return false;
+        }
+
         // Step 1: banned chunk check
         ChunkPos chunkPos = new ChunkPos(center);
         String worldKey = owner.getWorld().getRegistryKey().getValue().toString();
         String chunkKey = worldKey + ":" + chunkPos.x + "," + chunkPos.z;
-        if (config.domainBannedChunks.contains(chunkKey)) return false;
+        if (config.domainBannedChunks.contains(chunkKey)) {
+            ServerPlayNetworking.send(owner, new DomainDeployFailS2CPacket(DomainDeployFailS2CPacket.FailReason.BANNED_CHUNK));
+            return false;
+        }
 
         // Step 2: global cap §LOCK 4
         if (activeDomains.size() >= 4) return false;
@@ -167,12 +192,18 @@ public class DomainManager {
         long teamCount = activeDomains.values().stream()
                 .filter(d -> ownerTeam.equals(getTeamName(d.ownerUuid)))
                 .count();
-        if (teamCount >= 2) return false;
+        if (teamCount >= 2) {
+            ServerPlayNetworking.send(owner, new DomainDeployFailS2CPacket(DomainDeployFailS2CPacket.FailReason.DOMAIN_ALREADY_ACTIVE));
+            return false;
+        }
 
         // Step 4: cooldown check §LOCK domainCooldownUntil
         PlayerData data = JJKMod.getPlayerRepository().load(owner.getUuid());
         long currentTick = owner.getWorld().getTime();
-        if (currentTick < data.domainCooldownUntil) return false;
+        if (currentTick < data.domainCooldownUntil) {
+            ServerPlayNetworking.send(owner, new DomainDeployFailS2CPacket(DomainDeployFailS2CPacket.FailReason.ON_COOLDOWN));
+            return false;
+        }
 
         // Step 5: domain definition
         DomainDefinition def = domainDefs.get(domainId);
@@ -180,7 +211,10 @@ public class DomainManager {
 
         // Step 6: CE check (isOpen ×2)
         float ceCost = def.isOpen ? def.ceCost * 2f : def.ceCost;
-        if (data.ceCurrent < ceCost) return false;
+        if (data.ceCurrent < ceCost) {
+            ServerPlayNetworking.send(owner, new DomainDeployFailS2CPacket(DomainDeployFailS2CPacket.FailReason.CE_INSUFFICIENT));
+            return false;
+        }
 
         // Step 7: collision check — validate priority before any mutation
         DomainInstance conflictingDomain = null;
@@ -275,7 +309,7 @@ public class DomainManager {
     }
 
     /** §8-4: 개방형 시전자만 결계형 wallHp에 데미지 가능. */
-    public void applyWallDamage(UUID attackerUuid, UUID domainOwnerUuid, float damage) {
+    public void applyWallDamage(UUID attackerUuid, UUID domainOwnerUuid, float damage, long currentTick) {
         DomainInstance domain = activeDomains.values().stream()
                 .filter(d -> d.ownerUuid.equals(domainOwnerUuid) && !d.isOpen)
                 .findFirst().orElse(null);
@@ -286,7 +320,7 @@ public class DomainManager {
                 .findFirst().orElse(null);
         if (attackerDomain == null) return;
         domain.wallHp -= damage;
-        if (domain.wallHp <= 0) collapseDomain(domainOwnerUuid, System.currentTimeMillis());
+        if (domain.wallHp <= 0) collapseDomain(domainOwnerUuid, currentTick);
     }
 
     /** 영역 강제 종료. 같은 팀 영역이 1개로 줄면 restoreRadius() 호출. */
@@ -332,7 +366,7 @@ public class DomainManager {
      * CE 소모 없음 — 주령은 CE 시스템 외부.
      */
     public boolean deployNpcDomain(UUID npcUuid, Vec3d center,
-                                    String domainId, long currentTick) {
+                                    String domainId, long currentTick, String worldKey) {
         // 이미 전개 중이면 중복 방지
         boolean alreadyActive = activeDomains.values().stream()
             .anyMatch(d -> d.ownerUuid.equals(npcUuid));
@@ -344,7 +378,7 @@ public class DomainManager {
         // 금지 청크 체크 (center가 null이면 ORIGIN 사용)
         BlockPos blockCenter = center != null ? BlockPos.ofFloored(center) : BlockPos.ORIGIN;
         ChunkPos chunk = new ChunkPos(blockCenter);
-        String chunkKey = chunk.x + "," + chunk.z;
+        String chunkKey = worldKey + ":" + chunk.x + "," + chunk.z;
         if (config.domainBannedChunks.contains(chunkKey)) return false;
 
         DomainInstance instance = new DomainInstance(

@@ -33,7 +33,7 @@ public final class HudPacketSender {
 
         float cePercent = data.ceMax > 0f ? Math.min(1f, data.ceCurrent / data.ceMax) : 0f;
         float hpPercent = data.hpMax > 0f ? Math.min(1f, data.hpCurrent / data.hpMax) : 0f;
-        int gradeInt = gradeToInt(data.grade);
+        int gradeInt = data.grade != null ? (5 - data.grade.ordinal()) : 5;
 
         long currentTick = player.getWorld().getTime();
         boolean inCombat = (currentTick - data.lastCombatTick) < 100L;

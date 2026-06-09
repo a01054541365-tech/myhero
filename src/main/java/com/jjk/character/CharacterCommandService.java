@@ -3,6 +3,7 @@ package com.jjk.character;
 import com.jjk.JJKMod;
 import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.character.CharacterRegistry;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
 import com.jjk.item.JJKItems;
 import com.jjk.network.s2c.OpenCharacterSelectS2CPacket;
@@ -14,18 +15,12 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Identifier;
 
 import java.util.ArrayList;
-import java.util.Map;
 
 public class CharacterCommandService {
 
     private static final Identifier ITADORI_JUMP_MODIFIER_ID =
             Identifier.of("jjk", "itadori_jump_boost");
 
-    // grade_4 < grade_3 < grade_2 < grade_1 < semi_grade_1 < special_grade
-    private static final Map<String, Integer> GRADE_ORDER = Map.of(
-            "grade_4", 0, "grade_3", 1, "grade_2", 2,
-            "grade_1", 3, "semi_grade_1", 4, "special_grade", 5
-    );
 
     public enum SelectResult {
         OK, DUPLICATE_BLOCKED, GRADE_INSUFFICIENT, ALREADY_SELECTED, RESELECT_DISABLED
@@ -74,13 +69,13 @@ public class CharacterCommandService {
 
         // grade check (§26-2): skip on first selection (characterId == null)
         if (isReselect) {
-            int requiredRank = GRADE_ORDER.getOrDefault(meta.defaultGrade(), 0);
-            int playerRank   = GRADE_ORDER.getOrDefault(data.grade, 0);
+            int requiredRank = Grade.fromKey(meta.defaultGrade()).ordinal();
+            int playerRank   = data.grade != null ? data.grade.ordinal() : 0;
             if (playerRank < requiredRank) {
                 return SelectResult.GRADE_INSUFFICIENT;
             }
             // 재선택 시 전체 초기화
-            data.grade                       = "4급";
+            data.grade                       = Grade.GRADE_4;
             data.xp                          = 0;
             data.mastery                     = 0;
             data.unlockedSkills.clear();
@@ -92,7 +87,7 @@ public class CharacterCommandService {
             data.jackpotCooldownUntil        = 0L;
             data.curtainCooldownUntil        = 0L;
         } else {
-            data.grade = meta.defaultGrade();
+            data.grade = Grade.fromKey(meta.defaultGrade());
         }
 
         data.characterId = characterId;

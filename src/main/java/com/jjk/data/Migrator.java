@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class Migrator {
 
-    public static final int CURRENT_VERSION = 22;
+    public static final int CURRENT_VERSION = 23;
 
     private static final String DDL_PLAYER_DATA = """
             CREATE TABLE IF NOT EXISTS player_data (
@@ -65,6 +65,7 @@ public class Migrator {
                 last_received_is_domain     INTEGER NOT NULL DEFAULT 0,
                 mahoraga_counter            INTEGER NOT NULL DEFAULT 0,
                 black_flash_focus_end_tick  INTEGER NOT NULL DEFAULT 0,
+                black_flash_cooldown_until  INTEGER NOT NULL DEFAULT 0,
                 ten_shadows_active          INTEGER NOT NULL DEFAULT 0,
                 shield_active               INTEGER NOT NULL DEFAULT 0,
                 combo_count                 INTEGER NOT NULL DEFAULT 0,
@@ -297,6 +298,12 @@ public class Migrator {
                 try (Statement st = conn.createStatement()) {
                     try { st.execute("ALTER TABLE player_data ADD COLUMN anti_abuse_flags TEXT    NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
                     try { st.execute("ALTER TABLE player_data ADD COLUMN quarantined      INTEGER NOT NULL DEFAULT 0"); }   catch (SQLException ignored) {}
+                }
+            }
+            case 23 -> {
+                // 흑섬 연속 발동 쿨다운 (구현 C-2)
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN black_flash_cooldown_until INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
                 }
             }
         }

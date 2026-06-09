@@ -4,7 +4,6 @@ import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
 import com.jjk.api.skill.SkillResult;
 import com.jjk.chant.ChantingHandler;
-import com.jjk.audit.AuditLogger;
 import com.jjk.entity.CursedSpiritEntity;
 import com.jjk.entity.ShikigamiEntity;
 import com.jjk.awakening.AwakeningManager;
@@ -24,7 +23,6 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import com.jjk.advancement.AdvancementTriggerManager;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.network.packet.s2c.play.BossBarS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import java.util.Optional;
@@ -87,12 +85,17 @@ public class CombatPipeline {
         }
 
         // 5단계: 흑섬·Zone·각성 — checkAndActivate는 이 메서드(5·9단계)에서만 호출
-        boolean justFrame = ComboTracker.checkBlackFlash(attacker.lastAttackTick, currentTick);
+        // 구현 C-2: 흑섬 연속 발동 쿨다운 — 쿨다운 중이면 확률 계산 자체를 건너뛴다
+        boolean justFrame = currentTick >= attacker.blackFlashCooldownUntil
+                && ComboTracker.checkBlackFlash(attacker.lastAttackTick, currentTick);
         boolean isBlackFlash = justFrame
                 && ComboTracker.rollBlackFlash(attacker, attacker.hpCurrent, attacker.hpMax);
         // §LOCK base × 2.5: calculatePure에서 ctx.isBlackFlash 플래그로 적용 (이중 계산 방지)
-        if (isBlackFlash && attacker.uuid != null) {
-            BlackFlashPerfectTracker.record(attacker.uuid, currentTick);
+        if (isBlackFlash) {
+            attacker.blackFlashCooldownUntil = currentTick + config.blackFlashCooldownTicks();
+            if (attacker.uuid != null) {
+                BlackFlashPerfectTracker.record(attacker.uuid, currentTick);
+            }
         }
 
         awakeMgr.checkAndActivate(attacker, attacker.hpCurrent, attacker.hpMax, currentTick);
@@ -284,21 +287,8 @@ public class CombatPipeline {
                 damage *= 0.5f;
             }
 
-            // Stage 5: grade scaling
-            // awakeningActive already applied in DamageCalculator — not repeated here
-            // §LOCK clamp ×4.0 already applied in DamageCalculator — not repeated here
-            float gradeMultiplier = 1.00f;
-            if (attackerData.grade != null) {
-                gradeMultiplier = switch (attackerData.grade) {
-                    case "grade_4"      -> 1.00f;
-                    case "grade_3"      -> 1.15f;
-                    case "grade_2"      -> 1.30f;
-                    case "grade_1"      -> 1.50f;
-                    case "semi_grade_1" -> 1.65f;
-                    case "special_grade"-> 1.80f;
-                    default             -> 1.00f;
-                };
-            }
+            // Stage 5: grade scaling (§LOCK multipliers — see Grade.multiplier)
+            float gradeMultiplier = attackerData.grade != null ? attackerData.grade.multiplier : 1.00f;
             damage *= gradeMultiplier;
         }
 
@@ -430,7 +420,7 @@ public class CombatPipeline {
                 GradeManager gm = JJKMod.getGradeManager();
                 PlayerData atkXpData = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
                 long xpTick = ctx.attacker.getWorld().getTime();
-                int defGradeRank = GradeManager.Grade.fromLabel(targetData.grade).rank;
+                int defGradeRank = targetData.grade != null ? targetData.grade.ordinal() : 0;
                 gm.onDamageHit(atkXpData, attackerPlayer, xpTick, defGradeRank);
                 if (ctx.isBlackFlash) {
                     gm.onBlackFlash(atkXpData, attackerPlayer);

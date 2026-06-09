@@ -1,6 +1,7 @@
 package com.jjk.test;
 
 import com.jjk.JjkConfig;
+import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
 import com.jjk.domain.DomainDefinition;
 import com.jjk.domain.DomainInstance;
@@ -107,7 +108,7 @@ class DomainManagerTest {
     @Test
     void testPriorityCalculation() {
         PlayerData owner = PlayerData.createDefault(UUID.randomUUID());
-        owner.grade = "grade_1";
+        owner.grade = Grade.GRADE_1;
         owner.mastery = 50;
         owner.ceCurrent = 500f;
         owner.ceMax = 500f;
@@ -128,13 +129,13 @@ class DomainManagerTest {
         DomainPriorityCalculator calc = new DomainPriorityCalculator();
 
         PlayerData special = PlayerData.createDefault(UUID.randomUUID());
-        special.grade = "special_grade";
+        special.grade = Grade.SPECIAL;
         special.mastery = 0;
         special.ceCurrent = 100f;
         special.ceMax = 100f;
 
         PlayerData grade4 = PlayerData.createDefault(UUID.randomUUID());
-        grade4.grade = "grade_4";
+        grade4.grade = Grade.GRADE_4;
         grade4.mastery = 0;
         grade4.ceCurrent = 100f;
         grade4.ceMax = 100f;
@@ -153,10 +154,10 @@ class DomainManagerTest {
 
         // 동일한 grade/mastery/ce/wallHp → 우선순위 동점
         PlayerData dataA = PlayerData.createDefault(UUID.randomUUID());
-        dataA.grade = "grade_4"; dataA.mastery = 0; dataA.ceCurrent = 0f; dataA.ceMax = 100f;
+        dataA.grade = Grade.GRADE_4; dataA.mastery = 0; dataA.ceCurrent = 0f; dataA.ceMax = 100f;
 
         PlayerData dataB = PlayerData.createDefault(UUID.randomUUID());
-        dataB.grade = "grade_4"; dataB.mastery = 0; dataB.ceCurrent = 0f; dataB.ceMax = 100f;
+        dataB.grade = Grade.GRADE_4; dataB.mastery = 0; dataB.ceCurrent = 0f; dataB.ceMax = 100f;
 
         DomainInstance domA = closedInst(0f, 20f);
         DomainInstance domB = closedInst(0f, 20f);
