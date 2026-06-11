@@ -129,7 +129,7 @@ public class DomainBlockQueue {
                 ServerWorld w = getWorld(server, c.worldKey());
                 if (w == null) continue;
                 forceLoadChunk(w, c.pos());
-                w.setBlockState(c.pos(), c.targetState(), Block.NOTIFY_LISTENERS);
+                w.setBlockState(c.pos(), c.targetState(), Block.NOTIFY_ALL);
             }
             if (queue.isEmpty()) it.remove();
         }
@@ -142,7 +142,7 @@ public class DomainBlockQueue {
             if (w == null) { w = server.getOverworld(); }
             if (w == null) continue;
             forceLoadChunk(w, c.pos());
-            w.setBlockState(c.pos(), c.targetState(), Block.NOTIFY_LISTENERS);
+            w.setBlockState(c.pos(), c.targetState(), Block.NOTIFY_ALL);
         }
     }
 
@@ -257,7 +257,7 @@ public class DomainBlockQueue {
         net.minecraft.block.Block block = Registries.BLOCK.get(id);
         if (block == null) return;
         BlockPos pos = new BlockPos(entry.x(), entry.y(), entry.z());
-        world.setBlockState(pos, block.getDefaultState(), Block.NOTIFY_LISTENERS);
+        world.setBlockState(pos, block.getDefaultState(), Block.NOTIFY_ALL);
     }
 
     private void forceLoadChunk(ServerWorld world, BlockPos pos) {

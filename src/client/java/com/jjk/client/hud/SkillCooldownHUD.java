@@ -31,8 +31,6 @@ public final class SkillCooldownHUD {
     private static final int COLOR_SLOT_BORDER   = 0xFF888888;
     private static final int COLOR_SLOT_CE_LACK  = 0xFFFF4444;
 
-    private static final String[] KEY_LABELS = {"F", "G", "R", "H", "V", "C"};
-
     public void render(DrawContext context, MinecraftClient client) {
         if (client.player == null) return;
 
@@ -63,12 +61,6 @@ public final class SkillCooldownHUD {
         context.fill(x,                    y + SLOT_SIZE - 1,     x + SLOT_SIZE, y + SLOT_SIZE,   borderColor);
         context.fill(x,                    y + 1,                 x + 1,         y + SLOT_SIZE - 1, borderColor);
         context.fill(x + SLOT_SIZE - 1,    y + 1,                 x + SLOT_SIZE, y + SLOT_SIZE - 1, borderColor);
-
-        // 키 레이블
-        context.drawCenteredTextWithShadow(client.textRenderer,
-                Text.literal(KEY_LABELS[keyId]),
-                x + SLOT_SIZE / 2, y + SLOT_SIZE - 9,
-                0xFFAAAAAA);
 
         // 쿨타임 오버레이 (원호)
         float cdRatio = JjkClientState.getCooldownRatio(keyId, worldTick);

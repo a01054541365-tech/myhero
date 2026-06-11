@@ -1,7 +1,6 @@
 package com.jjk.bossbar;
 
 import com.jjk.JJKMod;
-import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.BossBarUpdateS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -55,16 +54,9 @@ public class CeBossBarManager {
 
     private static Text buildTitle(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        String charName = data.characterId != null
-                ? CharacterRegistry.get(data.characterId).displayName()
-                : "?";
-        int hp  = (int) data.hpCurrent;
-        int hpM = (int) data.hpMax;
         int ce  = (int) data.ceCurrent;
         int ceM = (int) data.ceMax;
-        return Text.literal(
-                "[" + charName + "] HP: " + hp + " / " + hpM
-                + "  CE: " + ce + " / " + ceM);
+        return Text.literal("주력  " + ce + " / " + ceM);
     }
 
     private static BossBar.Color colorFor(float ratio) {

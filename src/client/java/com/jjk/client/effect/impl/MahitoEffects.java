@@ -1,6 +1,7 @@
 package com.jjk.client.effect.impl;
 
 import com.jjk.client.effect.SkillEffectRegistry;
+import com.jjk.client.fx.ParticleThrottle;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.world.ClientWorld;
@@ -18,16 +19,51 @@ public final class MahitoEffects {
     }
 
     private static void idleTransfigure(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        // 자폐원돈과 — WITCH+PORTAL 혼합
-        CommonEffects.spawnBurst(w, ParticleTypes.WITCH, pkt.x(), pkt.y(), pkt.z(), 24);
-        CommonEffects.spawnBurst(w, ParticleTypes.PORTAL, pkt.x(), pkt.y(), pkt.z(), 16);
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        for (int i = 0; i < 24; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double angle = 2 * Math.PI * i / 24 + i * 0.3;
+            double r = 0.8 + Math.sin(i * 0.5) * 0.4;
+            double h = i / 24.0 * 2.5;
+            w.addParticle(ParticleTypes.WITCH,
+                x + Math.cos(angle) * r, y + h, z + Math.sin(angle) * r,
+                -Math.sin(angle) * 0.05, 0.04, Math.cos(angle) * 0.05);
+        }
+        for (int i = 0; i < 12; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.PORTAL,
+                x + (w.random.nextDouble() - 0.5) * 0.8,
+                y + w.random.nextDouble() * 2.0,
+                z + (w.random.nextDouble() - 0.5) * 0.8,
+                0, 0.1, 0);
+        }
     }
 
     private static void soulPunch(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        // 영혼 직접 가격 — SOUL 폭발 + CRIT
-        int count = (int)(32 * pkt.intensity());
-        CommonEffects.spawnBurst(w, ParticleTypes.SOUL, pkt.x(), pkt.y(), pkt.z(), count);
-        CommonEffects.spawnBurst(w, ParticleTypes.CRIT, pkt.x(), pkt.y(), pkt.z(), 8);
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        int count = (int)(40 * pkt.intensity());
+        for (int i = 0; i < count; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double angle = 2 * Math.PI * i / count;
+            double speed = 0.25 + w.random.nextDouble() * 0.15;
+            w.addParticle(ParticleTypes.SOUL, x, y, z,
+                Math.cos(angle) * speed, 0.1, Math.sin(angle) * speed);
+        }
+        for (int i = 0; i < 12; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.CRIT, x, y, z,
+                (w.random.nextDouble() - 0.5) * 0.4,
+                w.random.nextDouble() * 0.3,
+                (w.random.nextDouble() - 0.5) * 0.4);
+        }
+        for (int i = 0; i < 8; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.WITCH,
+                x + (w.random.nextDouble() - 0.5) * 1.0,
+                y + w.random.nextDouble() * 1.5,
+                z + (w.random.nextDouble() - 0.5) * 1.0,
+                0, 0.05, 0);
+        }
     }
 
     private static void domain(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {

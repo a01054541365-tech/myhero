@@ -6,7 +6,6 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.text.Text;
 
 @Environment(EnvType.CLIENT)
@@ -63,28 +62,27 @@ public class JjkHudRenderer {
     }
 
     private void renderHealthBar(DrawContext context, MinecraftClient client) {
-        PlayerEntity player = client.player;
-        float hp = player.getHealth();
-        float maxHp = player.getMaxHealth();
-        float hpRatio = maxHp > 0f ? hp / maxHp : 1f;
+        int hp    = JjkClientState.getHp();
+        int hpMax = JjkClientState.getHpMax();
+        float hpPercent = hpMax > 0 ? (float) hp / hpMax : 1f;
 
-        int color = getHealthColor(hpRatio);
+        int color = getHealthColor(hpPercent);
         int screenW = client.getWindow().getScaledWidth();
         int screenH = client.getWindow().getScaledHeight();
 
         int barX = screenW / 2 - 91;
-        int barY = screenH - 39;
-        int barW = (int)(182 * hpRatio);
+        int barY = screenH - 52;
+        int barW = (int)(182 * hpPercent);
 
         context.fill(barX, barY, barX + 182, barY + 5, 0xFF333333);
         if (barW > 0) context.fill(barX, barY, barX + barW, barY + 5, color);
     }
 
     private int getHealthColor(float ratio) {
-        if (ratio >= 0.70f) return 0xFF55FF55;
-        if (ratio >= 0.40f) return 0xFFFFFF55;
-        if (ratio >= 0.20f) return 0xFFFF9900;
-        return 0xFFFF2222;
+        if (ratio >= 0.75f) return 0xFF55FF55;
+        if (ratio >= 0.50f) return 0xFFFFFF55;
+        if (ratio >= 0.25f) return 0xFFFF9900;
+        return 0xFFFF4444;
     }
 
     private void renderChantingBar(DrawContext context, MinecraftClient client) {

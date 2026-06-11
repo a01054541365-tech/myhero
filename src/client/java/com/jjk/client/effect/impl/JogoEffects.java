@@ -37,22 +37,32 @@ public final class JogoEffects {
 
     private static void maximumMeteor(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
         double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        // 낙하 궤적 — 상단에서 아래로 FLAME 스트림
+        for (int i = 0; i < 30; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double ox = (w.random.nextDouble() - 0.5) * 1.5;
+            double oz = (w.random.nextDouble() - 0.5) * 1.5;
+            w.addParticle(ParticleTypes.FLAME,
+                x + ox, y + 8.0 + w.random.nextDouble() * 4.0, z + oz,
+                ox * 0.05, -0.5, oz * 0.05);
+        }
         for (int i = 0; i < 20; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            w.addParticle(ParticleTypes.FLAME, x + (w.random.nextDouble() - 0.5), y + 15 - i,
-                z + (w.random.nextDouble() - 0.5), 0, -0.3, 0);
+            double angle = 2 * Math.PI * i / 20;
+            double r = 1.0 + w.random.nextDouble() * 2.0;
+            w.addParticle(ParticleTypes.LAVA,
+                x + Math.cos(angle) * r, y + 0.2, z + Math.sin(angle) * r,
+                Math.cos(angle) * 0.2, 0.3, Math.sin(angle) * 0.2);
         }
-        // 착탄 폭발 — 방사형
-        int count = (int)(48 * pkt.intensity());
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < 16; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            double angle = 2 * Math.PI * i / count;
-            w.addParticle(ParticleTypes.FLAME,
-                x + Math.cos(angle) * 0.5, y, z + Math.sin(angle) * 0.5,
-                Math.cos(angle) * 0.5, 0.2, Math.sin(angle) * 0.5);
+            w.addParticle(ParticleTypes.SOUL_FIRE_FLAME,
+                x + (w.random.nextDouble() - 0.5) * 3.0,
+                y + 0.1,
+                z + (w.random.nextDouble() - 0.5) * 3.0,
+                0, 0.15 + w.random.nextDouble() * 0.1, 0);
         }
-        if (ParticleThrottle.canSpawn()) w.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 0, 0, 0);
     }
 
     private static void domain(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {

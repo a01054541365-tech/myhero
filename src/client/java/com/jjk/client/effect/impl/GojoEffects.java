@@ -21,57 +21,108 @@ public final class GojoEffects {
     }
 
     private static void blue(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        int count = (int)(32 * pkt.intensity());
-        // 구형 파티클 배치
-        CommonEffects.spawnSphere(w, ParticleTypes.DRAGON_BREATH, x, y, z, 2.5, count);
-        // 회전 링 (수평 원)
-        int ring = 16;
-        for (int i = 0; i < ring; i++) {
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        int count = (int)(40 * pkt.intensity());
+        int rings = 3;
+        for (int r = rings; r >= 1; r--) {
+            int perRing = count / rings;
+            for (int i = 0; i < perRing; i++) {
+                if (!ParticleThrottle.canSpawn()) return;
+                double angle = 2 * Math.PI * i / perRing;
+                double radius = r * 1.5;
+                double vx = -Math.cos(angle) * 0.15 * r;
+                double vz = -Math.sin(angle) * 0.15 * r;
+                w.addParticle(ParticleTypes.DRAGON_BREATH,
+                    x + Math.cos(angle) * radius,
+                    y + w.random.nextDouble() * 0.5,
+                    z + Math.sin(angle) * radius,
+                    vx, 0.02, vz);
+            }
+        }
+        for (int i = 0; i < 8; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            double angle = 2 * Math.PI * i / ring;
-            w.addParticle(ParticleTypes.PORTAL,
-                x + Math.cos(angle) * 3.0, y + 0.5, z + Math.sin(angle) * 3.0,
-                -Math.sin(angle) * 0.2, 0.05, Math.cos(angle) * 0.2);
+            w.addParticle(ParticleTypes.END_ROD, x, y, z,
+                (w.random.nextDouble() - 0.5) * 0.05,
+                w.random.nextDouble() * 0.05,
+                (w.random.nextDouble() - 0.5) * 0.05);
         }
     }
 
     private static void red(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        int count = (int)(32 * pkt.intensity());
-        CommonEffects.spawnSphere(w, ParticleTypes.FLAME, x, y, z, 2.5, count);
-        for (int i = 0; i < 12; i++) {
-            if (!ParticleThrottle.canSpawn()) return;
-            double angle = 2 * Math.PI * i / 12;
-            w.addParticle(ParticleTypes.FLAME,
-                x + Math.cos(angle) * 3.0, y, z + Math.sin(angle) * 3.0,
-                Math.cos(angle) * 0.4, 0.1, Math.sin(angle) * 0.4);
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        int count = (int)(40 * pkt.intensity());
+        int[] radii = {2, 4, 6};
+        for (int ri = 0; ri < radii.length; ri++) {
+            int perRing = count / 3;
+            for (int i = 0; i < perRing; i++) {
+                if (!ParticleThrottle.canSpawn()) return;
+                double angle = 2 * Math.PI * i / perRing;
+                double vx = Math.cos(angle) * (0.3 + ri * 0.1);
+                double vz = Math.sin(angle) * (0.3 + ri * 0.1);
+                w.addParticle(ParticleTypes.FLAME,
+                    x + Math.cos(angle) * radii[ri],
+                    y + 0.3,
+                    z + Math.sin(angle) * radii[ri],
+                    vx, 0.05, vz);
+            }
         }
+        for (int i = 0; i < 16; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.SOUL_FIRE_FLAME, x, y, z,
+                (w.random.nextDouble() - 0.5) * 0.2,
+                0.3 + w.random.nextDouble() * 0.4,
+                (w.random.nextDouble() - 0.5) * 0.2);
+        }
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 0, 0, 0);
     }
 
     private static void purple(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        int count = (int)(48 * pkt.intensity());
-        // blue + red 혼합 색상 → WITCH(보라) + DRAGON_BREATH
-        CommonEffects.spawnLine(w, ParticleTypes.WITCH, x, y, z, pkt.dirX(), pkt.dirY(), pkt.dirZ(), count / 2);
-        CommonEffects.spawnLine(w, ParticleTypes.DRAGON_BREATH, x, y, z, pkt.dirX(), pkt.dirY(), pkt.dirZ(), count / 2);
-        CommonEffects.spawnBurst(w, ParticleTypes.SOUL, x, y, z, 16);
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        double dx = pkt.dirX(), dy = pkt.dirY(), dz = pkt.dirZ();
+        double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001) { dx = 1; len = 1; }
+        double nx = dx / len, ny = dy / len, nz = dz / len;
+        int count = (int)(60 * pkt.intensity());
+        for (int i = 0; i < count; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double t = i / (double) count * 12.0;
+            double spread = 0.3;
+            double ox = (w.random.nextDouble() - 0.5) * spread;
+            double oz = (w.random.nextDouble() - 0.5) * spread;
+            net.minecraft.particle.ParticleEffect type =
+                (i % 2 == 0) ? ParticleTypes.WITCH : ParticleTypes.DRAGON_BREATH;
+            w.addParticle(type,
+                x + nx * t + ox, y + ny * t, z + nz * t + oz,
+                nx * 0.3, ny * 0.1, nz * 0.3);
+        }
+        double ex = x + nx * 10, ey = y + ny * 10, ez = z + nz * 10;
+        CommonEffects.spawnBurst(w, ParticleTypes.SOUL, ex, ey, ez, 24);
+        CommonEffects.spawnBurst(w, ParticleTypes.PORTAL, ex, ey, ez, 16);
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.EXPLOSION_EMITTER, ex, ey, ez, 0, 0, 0);
     }
 
     private static void infinityBlock(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        // 육각형 배치 파티클 플래시
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
         int sides = 6;
         for (int i = 0; i < sides; i++) {
             if (!ParticleThrottle.canSpawn()) return;
             double angle = 2 * Math.PI * i / sides;
-            for (int r = 1; r <= 2; r++) {
+            double cx = x + Math.cos(angle) * 1.2;
+            double cz = z + Math.sin(angle) * 1.2;
+            w.addParticle(ParticleTypes.END_ROD, cx, y + 1.0, cz, 0, 0.05, 0);
+            double nextAngle = 2 * Math.PI * ((i + 1) % sides) / sides;
+            double nx2 = x + Math.cos(nextAngle) * 1.2;
+            double nz2 = z + Math.sin(nextAngle) * 1.2;
+            for (int s = 1; s <= 3; s++) {
                 if (!ParticleThrottle.canSpawn()) return;
+                double t = s / 4.0;
                 w.addParticle(ParticleTypes.ENCHANT,
-                    x + Math.cos(angle) * r, y + 1.0, z + Math.sin(angle) * r, 0, 0.1, 0);
+                    cx + (nx2 - cx) * t, y + 1.0, cz + (nz2 - cz) * t,
+                    0, 0.08, 0);
             }
         }
-        if (ParticleThrottle.canSpawn()) w.addParticle(ParticleTypes.END_ROD, x, y + 1, z, 0, 0.3, 0);
     }
 
     private static void domain(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {

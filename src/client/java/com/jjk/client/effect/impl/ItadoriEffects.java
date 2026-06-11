@@ -21,19 +21,26 @@ public final class ItadoriEffects {
     }
 
     private static void divergentFist(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        // 충격파 부채꼴 — 방향 기반 6블록
-        CommonEffects.spawnLine(w, ParticleTypes.CRIT, x, y, z, pkt.dirX(), pkt.dirY(), pkt.dirZ(), 16);
-        // 주황 폭발 파티클
-        int count = (int)(24 * pkt.intensity());
-        for (int i = 0; i < count; i++) {
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        for (int i = 0; i < 12; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            double angle = (w.random.nextDouble() - 0.5) * Math.PI;
-            double range = w.random.nextDouble() * 3.0;
-            w.addParticle(ParticleTypes.SWEEP_ATTACK,
-                x + Math.cos(angle) * range, y + 0.5, z + Math.sin(angle) * range,
-                Math.cos(angle) * 0.2, 0, Math.sin(angle) * 0.2);
+            double angle = 2 * Math.PI * i / 12;
+            w.addParticle(ParticleTypes.CRIT,
+                x, y, z,
+                Math.cos(angle) * 0.25, 0.15, Math.sin(angle) * 0.25);
         }
+        for (int i = 0; i < 20; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.SOUL,
+                x + (w.random.nextDouble() - 0.5) * 0.4,
+                y + 0.3,
+                z + (w.random.nextDouble() - 0.5) * 0.4,
+                (w.random.nextDouble() - 0.5) * 0.3,
+                0.2 + w.random.nextDouble() * 0.2,
+                (w.random.nextDouble() - 0.5) * 0.3);
+        }
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.SWEEP_ATTACK, x, y, z, 0, 0, 0);
     }
 
     private static void blackFlash(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
@@ -67,7 +74,26 @@ public final class ItadoriEffects {
     }
 
     private static void shrine(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
-        CommonEffects.spawnBurst(w, ParticleTypes.SOUL, pkt.x(), pkt.y(), pkt.z(), 24);
-        CommonEffects.spawnBurst(w, ParticleTypes.CRIT, pkt.x(), pkt.y(), pkt.z(), 16);
+        double x = pkt.x(), y = pkt.y() + 1.0, z = pkt.z();
+        int count = (int)(32 * pkt.intensity());
+        for (int i = 0; i < count; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double angle = 2 * Math.PI * i / count;
+            double r = 0.3 + w.random.nextDouble() * 0.5;
+            w.addParticle(ParticleTypes.SOUL,
+                x + Math.cos(angle) * r,
+                y - 0.5 + (i / (double) count) * 3.0,
+                z + Math.sin(angle) * r,
+                0, 0.15, 0);
+        }
+        for (int i = 0; i < 16; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.CRIT, x, y, z,
+                (w.random.nextDouble() - 0.5) * 0.5,
+                w.random.nextDouble() * 0.3,
+                (w.random.nextDouble() - 0.5) * 0.5);
+        }
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.FLASH, x, y + 1.0, z, 0, 0, 0);
     }
 }

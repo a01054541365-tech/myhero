@@ -30,13 +30,31 @@ public final class CommonEffects {
     }
 
     private static void spawnBlackFlash(ClientWorld w, double x, double y, double z, float intensity) {
-        int count = (int)(32 * intensity);
+        int count = (int)(48 * intensity);
         for (int i = 0; i < count; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            w.addParticle(ParticleTypes.SOUL, x, y, z,
-                (w.random.nextDouble() - 0.5) * 0.3, 0.1, (w.random.nextDouble() - 0.5) * 0.3);
+            double angle = 2 * Math.PI * i / count;
+            double speed = 0.3 + w.random.nextDouble() * 0.3;
+            w.addParticle(ParticleTypes.SOUL,
+                x, y + 1.0, z,
+                Math.cos(angle) * speed,
+                0.1 + w.random.nextDouble() * 0.2,
+                Math.sin(angle) * speed);
         }
-        if (ParticleThrottle.canSpawn()) w.addParticle(ParticleTypes.FLASH, x, y, z, 0, 0, 0);
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.FLASH, x, y + 1.0, z, 0, 0, 0);
+        for (int i = 0; i < 16; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            w.addParticle(ParticleTypes.SOUL_FIRE_FLAME,
+                x + (w.random.nextDouble() - 0.5) * 0.5,
+                y + 0.5,
+                z + (w.random.nextDouble() - 0.5) * 0.5,
+                (w.random.nextDouble() - 0.5) * 0.1,
+                0.25 + w.random.nextDouble() * 0.2,
+                (w.random.nextDouble() - 0.5) * 0.1);
+        }
+        if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 0, 0, 0);
         BlackFlashOverlay.INSTANCE.triggerHitFlash();
     }
 

@@ -1,0 +1,22 @@
+{
+  "skill_hit": {
+    "category": "player",
+    "sounds": []
+  },
+  "black_flash": {
+    "category": "player",
+    "sounds": []
+  },
+  "domain_open": {
+    "category": "player",
+    "sounds": []
+  },
+  "domain_close": {
+    "category": "player",
+    "sounds": []
+  },
+  "awakening": {
+    "category": "player",
+    "sounds": []
+  }
+}
