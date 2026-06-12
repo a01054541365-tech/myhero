@@ -20,12 +20,12 @@ import java.util.Optional;
 public class GojoSkillSet implements ISkillSet {
 
     // key 0: blue, 1: red, 2: purple, 3: unlimited_void, 4: infinity_toggle, 5: curtain_toggle
-    private static final int CE_0 = 360,  CD_0 = 4;
-    private static final int CE_1 = 360,  CD_1 = 8;
-    private static final int CE_2 = 520,  CD_2 = 60;
-    private static final int CE_3 = 6000, CD_3 = 360;
-    private static final int CE_4 = 30,   CD_4 = 1;    // 50→30, 5→1 (§6-2 고죠 기준) | CE_4는 토글 ON 최소 보유량 기준; 실제 소모는 CEManager 드레인(1.5/틱)으로 처리
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환). key 5(커튼)는 techniques.json 미등재 — 상수 유지.
+    private static final String CHAR_ID = "gojo";
     private static final int CE_5 = 200,  CD_5 = 60;
+
+    private static int ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -51,16 +51,14 @@ public class GojoSkillSet implements ISkillSet {
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; case 5 -> CD_5; default -> 0;
+            case 0, 1, 2, 3, 4 -> cd(keyId); case 5 -> CD_5; default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> CE_4; case 5 -> CE_5; default -> 0;
+            case 0, 1, 2, 3, 4 -> ce(keyId); case 5 -> CE_5; default -> 0;
         };
     }
 
@@ -116,8 +114,8 @@ public class GojoSkillSet implements ISkillSet {
             target.velocityModified = true;
         }
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        CooldownManager.set(data, cdKey(0), tick, CD_0);
+        JJKMod.getCEManager().consume(player, ce(0));
+        CooldownManager.set(data, cdKey(0), tick, cd(0));
         JJKMod.getPlayerRepository().save(data);
         player.getServerWorld().getPlayers().forEach(p ->
                 ServerPlayNetworking.send(p, new AnimationTriggerS2CPacket(player.getUuid(), (byte) 1)));
@@ -138,8 +136,8 @@ public class GojoSkillSet implements ISkillSet {
             target.velocityModified = true;
         }
 
-        JJKMod.getCEManager().consume(player, CE_1);
-        CooldownManager.set(data, cdKey(1), tick, CD_1);
+        JJKMod.getCEManager().consume(player, ce(1));
+        CooldownManager.set(data, cdKey(1), tick, cd(1));
         JJKMod.getPlayerRepository().save(data);
         player.getServerWorld().getPlayers().forEach(p ->
                 ServerPlayNetworking.send(p, new AnimationTriggerS2CPacket(player.getUuid(), (byte) 2)));
@@ -155,8 +153,8 @@ public class GojoSkillSet implements ISkillSet {
         if (!recentlyUsed(data, tick, 0) && !recentlyUsed(data, tick, 1))
             return SkillResult.FAIL;
 
-        JJKMod.getCEManager().consume(player, CE_2);
-        CooldownManager.set(data, cdKey(2), tick, CD_2);
+        JJKMod.getCEManager().consume(player, ce(2));
+        CooldownManager.set(data, cdKey(2), tick, cd(2));
         JJKMod.getPlayerRepository().save(data);
         player.getServerWorld().getPlayers().forEach(p ->
                 ServerPlayNetworking.send(p, new AnimationTriggerS2CPacket(player.getUuid(), (byte) 3)));
@@ -175,13 +173,13 @@ public class GojoSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(4), tick)) return SkillResult.ON_COOLDOWN;
-        // §6-2: 토글 ON 시만 최소 보유량(CE_4=30) 확인. OFF는 항상 허용.
-        // 실제 CE 소모는 CEManager.regenTick() 드레인(1.5/틱)으로만 처리.
-        if (!data.infinityActive && !JJKMod.getCEManager().canAfford(player, CE_4)) {
+        // §6-2: 토글 ON 시만 최소 보유량(ce(4)) 확인. OFF는 항상 허용.
+        // 실제 CE 소모는 CEManager.regenTick() 드레인(cePerTick)으로만 처리.
+        if (!data.infinityActive && !JJKMod.getCEManager().canAfford(player, ce(4))) {
             return SkillResult.CE_INSUFFICIENT;
         }
         data.infinityActive = !data.infinityActive;
-        CooldownManager.set(data, cdKey(4), tick, CD_4);
+        CooldownManager.set(data, cdKey(4), tick, cd(4));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }

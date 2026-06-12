@@ -23,14 +23,13 @@ import java.util.List;
 public class OkkotsuSkillSet implements ISkillSet {
 
     // key 0: rika_summon, 1: sword_slash, 2: copy_technique, 3: okkotsu_true_mutual_love, 4: rct
-    // CE/CD 수치: jjk_spec_v5.md §6-5
-    private static final int CE_0 = 260,  CD_0 = 30,  ANIM_0 = 50;
-    private static final int CE_1 = 180,  CD_1 = 12,  ANIM_1 = 40;
-    private static final int CE_2 = 300,  CD_2 = 45,  ANIM_2 = 52;
-    private static final int CE_3 = 3000, CD_3 = 480, ANIM_3 = 41;  // 진판상애절단 영역
-    private static final int CD_4 = 8;   // RCT: 업프런트 CE 없음, 드레인 방식
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "okkotsu";
+    private static final int ANIM_0 = 50, ANIM_1 = 40, ANIM_2 = 52, ANIM_3 = 41;
 
-    private static final float SWORD_SLASH_DAMAGE = 60f;
+    private static float bd(int keyId) { return TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -55,18 +54,12 @@ public class OkkotsuSkillSet implements ISkillSet {
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> 0; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -91,15 +84,15 @@ public class OkkotsuSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(0), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_0)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(0))) return SkillResult.CE_INSUFFICIENT;
 
         RikaEntity rika = new RikaEntity(ShikigamiEntityTypes.RIKA, player.getServerWorld(), player.getUuid());
         rika.refreshPositionAndAngles(player.getX(), player.getY(), player.getZ(),
                 player.getYaw(), player.getPitch());
         player.getServerWorld().spawnEntity(rika);
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        CooldownManager.set(data, cdKey(0), tick, CD_0);
+        JJKMod.getCEManager().consume(player, ce(0));
+        CooldownManager.set(data, cdKey(0), tick, cd(0));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_0);
         return SkillResult.SUCCESS;
@@ -110,7 +103,7 @@ public class OkkotsuSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(1), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(1))) return SkillResult.CE_INSUFFICIENT;
 
         Vec3d facing = player.getRotationVec(1.0f);
         double cosHalf = Math.cos(Math.toRadians(45.0));  // ±45도 arc
@@ -125,7 +118,7 @@ public class OkkotsuSkillSet implements ISkillSet {
         float externalBuff = data.burstActive ? burstMult : 1.0f;
         for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target,
-                            IDamageSource.NORMAL_TECHNIQUE, SWORD_SLASH_DAMAGE)
+                            IDamageSource.NORMAL_TECHNIQUE, bd(1))
                     .externalBuffMult(externalBuff)
                     .keyId(1)
                     .skillName("sword_slash")
@@ -133,8 +126,8 @@ public class OkkotsuSkillSet implements ISkillSet {
             JJKMod.getCombatPipeline().process(ctx);
         }
 
-        JJKMod.getCEManager().consume(player, CE_1);
-        CooldownManager.set(data, cdKey(1), tick, CD_1);
+        JJKMod.getCEManager().consume(player, ce(1));
+        CooldownManager.set(data, cdKey(1), tick, cd(1));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_1);
         return SkillResult.SUCCESS;
@@ -145,7 +138,7 @@ public class OkkotsuSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(2), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(2))) return SkillResult.CE_INSUFFICIENT;
 
         // 복사 대상 스킬 존재 여부 확인
         if (data.lastReceivedSkillId == null) return SkillResult.FAIL_CONDITION;
@@ -157,14 +150,14 @@ public class OkkotsuSkillSet implements ISkillSet {
         int copiedCeCost   = (int)(data.lastReceivedCeCost        * 1.5f);
         int copiedCooldown = (int)(data.lastReceivedCooldownTicks * 1.5f);
 
-        // 기본 발동 CE 300 소모
-        JJKMod.getCEManager().consume(player, CE_2);
+        // 기본 발동 CE 소모
+        JJKMod.getCEManager().consume(player, ce(2));
 
         // 복사본 추가 CE 검증·소모
         if (copiedCeCost > 0) {
             if (!JJKMod.getCEManager().canAfford(player, copiedCeCost)) {
                 // §6-5: 이미 소모한 300 CE는 환불하지 않음
-                CooldownManager.set(data, cdKey(2), tick, CD_2);
+                CooldownManager.set(data, cdKey(2), tick, cd(2));
                 JJKMod.getPlayerRepository().save(data);
                 return SkillResult.CE_INSUFFICIENT;
             }
@@ -189,7 +182,7 @@ public class OkkotsuSkillSet implements ISkillSet {
 
         // 사용 후 lastReceivedSkill 초기화
         data.lastReceivedSkillId = null;
-        CooldownManager.set(data, cdKey(2), tick, CD_2);
+        CooldownManager.set(data, cdKey(2), tick, cd(2));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }
@@ -199,7 +192,7 @@ public class OkkotsuSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(3), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_3)) return SkillResult.CE_INSUFFICIENT;
+        // CE 검증·차감은 DomainManager(domains.json ceCost)가 단일 수행 — ce(3)=0
         if (data.lastReceivedSkillId == null) return SkillResult.FAIL_CONDITION;
 
         // deployDomain이 CE 차감 + domainCooldownUntil + saveImmediate 처리
@@ -208,7 +201,7 @@ public class OkkotsuSkillSet implements ISkillSet {
 
         // deployDomain 이후 freshLoad로 CooldownManager 설정 (CE double-deduction 방지)
         PlayerData fresh = JJKMod.getPlayerRepository().load(player.getUuid());
-        CooldownManager.set(fresh, cdKey(3), tick, CD_3);
+        CooldownManager.set(fresh, cdKey(3), tick, cd(3));
         JJKMod.getPlayerRepository().save(fresh);
         broadcastAnim(player, ANIM_3);
         return SkillResult.SUCCESS;
@@ -220,7 +213,7 @@ public class OkkotsuSkillSet implements ISkillSet {
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(4), tick)) return SkillResult.ON_COOLDOWN;
         data.healingActive = !data.healingActive;
-        CooldownManager.set(data, cdKey(4), tick, CD_4);
+        CooldownManager.set(data, cdKey(4), tick, cd(4));
 
         // 조준 대상 타인 치유 (6블록 이내 최근접 아군 우선)
         if (data.healingActive) {

@@ -12,9 +12,11 @@ import net.minecraft.util.Identifier;
 @Environment(EnvType.CLIENT)
 public final class CEBarRenderer {
 
-    private static final int CE_COLOR_HIGH   = 0xFF4A90D9; // CE ≥ 80% — 파란색
-    private static final int CE_COLOR_MID    = 0xFFCCCCCC; // CE 30–79% — 흰색
-    private static final int CE_COLOR_LOW    = 0xFFFF2222; // CE < 30% — 빨간색
+    // 색상 구간은 서버 보스바(CeBossBarManager.colorFor)와 동일: 70/40/20%
+    private static final int CE_COLOR_HIGH   = 0xFF4A90D9; // CE ≥ 70% — 파란색 (BLUE)
+    private static final int CE_COLOR_MID    = 0xFF55CC55; // CE 40–69% — 초록색 (GREEN)
+    private static final int CE_COLOR_WARN   = 0xFFE5C525; // CE 20–39% — 노란색 (YELLOW)
+    private static final int CE_COLOR_LOW    = 0xFFFF2222; // CE < 20% — 빨간색 (RED)
     private static final int CE_COLOR_BG     = 0xFF333333;
     private static final int VIGNETTE_COLOR  = 0x66FF0000; // semi-transparent red
     private static final int VIGNETTE_SIZE   = 20;
@@ -22,10 +24,10 @@ public final class CEBarRenderer {
     private boolean ceWarningBlink = false;
     private int blinkTimer = 0;
 
-    // CE 바 위치: 화면 하단, 체력바 위
+    // CE 바 위치: 화면 하단, 체력바 위 (체력바 -55, 쿨다운 슬롯 -84 사이)
     private static final int BAR_WIDTH  = 182;
     private static final int BAR_HEIGHT = 5;
-    private static final int BAR_OFFSET_Y = 48; // screenH - 48
+    private static final int BAR_OFFSET_Y = 62; // screenH - 62
 
     public void tick() {
         blinkTimer++;
@@ -53,14 +55,20 @@ public final class CEBarRenderer {
         context.fill(barX - 1, barY - 1, barX + BAR_WIDTH + 1, barY + BAR_HEIGHT + 1, 0xFF111111);
         context.fill(barX, barY, barX + BAR_WIDTH, barY + BAR_HEIGHT, CE_COLOR_BG);
 
-        // CE 바 (색상 분기)
+        // CE 바 (색상 분기 — 보스바와 동일 구간)
         int barColor;
-        if (ratio >= 0.80f) {
+        if (ratio >= 0.70f) {
             barColor = CE_COLOR_HIGH;
-        } else if (ratio >= 0.30f) {
+        } else if (ratio >= 0.40f) {
             barColor = CE_COLOR_MID;
+        } else if (ratio >= 0.20f) {
+            barColor = CE_COLOR_WARN;
         } else {
-            barColor = (ceWarningBlink && ce > 0f) ? CE_COLOR_LOW : CE_COLOR_BG;
+            barColor = CE_COLOR_LOW;
+        }
+        // 30% 이하 경고: 점멸로 강조
+        if (ratio < 0.30f && ceWarningBlink && ce > 0f) {
+            barColor = CE_COLOR_BG;
         }
 
         int filled = (int)(BAR_WIDTH * ratio);

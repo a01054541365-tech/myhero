@@ -114,6 +114,7 @@ public class TrialStateMachine {
     }
 
     private void broadcastSealedSkillSync(UUID targetUuid, String sealedSkillId, long expireAtTick) {
+        if (server == null) return;
         var pkt = new SealedSkillSyncS2CPacket(targetUuid, sealedSkillId, expireAtTick);
         for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
             ServerPlayNetworking.send(p, pkt);
@@ -121,6 +122,7 @@ public class TrialStateMachine {
     }
 
     private void broadcastVerdict(boolean guiltyResult, String sealedSkillId) {
+        if (server == null) return;
         var pkt = new VerdictS2CPacket(prosecutorUuid, accusedUuid, guiltyResult, sealedSkillId);
         for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
             ServerPlayNetworking.send(p, pkt);

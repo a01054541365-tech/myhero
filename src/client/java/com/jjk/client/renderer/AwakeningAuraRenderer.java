@@ -52,15 +52,24 @@ public final class AwakeningAuraRenderer {
             double px = player.getX();
             double py = player.getY();
             double pz = player.getZ();
-            // 4개 랜덤 위치 파티클
+            // 상승 기류: TOTEM + END_ROD 혼합 4개 (spec_05 §1-3 각성 분위기)
             for (int i = 0; i < 4; i++) {
                 if (!ParticleThrottle.canSpawn()) break;
                 double ox = (rng.nextFloat() - 0.5f) * 1.2;
                 double oy = rng.nextFloat() * 2.2;
                 double oz = (rng.nextFloat() - 0.5f) * 1.2;
-                mc.world.addParticle(ParticleTypes.TOTEM_OF_UNDYING,
+                mc.world.addParticle(
+                    i % 2 == 0 ? ParticleTypes.TOTEM_OF_UNDYING : ParticleTypes.END_ROD,
                     px + ox, py + oy, pz + oz,
-                    (rng.nextFloat() - 0.5f) * 0.1, 0.15f, (rng.nextFloat() - 0.5f) * 0.1);
+                    (rng.nextFloat() - 0.5f) * 0.1, 0.2f + rng.nextFloat() * 0.15f,
+                    (rng.nextFloat() - 0.5f) * 0.1);
+            }
+            // 발밑 기류: 낮은 확률로 CLOUD 1개
+            if (rng.nextInt(4) == 0 && ParticleThrottle.canSpawn()) {
+                double angle = rng.nextFloat() * 2 * Math.PI;
+                mc.world.addParticle(ParticleTypes.CLOUD,
+                    px + Math.cos(angle) * 0.9, py + 0.1, pz + Math.sin(angle) * 0.9,
+                    Math.cos(angle) * 0.06, 0.03, Math.sin(angle) * 0.06);
             }
         }
     }

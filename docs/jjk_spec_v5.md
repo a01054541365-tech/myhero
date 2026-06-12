@@ -201,7 +201,7 @@ GeckoLib 4.8.4는 Forge 전용. Fabric에서 `ClassNotFoundException` 크래시 
 ### 3-3. Zone
 
 - 흑섬 성공 또는 특정 콤보 조건 달성 시 진입
-- 지속시간: `zoneEndTick` 만료 기준. **`zoneDurationTicks: 200`(10초)** — decisions §2-3
+- 지속시간: `zoneEndTick` 만료 기준. **`zoneDurationTicks: 300`(15초)** — 밸런스 패스 2026-06-11 (config.json 권위)
 - 종료 후 `zonePenaltyUntilTick`까지 최종 배율 **×0.5** 페널티 적용
 - Zone 관리: `ZoneStateManager`. `ComboTracker`와 Just Frame 윈도우(8~12틱) 공유
 
@@ -233,7 +233,7 @@ Just Frame 윈도우: **8~12틱**. 30틱 동안 후속 입력 없으면 콤보 �
 - 발동 위치: CombatPipeline 5단계. `AwakeningManager.checkAndActivate()` 호출
 - 지속시간: **160틱(8초)** — `awakeningEndTick = currentTick + 160`
 - 쿨타임: **2400틱(120초)** — `awakeningCooldownUntil = currentTick + 2400`
-- 효과: `finalMultiplier × 1.25` (클램프 ×4.0 내 포함)
+- 효과: `finalMultiplier × awakeningMultiplier`(config.json 기본 **1.5**, 클램프 ×4.0 내 포함)
 - 해제: `awakeningEndTick` 도달 시 `tickCheck`에서 자동 해제
 
 `AwakeningManager` 로직 (checkAndActivate):
@@ -265,12 +265,12 @@ Just Frame 윈도우: **8~12틱**. 30틱 동안 후속 입력 없으면 콤보 �
 
 - `attackMultiplier`: attackStat 기반 (옷코츠 burstActive 시 ×1.30 포함)
 - `gradeMultiplier`: §7-1 등급 배율 표
-- `conditionMultiplier`: 각성(×1.25), Zone 페널티(×0.5), 흑섬(×2.5) 등
+- `conditionMultiplier`: 각성(×1.5, config.json awakeningMultiplier), Zone 페널티(×0.5), 흑섬(×2.5) 등
 - `specialMultiplier`: 캐릭터 특수 조건(무위전변 방어 무시 등)
 
 ### 4-2. 배율 클램프 — §LOCK
 
-최종 배율은 **×0.25~×4.0** 범위로 제한. 각성(×1.25), 옷코츠 burstActive(×1.30) 모두 이 클램프 안에 포함.
+최종 배율은 **×0.25~×4.0** 범위로 제한. 각성(×1.5), 옷코츠 burstActive(×1.30) 모두 이 클램프 안에 포함.
 
 ### 4-3. 방어 처리
 
@@ -312,7 +312,14 @@ public class DamageContext {
 
 ---
 
-## §6. 캐릭터별 스킬 수치 — §LOCK (임의 변경 금지)
+## §6. 캐릭터별 스킬 수치
+
+> **[2026-06-11 데이터 주도 전환]** 스킬별 `baseDamage`·`CE`·`CD`의 **런타임 권위는
+> `run/config/jjk/techniques.json`** (영역 CE는 `domains.json`)이다. 모든 스킬셋은
+> `TechniqueLoader`(keyId 기준)를 읽으며, `JJKMod.onInitialize()`/`JjkConfigManager`가 부팅 시 로드하고
+> `/jj reload`로 재적용된다. 아래 표의 수치 셀은 **설계 의도 기록용**이며 JSON과 어긋날 수 있다 —
+> 충돌 시 JSON이 우선. 예외(JSON 미등재, 상수 유지): 고죠 커튼(key5), 이타도리 shrine(extendedSkills),
+> 비술사(todo) 근접 수치, DoT/발사체 피해(techniques.json baseDamage=0인 항목).
 
 ### 6-1. ISkillSet 인터페이스
 
@@ -343,7 +350,7 @@ public interface ISkillSet {
 **무하한 무력화 조건** (InfinityHandler에서 체크, 4가지):
 1. 상대방의 영역 전개 중
 2. 영역 전연(Curtain) 내부
-3. 메구미 마허라가 의식 적응 카운터 달성 (`maharagaThreshold: 5` 피격)
+3. 메구미 마허라가 의식 적응 카운터 달성 (`maharagaThreshold: 3` 피격)
 4. `isSoulDirect=true` 공격
 
 ### 6-3. 이타도리 유지 (`characterId = "itadori"`)
@@ -364,7 +371,7 @@ public interface ISkillSet {
 |----|------|------------|----|--------|----------|
 | F | 누에 | 38 | 110 | 8 | 식신 엔티티 소환. 사망 시 `data.deadShikigamiIds`에 기록 → 영구 재소환 불가. |
 | Shift+F | 옥견 | 32 | 90 | 6 | 추적형 식신 2기. 소환 전 `deadShikigamiIds` 검사 필수. |
-| R | 마허라가 의식 | 0 | 900 | 180 | 적응 카운터 시작. 카운터는 피격 횟수 기반. `maharagaThreshold: 5` 달성 시 무하한 무력화. 실패(타임아웃 또는 CE 고갈) 시 CE 전량 소진 + `sealDurationTicks: 600`(30초) 스킬 봉인. |
+| R | 마허라가 의식 | 0 | 900 | 180 | 적응 카운터 시작. 카운터는 피격 횟수 기반. `maharagaThreshold: 3` 달성 시 무하한 무력화. 실패(타임아웃 또는 CE 고갈) 시 CE 전량 소진 + `sealDurationTicks: 400`(20초) 스킬 봉인. |
 | Shift+R | 감합암예정 | 0 | 2600 | 360 | 미완성 영역. `wallHp=750`(일반 결계 절반). `sureHitActive=false`. |
 | V | 그림자 이동 | 0 | 140 | 12 | 바닥 그림자 마커(별도 서버 객체) 위치로 순간이동. 10블록 이내 마커 없으면 실패. |
 
@@ -445,7 +452,7 @@ if (data.burstActive && tick >= data.burstEndTick) {
 | Shift+R | !잠들어 | 0 | 240 | 30 | animId 52. 100틱 수면. 부담 +25. |
 | V | !달려 | 0 | 150 | 18 | animId 53. 아군 이동속도 +40%, 80틱. 부담 +10. |
 
-부담 감소 공식: 전투 외 5/s(틱당 0.25), 전투 중 2/s(틱당 0.1). `lastCombatTick` 기준으로 분기. 부담 100 초과 시 `data.cooldowns.put("skill_seal", tick + sealDurationTicks)`. `sealDurationTicks: 600`(30초) — decisions §2-2, §3-6.
+부담 감소 공식: 전투 외 5/s(틱당 0.25), 전투 중 2/s(틱당 0.1). `lastCombatTick` 기준으로 분기. 부담 100 초과 시 `data.cooldowns.put("skill_seal", tick + sealDurationTicks)`. `sealDurationTicks: 400`(20초) — config.json / decisions §2-2.
 
 ### 6-10. 나나미 켄토 (`characterId = "nanami"`)
 
@@ -729,9 +736,9 @@ public class DomainInstance {
 | `xpMultiplierGradeDiff` | `1.5` | |
 | `allowCharacterReselect` | `false` | |
 | `rikaLifetimeTicks` | `200` | 옷코츠 리카 소환 지속시간 |
-| `maharagaThreshold` | `5` | 마허라가 의식 적응 임계 피격 횟수 |
-| `sealDurationTicks` | `600` | 술식 봉인 지속 30초 |
-| `zoneDurationTicks` | `200` | Zone 지속 10초 |
+| `maharagaThreshold` | `3` | 마허라가 의식 적응 임계 피격 횟수 (밸런스 패스 2026-06-11) |
+| `sealDurationTicks` | `400` | 술식 봉인 지속 20초 (밸런스 패스 2026-06-11) |
+| `zoneDurationTicks` | `300` | Zone 지속 15초 (밸런스 패스 2026-06-11) |
 | `ceRegenOutOfCombat` | `1.0` | §LOCK — 전투 외 틱당 CE 재생 |
 | `ceRegenInCombat` | `0.2` | §LOCK — 전투 중 틱당 CE 재생 |
 
@@ -1054,15 +1061,16 @@ CombatPipeline 1·2단계에서 서버 측 검증:
 | 등급 배율 PvP/PvE 분리 | 분리 (`gradePvpScaling: true`) |
 | 흑섬 데미지 배율 | `base × 2.5` (지수승 아님, 게임화 확정) |
 | 흑섬 Just Frame 윈도우 | 8~12틱 |
-| Zone 지속시간 | 200틱(10초) (`zoneDurationTicks: 200`) |
+| Zone 지속시간 | 300틱(15초) (`zoneDurationTicks: 300`) |
 | Zone 종료 페널티 | ×0.5 (`zonePenaltyUntilTick` 만료까지) |
-| 각성 발동 HP 임계 | `maxHp × 0.30` |
+| 각성 발동 HP 임계 | `maxHp × 0.30` (`awakeningHpThreshold: 0.3`) |
 | 각성 지속시간 | 160틱(8초) |
 | 각성 쿨타임 | 2400틱(120초) |
+| 각성 배율 | ×1.5 (`awakeningMultiplier: 1.5`) |
 | CE 재생 (전투 외) | 1.0/틱 |
 | CE 재생 (전투 중) | 0.2/틱 |
-| 마허라가 적응 임계 | 5회 피격 (`maharagaThreshold: 5`) |
-| 술식 봉인 지속 | 600틱(30초) (`sealDurationTicks: 600`) |
+| 마허라가 적응 임계 | 3회 피격 (`maharagaThreshold: 3`) |
+| 술식 봉인 지속 | 400틱(20초) (`sealDurationTicks: 400`) |
 | skill_seal 키 | 히구루마 + 마허라가 공유 |
 | 잭팟 기본값 | 251틱 (`jackpotDurationTicks: 251`) |
 | 잭팟 최솟값 | 60틱 (`jackpotDurationMinTicks: 60`) |

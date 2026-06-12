@@ -54,8 +54,9 @@ class SukunaSkillSetTest {
         assertEquals(SkillResult.FAIL_CE_INSUFFICIENT, skill.onShiftF(data, null, tick));
         assertEquals(SkillResult.FAIL_CE_INSUFFICIENT, skill.onR(data,      null, tick));
         assertEquals(SkillResult.FAIL_CE_INSUFFICIENT, skill.onShiftR(data, null, tick));
-        // onV: CE 부족
-        assertEquals(SkillResult.FAIL_CE_INSUFFICIENT, skill.onV(data, null, tick));
+        // onV: 영역 CE 검증은 DomainManager(domains.json)가 단일 수행 — onV는 player==null이면
+        // DomainManager 도달 전 FAIL_CONDITION 반환 (CE 사전검사 제거, 2026-06-11 데이터 주도 전환)
+        assertEquals(SkillResult.FAIL_CONDITION, skill.onV(data, null, tick));
     }
 
     // ── 2. 쿨타임 중 → ON_COOLDOWN ────────────────────────────────────────────

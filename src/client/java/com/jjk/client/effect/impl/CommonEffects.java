@@ -30,19 +30,7 @@ public final class CommonEffects {
     }
 
     private static void spawnBlackFlash(ClientWorld w, double x, double y, double z, float intensity) {
-        int count = (int)(48 * intensity);
-        for (int i = 0; i < count; i++) {
-            if (!ParticleThrottle.canSpawn()) return;
-            double angle = 2 * Math.PI * i / count;
-            double speed = 0.3 + w.random.nextDouble() * 0.3;
-            w.addParticle(ParticleTypes.SOUL,
-                x, y + 1.0, z,
-                Math.cos(angle) * speed,
-                0.1 + w.random.nextDouble() * 0.2,
-                Math.sin(angle) * speed);
-        }
-        if (ParticleThrottle.canSpawn())
-            w.addParticle(ParticleTypes.FLASH, x, y + 1.0, z, 0, 0, 0);
+        spawnBlackRedLightning(w, x, y + 1.0, z, (int)(6 * intensity) + 2);
         for (int i = 0; i < 16; i++) {
             if (!ParticleThrottle.canSpawn()) return;
             w.addParticle(ParticleTypes.SOUL_FIRE_FLAME,
@@ -54,9 +42,40 @@ public final class CommonEffects {
                 (w.random.nextDouble() - 0.5) * 0.1);
         }
         if (ParticleThrottle.canSpawn())
+            w.addParticle(ParticleTypes.FLASH, x, y + 1.0, z, 0, 0, 0);
+        if (ParticleThrottle.canSpawn())
             w.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 0, 0, 0);
         BlackFlashOverlay.INSTANCE.triggerHitFlash();
     }
+
+    /** 흑섬 — 검은 연기 + 붉은 잔광이 지그재그로 뻗는 방사형 번개 (spec_05 §1-1). */
+    public static void spawnBlackRedLightning(ClientWorld w, double x, double y, double z, int bolts) {
+        for (int b = 0; b < bolts; b++) {
+            double angle = 2 * Math.PI * b / bolts + w.random.nextDouble() * 0.4;
+            double pitch = (w.random.nextDouble() - 0.3) * 0.8;
+            double dx = Math.cos(angle) * Math.cos(pitch);
+            double dy = Math.sin(pitch);
+            double dz = Math.sin(angle) * Math.cos(pitch);
+            double px = x, py = y, pz = z;
+            int segments = 5 + w.random.nextInt(3);
+            for (int s = 0; s < segments; s++) {
+                if (!ParticleThrottle.canSpawn()) return;
+                // 지그재그: 진행 방향 + 수직 랜덤 꺾임
+                px += dx * 0.45 + (w.random.nextDouble() - 0.5) * 0.3;
+                py += dy * 0.45 + (w.random.nextDouble() - 0.5) * 0.3;
+                pz += dz * 0.45 + (w.random.nextDouble() - 0.5) * 0.3;
+                w.addParticle(ParticleTypes.SMOKE, px, py, pz, 0, 0, 0);
+                if (s % 2 == 0 && ParticleThrottle.canSpawn()) {
+                    w.addParticle(BLACK_FLASH_RED, px, py, pz, 0, 0, 0);
+                }
+            }
+        }
+    }
+
+    /** 흑섬 붉은 잔광색 (진홍, 1.4배 크기). */
+    static final net.minecraft.particle.DustParticleEffect BLACK_FLASH_RED =
+        new net.minecraft.particle.DustParticleEffect(
+            new org.joml.Vector3f(0.85f, 0.05f, 0.12f), 1.4f);
 
     private static void spawnExplodeWarning(ClientWorld w, double x, double y, double z) {
         int count = 24;

@@ -28,7 +28,8 @@ public final class AnimationCache {
     public static void loadAll(ResourceManager manager) {
         CACHE.clear();
         int attempted = 0;
-        for (int id = 0; id <= 60; id++) {
+        // 상한은 AnimationRegistry 최대 animId(65)와 일치해야 한다 — 60 하드코딩으로 61~65가 로드 누락되던 버그 수정
+        for (int id = 0; id <= 65; id++) {
             if (!AnimationRegistry.has(id)) continue;
             attempted++;
             String animName = AnimationRegistry.get(id);

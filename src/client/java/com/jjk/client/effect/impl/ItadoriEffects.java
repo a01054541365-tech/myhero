@@ -45,10 +45,11 @@ public final class ItadoriEffects {
 
     private static void blackFlash(com.jjk.network.s2c.SkillEffectS2CPacket pkt, ClientWorld w) {
         double x = pkt.x(), y = pkt.y(), z = pkt.z();
-        int count = (int)(64 * pkt.intensity());
+        CommonEffects.spawnBlackRedLightning(w, x, y + 1.0, z, (int)(6 * pkt.intensity()) + 2);
+        int count = (int)(24 * pkt.intensity());
         for (int i = 0; i < count; i++) {
             if (!ParticleThrottle.canSpawn()) return;
-            w.addParticle(ParticleTypes.SOUL, x, y, z,
+            w.addParticle(ParticleTypes.SMOKE, x, y, z,
                 (w.random.nextDouble() - 0.5) * 0.6, w.random.nextDouble() * 0.5,
                 (w.random.nextDouble() - 0.5) * 0.6);
         }

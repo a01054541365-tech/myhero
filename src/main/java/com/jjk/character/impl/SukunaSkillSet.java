@@ -21,17 +21,13 @@ import java.util.List;
  */
 public class SukunaSkillSet implements ISkillSet {
 
-    // 확정 수치 (Phase 3)
-    private static final float BD_F  = 42f;
-    private static final float BD_SF = 26f;
-    private static final float BD_R  = 95f;
-    private static final float BD_SR = 16f;
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "sukuna";
+    private static final int ANIM_F = 21, ANIM_SF = 22, ANIM_R = 23, ANIM_SR = 24, ANIM_V = 7;
 
-    private static final int CE_F  = 400,  BASE_CD_F  = 6,   ANIM_F  = 21;
-    private static final int CE_SF = 140,  BASE_CD_SF = 5,   ANIM_SF = 22;
-    private static final int CE_R  = 400,  BASE_CD_R  = 40,  ANIM_R  = 23;
-    private static final int CE_SR = 500,  BASE_CD_SR = 50,  ANIM_SR = 24;
-    private static final int CE_V  = 4800, BASE_CD_V  = 360, ANIM_V  = 7;
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     // ── ISkillSet 인터페이스 ──────────────────────────────────────────────────
 
@@ -48,25 +44,19 @@ public class SukunaSkillSet implements ISkillSet {
     public boolean canUse(ServerPlayerEntity player, int keyId) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
-        if (keyId == 4) return data.ceCurrent >= CE_V && tick >= data.domainCooldownUntil;
+        if (keyId == 4) return tick >= data.domainCooldownUntil; // CE는 DomainManager(domains.json)가 검증
         return data.cooldowns.getOrDefault(String.valueOf(keyId), 0L) <= tick
                 && data.ceCurrent >= getCeCost(keyId);
     }
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> BASE_CD_F; case 1 -> BASE_CD_SF; case 2 -> BASE_CD_R;
-            case 3 -> BASE_CD_SR; case 4 -> BASE_CD_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R;
-            case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -98,19 +88,19 @@ public class SukunaSkillSet implements ISkillSet {
     public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(0)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         // 전방 직선 참격: 폭 3블록 × 길이 15블록
         List<LivingEntity> targets = HitValidator.getNearbyBox(player, 3.0, 15.0);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_F;
-        data.cooldowns.put("0", tick + applyCdReduction(data, BASE_CD_F));
+        data.ceCurrent -= ce(0);
+        data.cooldowns.put("0", tick + applyCdReduction(data, cd(0)));
 
         for (LivingEntity target : targets) {
             // 방어 관통 20%: defenseMultiplier=0.80 (calculatePure에서 effectiveDefense × 0.80)
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_F)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(0))
                     .defenseMultiplier(0.80f).skillName("dismantle").keyId(0).build();
             JJKMod.getCombatPipeline().process(ctx);
         }
@@ -124,7 +114,7 @@ public class SukunaSkillSet implements ISkillSet {
     public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SF) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(1)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         // 전방 직선 레이캐스트 관통: 사거리 20블록
@@ -133,11 +123,11 @@ public class SukunaSkillSet implements ISkillSet {
         List<LivingEntity> targets = HitValidator.getRaycastPiercing(player, start, end, 0.5);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SF;
-        data.cooldowns.put("1", tick + applyCdReduction(data, BASE_CD_SF));
+        data.ceCurrent -= ce(1);
+        data.cooldowns.put("1", tick + applyCdReduction(data, cd(1)));
 
         for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(1))
                     .skillName("arrow").keyId(1).build();
             JJKMod.getCombatPipeline().process(ctx);
         }
@@ -151,7 +141,7 @@ public class SukunaSkillSet implements ISkillSet {
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(2)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         // 손가락 10개 이상: 범위 ×1.3
@@ -159,11 +149,11 @@ public class SukunaSkillSet implements ISkillSet {
         List<LivingEntity> targets = HitValidator.getNearbyArc(player, radius, 120f);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_R;
-        data.cooldowns.put("2", tick + applyCdReduction(data, BASE_CD_R));
+        data.ceCurrent -= ce(2);
+        data.cooldowns.put("2", tick + applyCdReduction(data, cd(2)));
 
         for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_R)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(2))
                     .skillName("reverse_eight_handled").keyId(2).build();
             JJKMod.getCombatPipeline().process(ctx);
             // 넉백 4블록
@@ -180,18 +170,18 @@ public class SukunaSkillSet implements ISkillSet {
     public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(3)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         // 원형 반경 6블록, isSoulDirect=true → 방어 무시
         List<LivingEntity> targets = HitValidator.getNearby(player, 6.0);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SR;
-        data.cooldowns.put("3", tick + applyCdReduction(data, BASE_CD_SR));
+        data.ceCurrent -= ce(3);
+        data.cooldowns.put("3", tick + applyCdReduction(data, cd(3)));
 
         for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_SR)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, bd(3))
                     .soulDirect().skillName("cleave").keyId(3).build();
             JJKMod.getCombatPipeline().process(ctx);
         }
@@ -205,7 +195,7 @@ public class SukunaSkillSet implements ISkillSet {
     public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        // CE 검증·차감은 DomainManager(domains.json ceCost, 개방형 ×2)가 단일 수행
         if (player == null) return SkillResult.FAIL_CONDITION;
 
         boolean deployed = JJKMod.getDomainManager()

@@ -51,12 +51,33 @@ public final class SkillEffectRenderer {
                     if (ParticleThrottle.canSpawn())
                         mc.world.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, y, z, 0, 0, 0);
                 }
-                case "AWAKENING_TRIGGER"  -> spawnBurst(mc.world, ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 30);
+                case "AWAKENING_TRIGGER"  -> spawnAwakeningUpdraft(mc.world, x, y, z);
             }
         } catch (Exception ignored) {}
     }
 
     // ── 파티클 형태 헬퍼 ────────────────────────────────────────────────────
+
+    /** 각성 — 발밑 기류 링 + 주변 3블록 내 파티클 부양 (spec_05 §1-3). */
+    private static void spawnAwakeningUpdraft(ClientWorld world, double x, double y, double z) {
+        for (int i = 0; i < 16; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double angle = 2 * Math.PI * i / 16;
+            world.addParticle(ParticleTypes.CLOUD,
+                x + Math.cos(angle) * 1.2, y + 0.1, z + Math.sin(angle) * 1.2,
+                Math.cos(angle) * 0.08, 0.02, Math.sin(angle) * 0.08);
+        }
+        for (int i = 0; i < 30; i++) {
+            if (!ParticleThrottle.canSpawn()) return;
+            double angle = RNG.nextDouble() * 2 * Math.PI;
+            double r = RNG.nextDouble() * 3.0;
+            world.addParticle(i % 3 == 0 ? ParticleTypes.TOTEM_OF_UNDYING : ParticleTypes.END_ROD,
+                x + Math.cos(angle) * r,
+                y + RNG.nextDouble() * 0.5,
+                z + Math.sin(angle) * r,
+                0, 0.35 + RNG.nextDouble() * 0.35, 0);
+        }
+    }
 
     private static void spawnSphere(ClientWorld world, net.minecraft.particle.ParticleEffect type,
                                      double cx, double cy, double cz, double radius, int count) {

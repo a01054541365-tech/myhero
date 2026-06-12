@@ -70,19 +70,32 @@ public class JjkHudRenderer {
         int screenW = client.getWindow().getScaledWidth();
         int screenH = client.getWindow().getScaledHeight();
 
+        // 바닐라 갑옷/공기 줄(screenH-49)과 겹치지 않도록 그 위에 배치
         int barX = screenW / 2 - 91;
-        int barY = screenH - 52;
+        int barY = screenH - 55;
         int barW = (int)(182 * hpPercent);
 
+        // 전투 중이면 붉은 테두리로 구분
+        if (JjkClientState.isInCombat()) {
+            context.fill(barX - 1, barY - 1, barX + 183, barY + 6, 0xFFCC3333);
+        }
         context.fill(barX, barY, barX + 182, barY + 5, 0xFF333333);
         if (barW > 0) context.fill(barX, barY, barX + barW, barY + 5, color);
     }
 
+    /** HP 비율별 색상 — 단계 경계에서 부드럽게 lerp: 빨강→주황→노랑→초록. */
     private int getHealthColor(float ratio) {
         if (ratio >= 0.75f) return 0xFF55FF55;
-        if (ratio >= 0.50f) return 0xFFFFFF55;
-        if (ratio >= 0.25f) return 0xFFFF9900;
-        return 0xFFFF4444;
+        if (ratio >= 0.50f) return lerpColor(0xFFFF55, 0x55FF55, (ratio - 0.50f) / 0.25f);
+        if (ratio >= 0.25f) return lerpColor(0xFF9900, 0xFFFF55, (ratio - 0.25f) / 0.25f);
+        return lerpColor(0xFF4444, 0xFF9900, Math.max(0f, ratio / 0.25f));
+    }
+
+    private static int lerpColor(int from, int to, float t) {
+        int r = (int)(((from >> 16) & 0xFF) + (((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * t);
+        int g = (int)(((from >> 8)  & 0xFF) + (((to >> 8)  & 0xFF) - ((from >> 8)  & 0xFF)) * t);
+        int b = (int)((from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * t);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     private void renderChantingBar(DrawContext context, MinecraftClient client) {

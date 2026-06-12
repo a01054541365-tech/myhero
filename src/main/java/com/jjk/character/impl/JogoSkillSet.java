@@ -20,17 +20,13 @@ import java.util.List;
 
 public class JogoSkillSet implements ISkillSet {
 
-    // §LOCK: techniques.json 수치와 동일 — 변경 금지
-    private static final float BD_F  = 46f;
-    private static final float BD_SF = 80f;
-    private static final float BD_R  = 120f;
-    private static final float BD_SR = 54f;
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "jogo";
+    private static final int ANIM_F = 30, ANIM_SF = 46, ANIM_R = 1, ANIM_SR = 47, ANIM_V = 7;
 
-    private static final int CE_F  = 130,  CD_F  = 6,   ANIM_F  = 30;
-    private static final int CE_SF = 280,  CD_SF = 20,  ANIM_SF = 46;
-    private static final int CE_R  = 600,  CD_R  = 75,  ANIM_R  = 1;
-    private static final int CE_SR = 230,  CD_SR = 16,  ANIM_SR = 47;
-    private static final int CE_V  = 2700, CD_V  = 360, ANIM_V  = 7;
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     // ── Legacy API ────────────────────────────────────────────────────────────
 
@@ -51,18 +47,12 @@ public class JogoSkillSet implements ISkillSet {
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> CD_F; case 1 -> CD_SF; case 2 -> CD_R;
-            case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R;
-            case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -80,11 +70,11 @@ public class JogoSkillSet implements ISkillSet {
     public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(0)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         // CE 소모
-        data.ceCurrent -= CE_F;
+        data.ceCurrent -= ce(0);
 
         // 전방 12블록 이내 가장 가까운 적
         List<LivingEntity> targets = HitValidator.getNearby(player, 12.0);
@@ -92,13 +82,13 @@ public class JogoSkillSet implements ISkillSet {
                 .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player)))
                 .orElse(null);
         if (target == null) {
-            data.ceCurrent += CE_F;
+            data.ceCurrent += ce(0);
             return SkillResult.FAIL_NO_TARGET;
         }
 
         // 우천 시 -20% 패널티 (DamageCalculator externalBuffMult 경로)
         float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
-        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_F)
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(0))
                 .skillName("화산탄").keyId(0).externalBuffMult(rainMult).build();
         JJKMod.getCombatPipeline().process(ctx);
 
@@ -109,7 +99,7 @@ public class JogoSkillSet implements ISkillSet {
             JJKMod.getPlayerRepository().save(targetData);
         }
 
-        data.cooldowns.put("0", tick + CD_F);
+        data.cooldowns.put("0", tick + cd(0));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_F);
         return SkillResult.SUCCESS;
@@ -120,7 +110,7 @@ public class JogoSkillSet implements ISkillSet {
     public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SF) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(1)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         Vec3d facing = player.getRotationVec(1.0f);
@@ -132,11 +122,11 @@ public class JogoSkillSet implements ISkillSet {
 
         if (lineTargets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SF;
+        data.ceCurrent -= ce(1);
         float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
 
         for (LivingEntity target : lineTargets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(1))
                     .skillName("개관").keyId(1).externalBuffMult(rainMult).build();
             JJKMod.getCombatPipeline().process(ctx);
 
@@ -147,7 +137,7 @@ public class JogoSkillSet implements ISkillSet {
             }
         }
 
-        data.cooldowns.put("1", tick + CD_SF);
+        data.cooldowns.put("1", tick + cd(1));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_SF);
         return SkillResult.SUCCESS;
@@ -158,18 +148,18 @@ public class JogoSkillSet implements ISkillSet {
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(2)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_R;
+        data.ceCurrent -= ce(2);
 
         // 전방 15블록 낙하 지점 예약 (40틱 후 실행)
         Vec3d dir = player.getRotationVec(1.0f);
         Vec3d strikePos = player.getPos().add(dir.multiply(15.0));
         JJKMod.getEffectDeferQueue().schedule(
-                BlockPos.ofFloored(strikePos), BD_R, 40, player.getUuid(), tick);
+                BlockPos.ofFloored(strikePos), bd(2), 40, player.getUuid(), tick);
 
-        data.cooldowns.put("2", tick + CD_R);
+        data.cooldowns.put("2", tick + cd(2));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_R);
         return SkillResult.SUCCESS;
@@ -180,17 +170,17 @@ public class JogoSkillSet implements ISkillSet {
     public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(3)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         List<LivingEntity> targets = HitValidator.getNearby(player, 6.0);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SR;
+        data.ceCurrent -= ce(3);
         float rainMult = player.getServerWorld().isRaining() ? 0.80f : 1.0f;
 
         for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SR)
+            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, bd(3))
                     .skillName("불꽃의 고리").keyId(3).externalBuffMult(rainMult).build();
             JJKMod.getCombatPipeline().process(ctx);
 
@@ -201,7 +191,7 @@ public class JogoSkillSet implements ISkillSet {
             }
         }
 
-        data.cooldowns.put("3", tick + CD_SR);
+        data.cooldowns.put("3", tick + cd(3));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_SR);
         return SkillResult.SUCCESS;
@@ -212,7 +202,7 @@ public class JogoSkillSet implements ISkillSet {
     public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
         // domainCooldownUntil — decisions §3-2: cooldowns Map "domain" 키 사용 금지
         if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
-        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        // CE 검증·차감은 DomainManager(domains.json ceCost)가 단일 수행
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         boolean deployed = JJKMod.getDomainManager().deployDomain("jogo_volcano_domain", player);

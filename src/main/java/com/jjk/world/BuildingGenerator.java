@@ -2,44 +2,47 @@ package com.jjk.world;
 
 import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
+import com.jjk.world.structure.NpcSpawnPoint;
 import net.minecraft.block.*;
 import net.minecraft.block.enums.DoubleBlockHalf;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Properties;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.Heightmap;
-import net.minecraft.world.World;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public final class BuildingGenerator {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("jjk");
-
     private BuildingGenerator() {}
 
-    public static void generateAll(MinecraftServer server) {
-        ServerWorld world = server.getWorld(World.OVERWORLD);
-        if (world == null) return;
+    // ── WorldGenerationManager 랜덤 배치용 진입점 4개 ────────────────────────
+
+    public static List<NpcSpawnPoint> buildShibuyaStation(ServerWorld world, BlockPos origin) {
+        generateShibuyaStation(world, origin.getX(), origin.getZ());
+        return List.of();
+    }
+
+    public static List<NpcSpawnPoint> buildJogoVolcano(ServerWorld world, BlockPos origin) {
+        generateJogoVolcano(world, origin.getX(), origin.getZ());
+        return List.of();
+    }
+
+    public static List<NpcSpawnPoint> buildTrainingDojo(ServerWorld world, BlockPos origin) {
+        generateTrainingDojo(world, origin.getX(), origin.getZ());
+        return List.of();
+    }
+
+    public static List<NpcSpawnPoint> buildBlackMarket(ServerWorld world, BlockPos origin) {
+        generateBlackMarket(world, origin.getX(), origin.getZ());
+        // 공시우 NPC 텔레포트 목적지 갱신 (config blackmarketPos)
+        BlockPos o = surfacePos(world, origin.getX(), origin.getZ());
         JjkConfig cfg = JJKMod.getConfig();
-
-        int cx = cfg.jjtBuilding_centerX;
-        int cz = cfg.jjtBuilding_centerZ;
-
-        generateShibuyaStation(world, cx + 120, cz);
-        generateJogoVolcano(world, cx - 150, cz);
-        generateTrainingDojo(world, cx, cz + 60);
-        generateBlackMarket(world, cx + 50, cz - 100);
-
-        BlockPos marketOrigin = surfacePos(world, cx + 50, cz - 100);
-        cfg.blackmarketPos = new double[]{marketOrigin.getX(), marketOrigin.getY(), marketOrigin.getZ()};
-
-        cfg.buildingsGenerated = true;
+        cfg.blackmarketPos = new double[]{o.getX(), o.getY(), o.getZ()};
         cfg.save();
-        LOGGER.info("[JJK] 원작 건축물 4개 생성 완료 (시부야역·죠고화산·훈련도장·암시장)");
+        return List.of();
     }
 
     // ── 공통 헬퍼 ─────────────────────────────────────────────────────────────

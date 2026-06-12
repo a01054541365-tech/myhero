@@ -78,13 +78,15 @@ public class DomainBoundaryRenderer {
             long lastMs = PARTICLE_TIMESTAMPS.getOrDefault(state.domainId(), 0L);
             if (nowMs - lastMs >= 250L) {
                 PARTICLE_TIMESTAMPS.put(state.domainId(), nowMs);
-                int count = 24;
+                // 경계 가시성 강화: 밀도 24→48, 상승 속도 증가, 2단 높이 링
+                int count = 48;
                 float rad = state.radius();
                 for (int i = 0; i < count; i++) {
                     double angle = 2.0 * Math.PI * i / count;
                     double px = state.center().x + rad * Math.cos(angle);
                     double pz = state.center().z + rad * Math.sin(angle);
-                    mc.world.addParticle(ParticleTypes.PORTAL, px, state.center().y, pz, 0.0, 0.05, 0.0);
+                    double py = state.center().y + (i % 2 == 0 ? 0.0 : 1.5);
+                    mc.world.addParticle(ParticleTypes.PORTAL, px, py, pz, 0.0, 0.12, 0.0);
                 }
             }
             return;

@@ -11,7 +11,7 @@
 
 | # | 항목 | 확정값 | config 키 |
 |---|---|---|---|
-| 2-1 | 마허라가 의식 적응 임계 횟수 | **2회** | `maharagaThreshold: 2` |
+| 2-1 | 마허라가 의식 적응 임계 횟수 | **3회** (밸런스 패스 2026-06-11) | `maharagaThreshold: 3` |
 | 2-2 | `sealDurationTicks` | **400틱 (20초)** | `sealDurationTicks: 400` |
 | 2-3 | Zone 종료 기준 | **300틱 (15초) 만료. 발동 흑섬은 Zone 보너스 적용 금지** | `zoneDurationTicks: 300` |
 | 2-4 | CE 재생 수치 | **전투 외 1.0/틱, 전투 중 0.2/틱 (config 조정 가능)** | `ceRegenOutOfCombat: 1.0` / `ceRegenInCombat: 0.2` |
@@ -64,7 +64,7 @@
 | `xpMultiplierGradeDiff` | `1.5` | |
 | `allowCharacterReselect` | `false` | |
 | `rikaLifetimeTicks` | `200` | §LOCK |
-| `maharagaThreshold` | `2` | 확정 2026-05-28 |
+| `maharagaThreshold` | `3` | 밸런스 패스 2026-06-11 (이전 2 → 3) |
 | `sealDurationTicks` | `400` | 확정 2026-05-28 |
 | `zoneDurationTicks` | `300` | 확정 2026-05-28 |
 | `ceRegenOutOfCombat` | `1.0` | 확정 2026-05-28, config 조정 가능 |
@@ -100,7 +100,7 @@
 
 | 키 | 실제값 | 설명 |
 |---|---|---|
-| `awakeningHpThreshold` | 0.05 | 각성 발동 HP 임계값 (5%) |
+| `awakeningHpThreshold` | 0.30 | 각성 발동 HP 임계값 (30%) — config.json 권위, 2026-06-11 확정 |
 | `awakeningMultiplier` | 1.5 | 각성 중 데미지 배율 |
 
 ### 방어 시스템
@@ -244,7 +244,7 @@
 - Zone 진입 유발 흑섬 스킬에 Zone 보너스 적용 금지
 - `sealDurationTicks` 600 사용 금지 → 400으로 교체됨
 - `zoneDurationTicks` 200 사용 금지 → 300으로 교체됨
-- `maharagaThreshold` 5 사용 금지 → 2로 교체됨
+- `maharagaThreshold` 5 사용 금지 → 3으로 교체됨 (config.json 권위, 2026-06-11)
 
 ---
 
@@ -357,7 +357,7 @@ Phase 3: nanami, jogo, inumaki, mahito, hakari, higuruma, sukuna (실구현)
 
 | # | 항목 | 확정값 | 비고 |
 |---|---|---|---|
-| 4-1 | `awakeningHpThreshold` | **0.10** | §LOCK — 각성 발동 HP 임계 (HP 10% 이하 시 각성 트리거) |
+| 4-1 | `awakeningHpThreshold` | **0.30** | 각성 발동 HP 임계 (HP 30% 이하 시 트리거). config.json 권위 — 구버전 0.05/0.10 표기는 폐기(2026-06-11) |
 | 4-2 | `blackFlashBaseRate` 재확인 | **1 유지** | §LOCK — spec §3-2 Normal 0.1%와 일치. 변경 불필요 확인됨 (2026-06-06) |
 | 4-3 | `OkkotsuSkillSet.onShiftR` burstActive 세팅 | **player=null 경로에서도 세팅 필수** | burstActive=true, burstEndTick=tick+200은 CE 검증 통과 후 player 참조 없이 즉시 세팅 |
 | 4-4 | 테스트 Migrator 기대값 | **assertEquals(17, CURRENT_VERSION)** | ReleaseGateTest×2 + ISkillSetTest 수정 완료 (2026-06-06) |

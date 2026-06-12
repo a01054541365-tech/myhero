@@ -25,12 +25,11 @@ public class MegumiSkillSet implements ISkillSet {
     private static final String SHIKIGAMI_RABBIT_MASK = "rabbit_mask";
 
     // key 0: nue, 1: divine_dog, 2: mahoraga_adaptation, 3: chimera_shadow_garden, 4: shadow_move
-    // §6-4 메구미 기준
-    private static final int CE_0 = 110,  CD_0 = 8;    // 200→110, 20→8 (§6-4 메구미 기준)
-    private static final int CE_1 = 90,   CD_1 = 6;    // 180→90, 16→6 (§6-4 메구미 기준)
-    private static final int CE_2 = 900,  CD_2 = 180;  // 0→900, 300→180 (§6-4 메구미 기준)
-    private static final int CE_3 = 2600, CD_3 = 360;  // 3000→2600, 600→360 (§6-4 메구미 기준)
-    private static final int CE_4 = 140,  CD_4 = 12;   // 100→140, 8→12 (§6-4 메구미 기준)
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "megumi";
+
+    private static int ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -54,18 +53,12 @@ public class MegumiSkillSet implements ISkillSet {
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> CE_4; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -115,7 +108,7 @@ public class MegumiSkillSet implements ISkillSet {
         if (countActiveShikigami(player) >= 3) return SkillResult.FAIL;
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(0), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_0)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(0))) return SkillResult.CE_INSUFFICIENT;
 
         ShikigamiEntity entity = new ShikigamiEntity(
                 ShikigamiEntityTypes.NUE,
@@ -131,8 +124,8 @@ public class MegumiSkillSet implements ISkillSet {
         LivingEntity target = findNearestEnemy(player, entity, 10.0);
         if (target != null) entity.setTarget(target);
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        CooldownManager.set(data, cdKey(0), tick, CD_0);
+        JJKMod.getCEManager().consume(player, ce(0));
+        CooldownManager.set(data, cdKey(0), tick, cd(0));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, 16);
         return SkillResult.SUCCESS;
@@ -144,7 +137,7 @@ public class MegumiSkillSet implements ISkillSet {
         if (countActiveShikigami(player) >= 3) return SkillResult.FAIL;
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(1), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(1))) return SkillResult.CE_INSUFFICIENT;
 
         ShikigamiEntity entity = new ShikigamiEntity(
                 ShikigamiEntityTypes.WHITE_DOG,
@@ -160,8 +153,8 @@ public class MegumiSkillSet implements ISkillSet {
         LivingEntity target = findNearestEnemy(player, entity, 10.0);
         if (target != null) entity.setTarget(target);
 
-        JJKMod.getCEManager().consume(player, CE_1);
-        CooldownManager.set(data, cdKey(1), tick, CD_1);
+        JJKMod.getCEManager().consume(player, ce(1));
+        CooldownManager.set(data, cdKey(1), tick, cd(1));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, 17);
         return SkillResult.SUCCESS;
@@ -180,7 +173,7 @@ public class MegumiSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(2), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(2))) return SkillResult.CE_INSUFFICIENT;
 
         data.cooldowns.put("mahoraga_adaptation_start", tick);
         data.cooldowns.put("mahoraga_hit_count", 0L);
@@ -199,7 +192,7 @@ public class MegumiSkillSet implements ISkillSet {
                 player.getYaw(), 0f);
         player.getServerWorld().spawnEntity(mahoraga);
 
-        CooldownManager.set(data, cdKey(2), tick, CD_2);
+        CooldownManager.set(data, cdKey(2), tick, cd(2));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }
@@ -271,14 +264,14 @@ public class MegumiSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(4), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_4)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(4))) return SkillResult.CE_INSUFFICIENT;
 
         Vec3d dest = player.getPos().add(player.getRotationVec(1.0f).multiply(10.0));
         player.teleport(player.getServerWorld(), dest.x, dest.y, dest.z,
                 player.getYaw(), player.getPitch());
 
-        JJKMod.getCEManager().consume(player, CE_4);
-        CooldownManager.set(data, cdKey(4), tick, CD_4);
+        JJKMod.getCEManager().consume(player, ce(4));
+        CooldownManager.set(data, cdKey(4), tick, cd(4));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }

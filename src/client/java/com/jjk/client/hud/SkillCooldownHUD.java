@@ -25,11 +25,17 @@ public final class SkillCooldownHUD {
     private static final int SLOT_GAP   = 4;
     private static final int SLOT_COUNT = 6;
     private static final int TOTAL_W    = SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
-    private static final int SLOT_OFFSET_Y = 62; // screenH - 62
+    private static final int SLOT_OFFSET_Y = 84; // screenH - 84 (CE바 -62, 체력바 -55 위)
 
     private static final int COLOR_SLOT_BG      = 0xFF222222;
     private static final int COLOR_SLOT_BORDER   = 0xFF888888;
     private static final int COLOR_SLOT_CE_LACK  = 0xFFFF4444;
+    private static final int COLOR_SLOT_READY    = 0xFFFFE066; // 쿨타임 완료 플래시
+    private static final int READY_FLASH_TICKS   = 12;
+
+    // 쿨타임 완료 순간 감지용 — keyId별 직전 프레임 쿨타임 여부 + 플래시 만료 틱
+    private final boolean[] wasCoolingDown = new boolean[SLOT_COUNT];
+    private final long[]    flashUntilTick = new long[SLOT_COUNT];
 
     public void render(DrawContext context, MinecraftClient client) {
         if (client.player == null) return;
@@ -55,8 +61,17 @@ public final class SkillCooldownHUD {
         // 배경
         context.fill(x, y, x + SLOT_SIZE, y + SLOT_SIZE, COLOR_SLOT_BG);
 
+        // 쿨타임 완료 순간 감지 → 짧은 하이라이트 플래시
+        boolean coolingNow = JjkClientState.getCooldownRatio(keyId, worldTick) > 0f;
+        if (wasCoolingDown[keyId] && !coolingNow) {
+            flashUntilTick[keyId] = worldTick + READY_FLASH_TICKS;
+        }
+        wasCoolingDown[keyId] = coolingNow;
+        boolean readyFlash = worldTick < flashUntilTick[keyId] && (worldTick / 2) % 2 == 0;
+
         // 테두리
-        int borderColor = ceLow ? COLOR_SLOT_CE_LACK : COLOR_SLOT_BORDER;
+        int borderColor = readyFlash ? COLOR_SLOT_READY
+                        : ceLow      ? COLOR_SLOT_CE_LACK : COLOR_SLOT_BORDER;
         context.fill(x,                    y,                     x + SLOT_SIZE, y + 1,          borderColor);
         context.fill(x,                    y + SLOT_SIZE - 1,     x + SLOT_SIZE, y + SLOT_SIZE,   borderColor);
         context.fill(x,                    y + 1,                 x + 1,         y + SLOT_SIZE - 1, borderColor);

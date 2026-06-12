@@ -42,9 +42,22 @@ public final class DomainIndicator {
         }
     }
 
+    private static final int DOMAIN_VIGNETTE_COLOR = 0x303B1E5E; // 옅은 보라
+    private static final int DOMAIN_VIGNETTE_SIZE  = 12;
+
     public void render(DrawContext context, MinecraftClient client) {
         if (client.player == null) return;
         int screenW = client.getWindow().getScaledWidth();
+
+        // 영역 내부에 있는 동안 화면 가장자리 미세 비네팅
+        if (JjkClientState.isInDomain()) {
+            int screenH = client.getWindow().getScaledHeight();
+            int s = DOMAIN_VIGNETTE_SIZE;
+            context.fill(0, 0, s, screenH, DOMAIN_VIGNETTE_COLOR);
+            context.fill(screenW - s, 0, screenW, screenH, DOMAIN_VIGNETTE_COLOR);
+            context.fill(s, 0, screenW - s, s, DOMAIN_VIGNETTE_COLOR);
+            context.fill(s, screenH - s, screenW - s, screenH, DOMAIN_VIGNETTE_COLOR);
+        }
 
         // 영역 진입 메시지 (상단 중앙, 페이드아웃) — 영역 이름 + 소유자 이름
         if (displayDomainName != null && fadeAlpha > 0f) {

@@ -18,7 +18,8 @@ import java.util.Random;
 
 /**
  * 서버 시작 시 WorldSeed 기반 결정론적 위치 계산으로 건물을 다중 생성.
- * BuildingRegistry(buildings.json)가 비어 있는 경우에만 생성.
+ * 타입별로 BuildingRegistry(buildings.json)의 기존 개수와 목표 개수를 비교해 부족분만 생성
+ * (기존 월드에 새 건물 타입이 추가돼도 자동 보충됨).
  * 항상 BuildingNpcSpawner.recheckAndRespawn() 호출 (재시작 후 NPC 복구).
  */
 public final class WorldGenerationManager {
@@ -35,34 +36,47 @@ public final class WorldGenerationManager {
 
         BuildingRegistry registry = BuildingRegistry.load();
 
-        if (registry.isEmpty()) {
-            generateAll(world, cfg, registry);
+        int added = generateMissing(world, cfg, registry);
+        if (added > 0) {
             registry.save();
-            LOGGER.info("[JJK] WorldGenerationManager: 전체 건물 생성 완료");
+            LOGGER.info("[JJK] WorldGenerationManager: 건물 {}개 신규 생성 완료", added);
         } else {
-            LOGGER.info("[JJK] WorldGenerationManager: buildings.json 존재 — 생성 건너뜀");
+            LOGGER.info("[JJK] WorldGenerationManager: 모든 건물 타입 충족 — 생성 건너뜀");
         }
 
         BuildingNpcSpawner.recheckAndRespawn(world, registry);
     }
 
-    // ── 전체 생성 ───────────────────────────────────────────────────────────
+    // ── 타입별 부족분 생성 ───────────────────────────────────────────────────
 
-    private static void generateAll(ServerWorld world, JjkConfig cfg, BuildingRegistry registry) {
+    private static int generateMissing(ServerWorld world, JjkConfig cfg, BuildingRegistry registry) {
         long seed = world.getSeed();
         int minDist = cfg.buildingMinDistanceBlocks;
-        List<BuildingInstance> placed = new ArrayList<>();
+        // 기존 건물도 최소 거리 검사 대상에 포함
+        List<BuildingInstance> placed = new ArrayList<>(registry.getAll());
+        int added = 0;
 
-        place(world, seed, "jujutsu_high_tokyo",  cfg.jujutsuHighTokyoCount,    minDist, placed, registry,
+        added += place(world, seed, "jujutsu_high_tokyo",  cfg.jujutsuHighTokyoCount,    minDist, placed, registry,
             JujutsuHighTokyoStructure::build);
-        place(world, seed, "jujutsu_high_kyoto",  1,                             minDist, placed, registry,
+        added += place(world, seed, "jujutsu_high_kyoto",  1,                             minDist, placed, registry,
             JujutsuHighKyotoStructure::build);
-        place(world, seed, "detention_facility",  cfg.detentionFacilityCount,    minDist, placed, registry,
+        added += place(world, seed, "detention_facility",  cfg.detentionFacilityCount,    minDist, placed, registry,
             DetentionFacilityStructure::build);
-        place(world, seed, "shibuya_underground", cfg.shibuyaUndergroundCount,   minDist, placed, registry,
+        added += place(world, seed, "shibuya_underground", cfg.shibuyaUndergroundCount,   minDist, placed, registry,
             ShibuyaUndergroundStructure::build);
-        place(world, seed, "nanami_office",       cfg.nanamiOfficeCount,         minDist, placed, registry,
+        added += place(world, seed, "nanami_office",       cfg.nanamiOfficeCount,         minDist, placed, registry,
             NanamiOfficeStructure::build);
+        added += place(world, seed, "shibuya_city",        cfg.shibuyaCityCount,          minDist, placed, registry,
+            ShibuyaCityStructure::build);
+        added += place(world, seed, "shibuya_station",     1,                             minDist, placed, registry,
+            BuildingGenerator::buildShibuyaStation);
+        added += place(world, seed, "jogo_volcano",        1,                             minDist, placed, registry,
+            BuildingGenerator::buildJogoVolcano);
+        added += place(world, seed, "training_dojo",       1,                             minDist, placed, registry,
+            BuildingGenerator::buildTrainingDojo);
+        added += place(world, seed, "black_market",        1,                             minDist, placed, registry,
+            BuildingGenerator::buildBlackMarket);
+        return added;
     }
 
     @FunctionalInterface
@@ -70,10 +84,16 @@ public final class WorldGenerationManager {
         List<NpcSpawnPoint> build(ServerWorld world, BlockPos origin);
     }
 
-    private static void place(ServerWorld world, long seed, String type, int count,
+    /** 기존 개수를 제외한 부족분만 생성. 생성한 개수를 반환. */
+    private static int place(ServerWorld world, long seed, String type, int count,
                                int minDist, List<BuildingInstance> placed,
                                BuildingRegistry registry, StructureBuilder builder) {
-        for (int i = 0; i < count; i++) {
+        int existing = 0;
+        for (BuildingInstance b : placed) {
+            if (type.equals(b.type)) existing++;
+        }
+        int addedCount = 0;
+        for (int i = existing; i < count; i++) {
             BlockPos origin = findPosition(world, seed, type, i, placed, minDist);
             if (origin == null) {
                 LOGGER.warn("[JJK] WorldGen: {} 인스턴스 {} 위치 탐색 실패 (건너뜀)", type, i);
@@ -83,9 +103,11 @@ public final class WorldGenerationManager {
             BuildingInstance inst = new BuildingInstance(type, origin.getX(), origin.getY(), origin.getZ(), points);
             placed.add(inst);
             registry.add(inst);
+            addedCount++;
             LOGGER.info("[JJK] WorldGen: {} #{} @ ({},{},{})",
                 type, i, origin.getX(), origin.getY(), origin.getZ());
         }
+        return addedCount;
     }
 
     // ── 위치 결정 (결정론적 해시 기반) ──────────────────────────────────────

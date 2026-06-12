@@ -53,6 +53,12 @@ public class DomainManager {
         }
     }
 
+    /** /jj reload — domains.json 정의를 다시 읽는다 (활성 영역은 유지). */
+    public void reloadDefs() {
+        domainDefs.clear();
+        loadDomainDefs();
+    }
+
     public void tickDomains(ServerWorld world) {
         long currentTick = world.getTime();
 

@@ -22,15 +22,16 @@ import java.util.List;
 // key 0=천혈, 1=적린약동, 2=사혈, 3=NOT_IMPLEMENTED, 4=혈도이동
 public class ChosoSkillSet implements ISkillSet {
 
-    private static final int CE_0 = 200, CD_0 = 80,  ANIM_0 = 60;
-    private static final int CE_1 = 280, CD_1 = 100, ANIM_1 = 61;
-    private static final int CE_2 = 350, CD_2 = 140, ANIM_2 = 62;
-    private static final int CE_4 = 150, CD_4 = 60,  ANIM_4 = 63;
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "choso";
+    private static final int ANIM_0 = 60, ANIM_1 = 61, ANIM_2 = 62, ANIM_4 = 63;
 
-    private static final float BLOOD_PROJECTILE_DMG = 32f;
-    private static final float CRIMSON_BINDING_DMG  = 22f;
-    private static final float POISON_DMG_PER_HIT   = 8f;
-    private static final int   BLOOD_RESOURCE_MAX   = 5;
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
+
+    private static final float POISON_DMG_PER_HIT = 8f; // 사혈 DoT (techniques.json baseDamage=0)
+    private static final int   BLOOD_RESOURCE_MAX  = 5;
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
@@ -55,14 +56,14 @@ public class ChosoSkillSet implements ISkillSet {
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2; case 4 -> CD_4; default -> 0;
+            case 0 -> cd(0); case 1 -> cd(1); case 2 -> cd(2); case 4 -> cd(4); default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2; case 4 -> CE_4; default -> 0;
+            case 0 -> ce(0); case 1 -> ce(1); case 2 -> ce(2); case 4 -> ce(4); default -> 0;
         };
     }
 
@@ -88,7 +89,7 @@ public class ChosoSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(0), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_0)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(0))) return SkillResult.CE_INSUFFICIENT;
 
         CeProjectileEntity projectile = new CeProjectileEntity(
                 CursedSpiritEntityTypes.CE_PROJECTILE, player.getServerWorld());
@@ -96,11 +97,11 @@ public class ChosoSkillSet implements ISkillSet {
         projectile.setPosition(player.getX(), player.getEyeY() - 0.1, player.getZ());
         Vec3d vel = player.getRotationVec(1.0f).multiply(1.5);
         projectile.setVelocity(vel.x, vel.y, vel.z);
-        projectile.setDamage(BLOOD_PROJECTILE_DMG);
+        projectile.setDamage(bd(0));
         player.getServerWorld().spawnEntity(projectile);
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        CooldownManager.set(data, cdKey(0), tick, CD_0);
+        JJKMod.getCEManager().consume(player, ce(0));
+        CooldownManager.set(data, cdKey(0), tick, cd(0));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_0);
         return SkillResult.SUCCESS;
@@ -111,7 +112,7 @@ public class ChosoSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(1), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(1))) return SkillResult.CE_INSUFFICIENT;
         if (data.bloodResource <= 0) return SkillResult.FAIL_CONDITION;
 
         Vec3d facing = player.getRotationVec(1.0f);
@@ -125,7 +126,7 @@ public class ChosoSkillSet implements ISkillSet {
 
         for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target,
-                            IDamageSource.NORMAL_TECHNIQUE, CRIMSON_BINDING_DMG)
+                            IDamageSource.NORMAL_TECHNIQUE, bd(1))
                     .keyId(1)
                     .skillName("적린약동")
                     .build();
@@ -133,8 +134,8 @@ public class ChosoSkillSet implements ISkillSet {
         }
 
         data.bloodResource--;
-        JJKMod.getCEManager().consume(player, CE_1);
-        CooldownManager.set(data, cdKey(1), tick, CD_1);
+        JJKMod.getCEManager().consume(player, ce(1));
+        CooldownManager.set(data, cdKey(1), tick, cd(1));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_1);
         return SkillResult.SUCCESS;
@@ -145,7 +146,7 @@ public class ChosoSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(2), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_2)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(2))) return SkillResult.CE_INSUFFICIENT;
 
         List<LivingEntity> nearby = HitValidator.getNearby(player, 4.0);
         if (nearby.isEmpty()) return SkillResult.FAIL_NO_TARGET;
@@ -156,8 +157,8 @@ public class ChosoSkillSet implements ISkillSet {
                     target.getBlockPos(), POISON_DMG_PER_HIT, 20 * i, player.getUuid(), tick);
         }
 
-        JJKMod.getCEManager().consume(player, CE_2);
-        CooldownManager.set(data, cdKey(2), tick, CD_2);
+        JJKMod.getCEManager().consume(player, ce(2));
+        CooldownManager.set(data, cdKey(2), tick, cd(2));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_2);
         return SkillResult.SUCCESS;
@@ -168,15 +169,15 @@ public class ChosoSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(4), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_4)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(4))) return SkillResult.CE_INSUFFICIENT;
 
         Vec3d forward = player.getRotationVec(1.0f);
         player.setVelocity(forward.multiply(1.5));
         player.velocityModified = true;
 
         data.bloodResource = Math.min(data.bloodResource + 1, BLOOD_RESOURCE_MAX);
-        JJKMod.getCEManager().consume(player, CE_4);
-        CooldownManager.set(data, cdKey(4), tick, CD_4);
+        JJKMod.getCEManager().consume(player, ce(4));
+        CooldownManager.set(data, cdKey(4), tick, cd(4));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_4);
         return SkillResult.SUCCESS;

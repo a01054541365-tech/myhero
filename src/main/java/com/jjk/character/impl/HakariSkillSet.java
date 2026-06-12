@@ -5,7 +5,6 @@ import com.jjk.advancement.AdvancementTriggerManager;
 import com.jjk.api.combat.IDamageSource;
 import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
-import com.jjk.combat.CooldownManager;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
@@ -17,64 +16,49 @@ import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class HakariSkillSet implements ISkillSet {
 
-    // §LOCK: techniques.json 기준 baseDamage 값 — 임의 변경 금지
-    private static final float BD_SF = 66f;
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "hakari";
+    private static final int ANIM_F = 36, ANIM_SF = 48, ANIM_R = 1, ANIM_SR = 49, ANIM_V = 37;
 
-    private static final int CE_F  = 600,  CD_F  = 400, ANIM_F  = 36;
-    private static final int CE_SF = 0,    CD_SF = 8,   ANIM_SF = 48;
-    private static final int CE_R  = 180,  CD_R  = 30,  ANIM_R  = 1;
-    private static final int CE_SR = 450,  CD_SR = 20,  ANIM_SR = 49;
-    private static final int CE_V  = 2500, CD_V  = 360, ANIM_V  = 37;
-
-    // §LOCK: jackpot probability 1/239
-    private static final int JACKPOT_ODDS = 239;
-    // 잭팟 종료 후 재시도 대기시간 (최소 = 600틱)
-    private static final int POST_JACKPOT_CD = 600;
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
 
     // 동시 잭팟 상한 (P2-3): TPS 보호
     private static final AtomicInteger activeJackpots = new AtomicInteger(0);
     private static final int MAX_CONCURRENT_JACKPOTS = 2;
 
-    private static final Random RANDOM = new Random();
-
-    // 잭팟 관련 쿨다운 키 (PlayerData.cooldowns 맵에 저장 — DB 영속화 됨)
-    private static final String KEY_JACKPOT_UNTIL  = "hakari_jackpot_until";
-    private static final String KEY_LAST_ATTEMPT   = "hakari_last_attempt";
-
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
-        return switch (keyId) {
-            case 0 -> useJackpotActivate(player);
-            case 1 -> usePowerOutput(player);
-            case 2 -> useReroll(player);
-            case 3 -> useUncertainDomain(player);
-            case 4 -> useDomainDeploy(player);
-            default -> SkillResult.FAIL;
-        };
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        SkillResult result = dispatch(keyId, data, player, tick);
+        JJKMod.getPlayerRepository().save(data);
+        return result;
     }
 
-    @Override public boolean canUse(ServerPlayerEntity player, int keyId) { return true; }
+    @Override
+    public boolean canUse(ServerPlayerEntity player, int keyId) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        if (keyId == 4) return tick >= data.domainCooldownUntil; // CE는 DomainManager(domains.json)가 검증
+        return data.cooldowns.getOrDefault(String.valueOf(keyId), 0L) <= tick
+                && data.ceCurrent >= getCeCost(keyId);
+    }
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> CD_F; case 1 -> CD_SF; case 2 -> CD_R;
-            case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R;
-            case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -83,8 +67,8 @@ public class HakariSkillSet implements ISkillSet {
             case 0 -> "jackpot_activate";
             case 1 -> "power_output";
             case 2 -> "reroll";
-            case 3 -> "uncertain_domain";
-            case 4 -> "domain_deploy";
+            case 3 -> "indeterminate_domain";
+            case 4 -> "jackpot_domain";
             default -> "unknown";
         };
     }
@@ -95,10 +79,10 @@ public class HakariSkillSet implements ISkillSet {
     public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(0)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_CONDITION;
 
-        data.ceCurrent -= CE_F;
+        data.ceCurrent -= ce(0);
         boolean jackpot = JackpotStateMachine.tryJackpot(data, tick, JJKMod.getConfig());
         if (jackpot) {
             if (activeJackpots.get() >= MAX_CONCURRENT_JACKPOTS) {
@@ -109,14 +93,14 @@ public class HakariSkillSet implements ISkillSet {
                 activeJackpots.incrementAndGet();
                 long streak = data.cooldowns.getOrDefault("adv_jackpot_streak", 0L) + 1L;
                 data.cooldowns.put("adv_jackpot_streak", streak);
-                if (player != null) AdvancementTriggerManager.onHakariJackpotStreak(player, (int) streak);
+                AdvancementTriggerManager.onHakariJackpotStreak(player, (int) streak);
             }
         }
         if (!jackpot) {
-            data.ceCurrent += CE_F;
+            data.ceCurrent += ce(0);
             data.cooldowns.put("adv_jackpot_streak", 0L);
         }
-        data.cooldowns.put("0", tick + 20);
+        data.cooldowns.put("0", tick + cd(0));
         ServerPlayNetworking.send(player,
                 new SkillResultS2CPacket(0, jackpot ? "jackpot_success" : "jackpot_fail", 0f));
         broadcastAnim(player, ANIM_F);
@@ -134,11 +118,11 @@ public class HakariSkillSet implements ISkillSet {
                 .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
         if (target == null) return SkillResult.FAIL_NO_TARGET;
 
-        float damage = JackpotStateMachine.isJackpotActive(data, tick) ? BD_SF * 1.5f : BD_SF;
+        float damage = JackpotStateMachine.isJackpotActive(data, tick) ? bd(1) * 1.5f : bd(1);
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, damage)
                 .skillName("power_output").keyId(1).build();
         JJKMod.getCombatPipeline().process(ctx);
-        data.cooldowns.put("1", tick + CD_SF);
+        data.cooldowns.put("1", tick + cd(1));
         broadcastAnim(player, ANIM_SF);
         return SkillResult.SUCCESS;
     }
@@ -148,13 +132,13 @@ public class HakariSkillSet implements ISkillSet {
         if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
         if (data.cooldowns.getOrDefault("jackpot_retry_used", 0L) > 0L) return SkillResult.FAIL_CONDITION;
-        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(2)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_CONDITION;
 
-        data.ceCurrent -= CE_R;
+        data.ceCurrent -= ce(2);
         JackpotStateMachine.tryJackpot(data, tick, JJKMod.getConfig());
         data.cooldowns.put("jackpot_retry_used", tick + 1);
-        data.cooldowns.put("2", tick + CD_R);
+        data.cooldowns.put("2", tick + cd(2));
         broadcastAnim(player, ANIM_R);
         return SkillResult.SUCCESS;
     }
@@ -163,17 +147,17 @@ public class HakariSkillSet implements ISkillSet {
     public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(3)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SR;
+        data.ceCurrent -= ce(3);
         int roll = ThreadLocalRandom.current().nextInt(3);
         switch (roll) {
             case 0 -> applyUncertainShockwave(player);
             case 1 -> applyUncertainCEAbsorb(player, data);
             case 2 -> applyUncertainSlowZone(player);
         }
-        data.cooldowns.put("3", tick + CD_SR);
+        data.cooldowns.put("3", tick + cd(3));
         ServerPlayNetworking.send(player,
                 new SkillResultS2CPacket(3, "hakari_shift_r_" + roll, 0f));
         broadcastAnim(player, ANIM_SR);
@@ -184,7 +168,7 @@ public class HakariSkillSet implements ISkillSet {
     public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        // CE 검증·차감은 DomainManager(domains.json ceCost)가 단일 수행
         if (player == null) return SkillResult.FAIL_CONDITION;
 
         boolean deployed = JJKMod.getDomainManager().deployDomain("hakari_jackpot_domain", player);
@@ -193,116 +177,7 @@ public class HakariSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // F — jackpot_activate: 1/239 확률, §LOCK jackpotDurationTicks는 config에서 참조함.
-    private SkillResult useJackpotActivate(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-
-        // 잭팟 발동 시도 — 600틱 CD (jackpotCooldownUntil과는 별개)
-        if (!CooldownManager.isReady(data, "cd_hakari_0", tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
-
-        data.cooldowns.put(KEY_LAST_ATTEMPT, tick);
-
-        boolean canJackpot = (tick - data.lastJackpotAttemptTick) >= POST_JACKPOT_CD;
-        boolean jackpot = canJackpot && RANDOM.nextInt(JACKPOT_ODDS) == 0;
-        if (jackpot && activeJackpots.get() >= MAX_CONCURRENT_JACKPOTS) {
-            player.sendMessage(
-                    net.minecraft.text.Text.literal("[JJK] 현재 잭팟이 최대 동시 발동 중입니다."), true);
-            jackpot = false;
-        }
-        if (jackpot) {
-            // §LOCK: jackpotDurationTicks는 config에서 참조, 기본값 상한 251틱
-            activeJackpots.incrementAndGet();
-            int duration = JJKMod.getConfig().jackpotDurationTicks;
-            data.jackpotActive = true;
-            data.jackpotEndTick = tick + duration;
-        }
-
-        JJKMod.getCEManager().consume(player, CE_F);
-        CooldownManager.set(data, "cd_hakari_0", tick, CD_F);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_F);
-        return SkillResult.SUCCESS;
-    }
-
-    // SF — power_output: 공격력 1.5배 버프 적용. ceCost=0이므로 canAfford 생략.
-    private SkillResult usePowerOutput(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_hakari_1";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        // CE_SF=0 이므로 canAfford/consume 생략
-
-        boolean jackpotActive = isJackpotActive(data, tick);
-        float mult = jackpotActive ? 1.5f : 1.0f;
-
-        List<LivingEntity> targets = HitValidator.getNearby(player, 3.0);
-        if (targets.isEmpty()) return SkillResult.FAIL;
-
-        LivingEntity target = targets.get(0);
-        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.NORMAL_TECHNIQUE, BD_SF)
-                .externalBuffMult(mult)
-                .skillName("power_output")
-                .build();
-        JJKMod.getCombatPipeline().process(ctx);
-
-        CooldownManager.set(data, cdKey, tick, CD_SF);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_SF);
-        return SkillResult.SUCCESS;
-    }
-
-    // R: reroll
-    private SkillResult useReroll(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_hakari_2";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_R)) return SkillResult.CE_INSUFFICIENT;
-
-        if (isJackpotActive(data, tick)) return SkillResult.FAIL; // 이미 잭팟 활성 중이면 재시도 불가
-        long lastAttempt = data.cooldowns.getOrDefault(KEY_LAST_ATTEMPT, 0L);
-        if (tick - lastAttempt > 20) return SkillResult.FAIL; // 20틱 내 재시도 불가
-        data.cooldowns.put(KEY_LAST_ATTEMPT, tick);
-        boolean jackpot = RANDOM.nextInt(JACKPOT_ODDS) == 0;
-        if (jackpot) {
-            int duration = JJKMod.getConfig().jackpotDurationTicks;
-            data.jackpotActive = true;
-            data.jackpotEndTick = tick + duration;
-        }
-
-        JJKMod.getCEManager().consume(player, CE_R);
-        CooldownManager.set(data, cdKey, tick, CD_R);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_R);
-        return SkillResult.SUCCESS;
-    }
-
-    // SR — uncertain_domain: Random.nextInt(3)으로 효과 랜덤 선택, 결과는 SkillResultS2CPacket으로 전송
-    private SkillResult useUncertainDomain(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_hakari_3";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
-
-        int effect = RANDOM.nextInt(3);
-        switch (effect) {
-            case 0 -> applyUncertainShockwave(player);
-            case 1 -> applyUncertainCEAbsorb(player, data);
-            case 2 -> applyUncertainSlowZone(player);
-        }
-
-        // 클라이언트에 효과 종류를 알려주기 위해 결과 패킷 전송
-        ServerPlayNetworking.send(player, new SkillResultS2CPacket(3, "uncertain_domain:" + effect, 0f));
-
-        JJKMod.getCEManager().consume(player, CE_SR);
-        CooldownManager.set(data, cdKey, tick, CD_SR);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_SR);
-        return SkillResult.SUCCESS;
-    }
+    // ── 불확정 영역(Shift+R) 효과 헬퍼 ───────────────────────────────────────────
 
     private void applyUncertainShockwave(ServerPlayerEntity player) {
         List<LivingEntity> targets = HitValidator.getNearby(player, 8.0);
@@ -341,23 +216,6 @@ public class HakariSkillSet implements ISkillSet {
         }
     }
 
-    // V — domain_deploy: DomainManager 영역 전개
-    private SkillResult useDomainDeploy(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_hakari_4";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_V)) return SkillResult.CE_INSUFFICIENT;
-
-        JJKMod.getDomainManager().deployDomain("hakari_domain", player);
-
-        JJKMod.getCEManager().consume(player, CE_V);
-        CooldownManager.set(data, cdKey, tick, CD_V);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_V);
-        return SkillResult.SUCCESS;
-    }
-
     // 잭팟 종료 처리: CE/HP 회복 + 능력치 버프 해제는 JJKMod.onInitialize()에서 등록한 틱 핸들러가 처리
     public static void tickJackpot(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
@@ -373,10 +231,6 @@ public class HakariSkillSet implements ISkillSet {
             activeJackpots.updateAndGet(v -> Math.max(0, v - 1));
             JJKMod.getPlayerRepository().save(data);
         }
-    }
-
-    private static boolean isJackpotActive(PlayerData data, long currentTick) {
-        return data.jackpotActive && currentTick < data.jackpotEndTick;
     }
 
     private static void broadcastAnim(ServerPlayerEntity player, int animId) {

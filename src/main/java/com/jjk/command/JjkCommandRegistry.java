@@ -16,6 +16,9 @@ import com.jjk.item.CursedToolRegistry;
 import com.jjk.item.GuideBookItem;
 import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.jjk.team.TeamManager;
+import com.jjk.world.BuildingRegistry;
+import com.jjk.world.structure.BuildingInstance;
+import com.jjk.world.structure.ShibuyaCityStructure;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -424,6 +427,8 @@ public final class JjkCommandRegistry {
                             try {
                                 Path configBase = Path.of("config/jjk");
                                 JJKMod.getConfig().reload(configBase.resolve("config.json"));
+                                com.jjk.combat.TechniqueLoader.load(configBase.resolve("techniques.json"));
+                                JJKMod.getDomainManager().reloadDefs();
                                 src.sendFeedback(() -> Text.literal("[JJK] config·techniques·domains 리로드 완료"), true);
                                 return 1;
                             } catch (Exception e) {
@@ -431,6 +436,29 @@ public final class JjkCommandRegistry {
                                 return 0;
                             }
                         })
+                    )
+
+                    // /jj build city — OP 2: 현재 위치에 시부야 도심 생성 (기존 월드용)
+                    .then(CommandManager.literal("build")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("city")
+                            .executes(ctx -> {
+                                ServerCommandSource src = ctx.getSource();
+                                ServerPlayerEntity player = src.getPlayer();
+                                if (player == null) { src.sendError(Text.literal("플레이어만 사용 가능합니다.")); return 0; }
+                                ServerWorld world = player.getServerWorld();
+                                BlockPos origin = player.getBlockPos();
+                                src.sendFeedback(() -> Text.literal("[JJK] 시부야 도심 생성 시작... (121×121, 수 초 소요)"), true);
+                                var points = ShibuyaCityStructure.build(world, origin);
+                                BuildingRegistry registry = BuildingRegistry.load();
+                                registry.add(new BuildingInstance("shibuya_city",
+                                    origin.getX(), origin.getY(), origin.getZ(), points));
+                                registry.save();
+                                src.sendFeedback(() -> Text.literal("[JJK] 시부야 도심 생성 완료 @ "
+                                    + origin.toShortString()), true);
+                                return 1;
+                            })
+                        )
                     )
 
                     // /jj char — 캐릭터 초기화 서브커맨드

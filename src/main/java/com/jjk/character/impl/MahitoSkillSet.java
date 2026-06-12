@@ -4,12 +4,9 @@ import com.jjk.JJKMod;
 import com.jjk.api.combat.IDamageSource;
 import com.jjk.api.skill.ISkillSet;
 import com.jjk.api.skill.SkillResult;
-import com.jjk.combat.CooldownManager;
 import com.jjk.combat.DamageContext;
 import com.jjk.combat.HitValidator;
 import com.jjk.data.PlayerData;
-import com.jjk.effect.EffectManager;
-import com.jjk.effect.EffectType;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
@@ -21,45 +18,40 @@ import java.util.stream.Collectors;
 
 public class MahitoSkillSet implements ISkillSet {
 
-    // §LOCK: techniques.json 기준 baseDamage 값 — 임의 변경 금지
-    private static final float BD_F  = 26f;
-    private static final float BD_SF = 48f;
-    private static final float BD_SR = 52f;
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
+    private static final String CHAR_ID = "mahito";
+    private static final int ANIM_F = 33, ANIM_SF = 43, ANIM_R = 34, ANIM_SR = 44, ANIM_V = 35;
 
-    private static final int CE_F  = 140,  CD_F  = 8,   ANIM_F  = 33;
-    private static final int CE_SF = 220,  CD_SF = 18,  ANIM_SF = 43;
-    private static final int CE_R  = 120,  CD_R  = 15,  ANIM_R  = 34;
-    private static final int CE_SR = 190,  CD_SR = 12,  ANIM_SR = 44;
-    private static final int CE_V  = 3150, CD_V  = 360, ANIM_V  = 35;
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
+
+    // ── Legacy API ────────────────────────────────────────────────────────────
 
     @Override
     public SkillResult use(ServerPlayerEntity player, int keyId) {
-        return switch (keyId) {
-            case 0 -> useIdleTransfiguration(player);
-            case 1 -> usePolymorphicSoulIsomer(player);
-            case 2 -> useSoulDefense(player);
-            case 3 -> useBladeTransfiguration(player);
-            case 4 -> useSelfEmbodiment(player);
-            default -> SkillResult.FAIL;
-        };
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        return dispatch(keyId, data, player, tick);
     }
 
-    @Override public boolean canUse(ServerPlayerEntity player, int keyId) { return true; }
+    @Override
+    public boolean canUse(ServerPlayerEntity player, int keyId) {
+        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
+        long tick = player.getWorld().getTime();
+        if (keyId == 4) return tick >= data.domainCooldownUntil; // CE는 DomainManager(domains.json)가 검증
+        return data.cooldowns.getOrDefault(String.valueOf(keyId), 0L) <= tick
+                && data.ceCurrent >= getCeCost(keyId);
+    }
 
     @Override
     public int getCooldownTicks(int keyId) {
-        return switch (keyId) {
-            case 0 -> CD_F; case 1 -> CD_SF; case 2 -> CD_R;
-            case 3 -> CD_SR; case 4 -> CD_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? cd(keyId) : 0;
     }
 
     @Override
     public int getCeCost(int keyId) {
-        return switch (keyId) {
-            case 0 -> CE_F; case 1 -> CE_SF; case 2 -> CE_R;
-            case 3 -> CE_SR; case 4 -> CE_V; default -> 0;
-        };
+        return (keyId >= 0 && keyId <= 4) ? ce(keyId) : 0;
     }
 
     @Override
@@ -74,13 +66,14 @@ public class MahitoSkillSet implements ISkillSet {
         };
     }
 
-    // ── onX PlayerData 경로 ───────────────────────────────────────────────────────
+    // ── onX 경로 ─────────────────────────────────────────────────────────────
 
+    /** F — 무위전변: 근접 4블록 최근접 단일 대상, isSoulDirect=true */
     @Override
     public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("0", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_F) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(0)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         List<LivingEntity> targets = HitValidator.getNearby(player, 4.0);
@@ -88,21 +81,21 @@ public class MahitoSkillSet implements ISkillSet {
                 .min(Comparator.comparingDouble(e -> e.squaredDistanceTo(player))).orElse(null);
         if (target == null) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_F;
-        DamageContext ctx = DamageContext.builder(player, target,
-                com.jjk.api.combat.IDamageSource.SOUL_DIRECT, BD_F)
+        data.ceCurrent -= ce(0);
+        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, bd(0))
                 .soulDirect().skillName("idle_transfiguration").keyId(0).build();
         JJKMod.getCombatPipeline().process(ctx);
-        data.cooldowns.put("0", tick + CD_F);
+        data.cooldowns.put("0", tick + cd(0));
         broadcastAnim(player, ANIM_F);
         return SkillResult.SUCCESS;
     }
 
+    /** Shift+F — 다중체변: 최대 3타, MultiHitDampener 1.0/0.85/0.70 */
     @Override
     public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("1", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SF) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(1)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         List<LivingEntity> nearbyTargets = HitValidator.getNearby(player, 10.0).stream()
@@ -112,190 +105,77 @@ public class MahitoSkillSet implements ISkillSet {
                 .collect(Collectors.toList());
         if (nearbyTargets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SF;
+        data.ceCurrent -= ce(1);
         float[] dampeners = {1.0f, 0.85f, 0.70f};
         for (int i = 0; i < nearbyTargets.size(); i++) {
             DamageContext ctx = DamageContext.builder(player, nearbyTargets.get(i),
-                    com.jjk.api.combat.IDamageSource.NORMAL_TECHNIQUE, BD_SF * dampeners[i])
+                    IDamageSource.NORMAL_TECHNIQUE, bd(1) * dampeners[i])
                     .skillName("polymorphic_soul_isomer").keyId(1).build();
             JJKMod.getCombatPipeline().process(ctx);
         }
-        data.cooldowns.put("1", tick + CD_SF);
+        data.cooldowns.put("1", tick + cd(1));
         broadcastAnim(player, ANIM_SF);
         return SkillResult.SUCCESS;
     }
 
+    /** R — 혼방어: 80틱 soul_resist 부여 (isSoulDirect 피격 시 데미지 50% 감소) */
     @Override
     public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("2", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_R) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(2)) return SkillResult.FAIL_CE_INSUFFICIENT;
 
-        data.ceCurrent -= CE_R;
+        data.ceCurrent -= ce(2);
         data.cooldowns.put("status_soul_resist", tick + 80);
-        data.cooldowns.put("2", tick + CD_R);
+        data.cooldowns.put("2", tick + cd(2));
         if (player != null) broadcastAnim(player, ANIM_R);
         return SkillResult.SUCCESS;
     }
 
+    /** Shift+R — 체변의 칼날: 전방 90도 arc 5블록, isSoulDirect=true */
     @Override
     public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.cooldowns.getOrDefault("3", 0L) > tick) return SkillResult.ON_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_SR) return SkillResult.FAIL_CE_INSUFFICIENT;
+        if (data.ceCurrent < ce(3)) return SkillResult.FAIL_CE_INSUFFICIENT;
         if (player == null) return SkillResult.FAIL_NO_TARGET;
 
         List<LivingEntity> targets = HitValidator.getNearbyArc(player, 5.0, 90f);
         if (targets.isEmpty()) return SkillResult.FAIL_NO_TARGET;
 
-        data.ceCurrent -= CE_SR;
+        data.ceCurrent -= ce(3);
         for (LivingEntity target : targets) {
             DamageContext ctx = DamageContext.builder(player, target,
-                    com.jjk.api.combat.IDamageSource.SOUL_DIRECT, BD_SR)
+                    IDamageSource.SOUL_DIRECT, bd(3))
                     .soulDirect().skillName("blade_transfiguration").keyId(3).build();
             JJKMod.getCombatPipeline().process(ctx);
         }
-        data.cooldowns.put("3", tick + CD_SR);
+        data.cooldowns.put("3", tick + cd(3));
         broadcastAnim(player, ANIM_SR);
         return SkillResult.SUCCESS;
     }
 
+    /** V — 자기 체현 완성 (영역 전개) + 양날성(자기 피해) */
     @Override
     public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
         if (data.domainCooldownUntil > tick) return SkillResult.FAIL_COOLDOWN;
         if (data.cooldowns.getOrDefault("skill_seal", 0L) > tick) return SkillResult.FAIL_SKILL_SEALED;
-        if (data.ceCurrent < CE_V) return SkillResult.FAIL_CE_INSUFFICIENT;
+        // CE 검증·차감은 DomainManager(domains.json ceCost)가 단일 수행
         if (player == null) return SkillResult.FAIL_CONDITION;
 
         boolean deployed = JJKMod.getDomainManager().deployDomain("mahito_self_embodiment", player);
         if (!deployed) return SkillResult.FAIL_CONDITION;
-        broadcastAnim(player, ANIM_V);
-        return SkillResult.SUCCESS;
-    }
 
-    // F — idle_transfiguration: 근접 1.5칸, isSoulDirect=true
-    private SkillResult useIdleTransfiguration(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_mahito_0";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_F)) return SkillResult.CE_INSUFFICIENT;
-
-        List<LivingEntity> targets = HitValidator.getNearby(player, 1.5);
-        if (targets.isEmpty()) return SkillResult.FAIL;
-
-        LivingEntity target = targets.get(0);
-        DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_F)
-                .soulDirect()
-                .skillName("idle_transfiguration")
-                .build();
-        JJKMod.getCombatPipeline().process(ctx);
-
-        JJKMod.getCEManager().consume(player, CE_F);
-        CooldownManager.set(data, cdKey, tick, CD_F);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_F);
-        return SkillResult.SUCCESS;
-    }
-
-    // SF — polymorphic_soul_isomer: 최대 3타, MultiHitDampener 1.0/0.85/0.70
-    private SkillResult usePolymorphicSoulIsomer(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_mahito_1";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_SF)) return SkillResult.CE_INSUFFICIENT;
-
-        List<LivingEntity> targets = HitValidator.getNearby(player, 10.0).stream()
-                .filter(t -> {
-                    if (t instanceof ServerPlayerEntity p) return JJKMod.getTeamManager().isEnemy(player, p);
-                    return true; // mobs are always valid targets
-                })
-                .sorted(Comparator.comparingDouble(e -> e.squaredDistanceTo(player)))
-                .limit(3)
-                .collect(Collectors.toList());
-
-        float[] dampeners = {1.0f, 0.85f, 0.70f};
-        for (int i = 0; i < targets.size(); i++) {
-            float dmg = BD_SF * dampeners[i];
-            DamageContext ctx = DamageContext.builder(player, targets.get(i),
-                    IDamageSource.NORMAL_TECHNIQUE, dmg)
-                    .skillName("polymorphic_soul_isomer")
-                    .build();
-            JJKMod.getCombatPipeline().process(ctx);
-        }
-
-        JJKMod.getCEManager().consume(player, CE_SF);
-        CooldownManager.set(data, cdKey, tick, CD_SF);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_SF);
-        return SkillResult.SUCCESS;
-    }
-
-    // R — soul_defense: 80틱 soul_resist 부여 (isSoulDirect 피격 시 데미지 50% 감소)
-    private SkillResult useSoulDefense(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_mahito_2";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_R)) return SkillResult.CE_INSUFFICIENT;
-
-        data.cooldowns.put("status_soul_resist", tick + 80);
-        JJKMod.getCEManager().consume(player, CE_R);
-        CooldownManager.set(data, cdKey, tick, CD_R);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_R);
-        return SkillResult.SUCCESS;
-    }
-
-    // SR — blade_transfiguration: 전방 90도 arc 2칸, isSoulDirect=true
-    private SkillResult useBladeTransfiguration(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_mahito_3";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_SR)) return SkillResult.CE_INSUFFICIENT;
-
-        List<LivingEntity> targets = HitValidator.getNearbyArc(player, 2.0, 90f);
-        for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(player, target, IDamageSource.SOUL_DIRECT, BD_SR)
-                    .soulDirect()
-                    .skillName("blade_transfiguration")
-                    .build();
-            JJKMod.getCombatPipeline().process(ctx);
-        }
-
-        JJKMod.getCEManager().consume(player, CE_SR);
-        CooldownManager.set(data, cdKey, tick, CD_SR);
-        JJKMod.getPlayerRepository().save(data);
-        broadcastAnim(player, ANIM_SR);
-        return SkillResult.SUCCESS;
-    }
-
-    // V: 자기 체현 완성 — 영역 전개 + 양날성(자기 피해) + bypassRCT + isSoulDirect
-    private SkillResult useSelfEmbodiment(ServerPlayerEntity player) {
-        PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
-        long tick = player.getWorld().getTime();
-        String cdKey = "cd_mahito_4";
-        if (!CooldownManager.isReady(data, cdKey, tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_V)) return SkillResult.CE_INSUFFICIENT;
-
-        JJKMod.getDomainManager().deployDomain("mahito_domain", player);
-
-        // 양날성: 영역 전개 반동으로 사용자 자신에게도 soul-direct 피해
-        DamageContext selfCtx = DamageContext.builder(null, player, com.jjk.api.combat.IDamageSource.SOUL_DIRECT, BD_SF)
-                .soulDirect()
-                .bypassRCT()
-                .skillName("self_embodiment_recoil")
-                .build();
+        // 양날성: 영역 전개 반동으로 사용자 자신에게도 soul-direct 피해 (bypassRCT)
+        DamageContext selfCtx = DamageContext.builder(null, player, IDamageSource.SOUL_DIRECT, bd(1))
+                .soulDirect().bypassRCT().skillName("self_embodiment_recoil").build();
         JJKMod.getCombatPipeline().process(selfCtx);
 
-        JJKMod.getCEManager().consume(player, CE_V);
-        CooldownManager.set(data, cdKey, tick, CD_V);
-        JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, ANIM_V);
         return SkillResult.SUCCESS;
     }
+
+    // ── 헬퍼 ──────────────────────────────────────────────────────────────────
 
     private static void broadcastAnim(ServerPlayerEntity player, int animId) {
         var pkt = new AnimationTriggerS2CPacket(player.getUuid(), (byte) animId);

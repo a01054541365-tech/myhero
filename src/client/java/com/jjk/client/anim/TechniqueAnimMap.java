@@ -38,7 +38,7 @@ public final class TechniqueAnimMap {
         MAP.put("sukuna:1",  22);
         MAP.put("sukuna:2",  23);
         MAP.put("sukuna:3",  24);
-        MAP.put("sukuna:4",   0);
+        MAP.put("sukuna:4",   7); // decisions §P3-6: V=7 (서버 techniques.json animId와 일치)
     }
 
     /** 없으면 1(공통 cast) 반환 */

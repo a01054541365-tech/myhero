@@ -7,6 +7,7 @@ import com.jjk.character.impl.HigurumaSkillSet;
 import com.jjk.data.PlayerData;
 import com.jjk.trial.TrialManager;
 import com.jjk.trial.TrialStateMachine;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,17 @@ class HigurumaTrialTest {
         configField.setAccessible(true);
         configField.set(mod, new JjkConfig());
         instanceField.set(null, mod);
+        // 데이터 주도 전환(2026-06-11): 스킬 CE/CD는 techniques.json에서 읽으므로 로드 필요
+        com.jjk.combat.TechniqueLoader.load(java.nio.file.Path.of("run/config/jjk/techniques.json"));
+    }
+
+    // 전역 JJKMod.INSTANCE 오염 정리 — 다른 테스트(CombatPipelineIntegrationTest 등)가
+    // getCEManager() 등 null 매니저에 NPE 발생하는 것을 방지 (테스트 순서 비의존성 보장)
+    @AfterAll
+    static void tearDownJJKMod() throws Exception {
+        Field instanceField = JJKMod.class.getDeclaredField("INSTANCE");
+        instanceField.setAccessible(true);
+        instanceField.set(null, null);
     }
 
     private static PlayerData higuruma() {
@@ -42,7 +54,7 @@ class HigurumaTrialTest {
     void testCulpableHitMetadata() {
         HigurumaSkillSet skill = new HigurumaSkillSet();
         assertEquals("culpable_hit", skill.getSkillName(1));
-        assertEquals(160, skill.getCeCost(1));
+        assertEquals(140, skill.getCeCost(1));        // techniques.json higuruma keyId1
         assertEquals(18, skill.getCooldownTicks(1));
     }
 

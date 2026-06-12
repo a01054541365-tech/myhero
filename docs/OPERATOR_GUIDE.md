@@ -19,6 +19,14 @@
 
 ## 설정 파일
 
+### 밸런스 데이터 주도 (2026-06-11)
+
+스킬별 **데미지·CE·쿨다운**은 `config/jjk/techniques.json`(영역 CE는 `domains.json`)이 **런타임 권위**다.
+모든 스킬셋이 부팅 시 로드된 이 값을 `keyId` 기준으로 읽으므로, JSON만 고치고 `/jj reload`하면
+서버 재시작 없이 즉시 튜닝된다. 캐릭터 CE풀·재생·HP도 `techniques.json`의 `characterStats`에서 적용된다.
+
+> 예외(JSON 미등재, 코드 상수 유지): 고죠 커튼·이타도리 shrine·비술사(todo) 근접 피해·DoT/발사체 피해.
+
 ### config/jjk/config.json
 
 운영자가 조정 가능한 주요 항목:
@@ -62,7 +70,8 @@
 |---|---|---|
 | `/jj select <characterId>` | 플레이어 | 캐릭터 선택 |
 | `/jj info` | 플레이어 | 현재 상태 조회 (캐릭터·CE·HP·각성·Zone·부담·봉인) |
-| `/jj reload` | OP 2 | config 핫리로드 |
+| `/jj reload` | OP 2 | config·techniques·domains 핫리로드 (스킬/영역 수치 즉시 재적용) |
+| `/jj build city` | OP 2 | 현재 위치에 시부야 도심 구조물 생성 (기존 월드용) |
 | `/jj selectchar <player> <characterId>` | OP 2 | 다른 플레이어 캐릭터 강제 지정 |
 | `/jj data save <player>` | OP 2 | 플레이어 데이터 즉시 저장 |
 | `/jj domain clear` | OP 2 | 모든 활성 영역 강제 종료 |
@@ -80,7 +89,8 @@
 ### 영역 domainId 목록
 
 `gojo_unlimited_void` · `sukuna_malevolent_shrine` · `mahito_self_embodiment` ·
-`itadori_unnamed` · `megumi_chimera_shadow` · `jogo_volcano_domain` · `hakari_jackpot_domain`
+`itadori_unnamed` · `megumi_chimera_shadow` · `jogo_volcano_domain` · `hakari_jackpot_domain` ·
+`okkotsu_true_mutual_love` · `cursed_spirit_domain`(NPC 전용)
 
 ---
 

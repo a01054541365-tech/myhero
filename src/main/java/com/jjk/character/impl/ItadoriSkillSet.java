@@ -27,13 +27,14 @@ public class ItadoriSkillSet implements ISkillSet {
 
     // key 0: divergent_fist, 1: manji_kick, 2: black_flash_focus, 3: domain_startup, 4: rct
     // key 5 (extended): shrine
-    // §6-3 이타도리 기준
-    private static final int CE_0 = 80,   CD_0 = 4;    // 5→4 (§6-3 이타도리 기준)
-    private static final int CE_1 = 90,   CD_1 = 6;
-    private static final int CE_2 = 120,  CD_2 = 20;   // 0→120, 120→20 (§6-3 이타도리 기준)
-    private static final int CE_3 = 2200, CD_3 = 300;  // 2400→2200, 480→300 (§6-3 이타도리 기준)
-    private static final int CE_4 = 0,    CD_4 = 5;
-    // shrine (확장 슬롯 keyId=5) — §H-3 밸런스 확정
+    // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환). key 5(shrine)는 extendedSkills — 상수 유지.
+    private static final String CHAR_ID = "itadori";
+
+    private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
+    private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
+    private static int   cd(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCooldownTicks(CHAR_ID, keyId); }
+
+    // shrine (확장 슬롯 keyId=5) — extendedSkills, §H-3 밸런스 확정
     private static final int CE_SHRINE = 450, CD_SHRINE = 160, SHRINE_ANIM = 63;
     private static final int BF_COMBO_WINDOW = 20; // 흑섬 Perfect → shrine 콤보 윈도우(틱)
     private static final float[] SHRINE_DECAY = {1.0f, 0.90f, 0.75f}; // 3타 decay
@@ -63,16 +64,14 @@ public class ItadoriSkillSet implements ISkillSet {
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> CD_0; case 1 -> CD_1; case 2 -> CD_2;
-            case 3 -> CD_3; case 4 -> CD_4; case 5 -> CD_SHRINE; default -> 0;
+            case 0, 1, 2, 3, 4 -> cd(keyId); case 5 -> CD_SHRINE; default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> CE_0; case 1 -> CE_1; case 2 -> CE_2;
-            case 3 -> CE_3; case 4 -> CE_4; case 5 -> CE_SHRINE; default -> 0;
+            case 0, 1, 2, 3, 4 -> ce(keyId); case 5 -> CE_SHRINE; default -> 0;
         };
     }
 
@@ -97,17 +96,17 @@ public class ItadoriSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(0), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_0)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(0))) return SkillResult.CE_INSUFFICIENT;
 
         List<LivingEntity> targets = HitValidator.getNearbyArc(player, 3.0, 120f);
 
         for (LivingEntity target : targets) {
             JJKMod.getEffectDeferQueue().schedule(
-                    BlockPos.ofFloored(target.getPos()), 17f, 5, player.getUuid(), tick);
+                    BlockPos.ofFloored(target.getPos()), bd(0), 5, player.getUuid(), tick);
         }
 
-        JJKMod.getCEManager().consume(player, CE_0);
-        CooldownManager.set(data, cdKey(0), tick, CD_0);
+        JJKMod.getCEManager().consume(player, ce(0));
+        CooldownManager.set(data, cdKey(0), tick, cd(0));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }
@@ -116,7 +115,7 @@ public class ItadoriSkillSet implements ISkillSet {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(1), tick)) return SkillResult.ON_COOLDOWN;
-        if (!JJKMod.getCEManager().canAfford(player, CE_1)) return SkillResult.CE_INSUFFICIENT;
+        if (!JJKMod.getCEManager().canAfford(player, ce(1))) return SkillResult.CE_INSUFFICIENT;
 
         Vec3d dir = player.getRotationVec(1.0f);
         player.setVelocity(dir.multiply(1.5));
@@ -127,8 +126,8 @@ public class ItadoriSkillSet implements ISkillSet {
             JJKMod.getComboTracker().recordHit(player.getUuid(), tick);
         }
 
-        JJKMod.getCEManager().consume(player, CE_1);
-        CooldownManager.set(data, cdKey(1), tick, CD_1);
+        JJKMod.getCEManager().consume(player, ce(1));
+        CooldownManager.set(data, cdKey(1), tick, cd(1));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, 14);
         return SkillResult.SUCCESS;
@@ -140,7 +139,7 @@ public class ItadoriSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey(2), tick)) return SkillResult.ON_COOLDOWN;
 
         blackFlashFocusTicks.put(player.getUuid(), tick);
-        CooldownManager.set(data, cdKey(2), tick, CD_2);
+        CooldownManager.set(data, cdKey(2), tick, cd(2));
         JJKMod.getPlayerRepository().save(data);
         return SkillResult.SUCCESS;
     }
@@ -158,7 +157,7 @@ public class ItadoriSkillSet implements ISkillSet {
         if (!CooldownManager.isReady(data, cdKey(4), tick)) return SkillResult.ON_COOLDOWN;
 
         data.healingActive = true;
-        CooldownManager.set(data, cdKey(4), tick, CD_4);
+        CooldownManager.set(data, cdKey(4), tick, cd(4));
         JJKMod.getPlayerRepository().save(data);
         broadcastAnim(player, 15);
         return SkillResult.SUCCESS;

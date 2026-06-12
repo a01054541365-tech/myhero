@@ -110,6 +110,9 @@ public class JJKMod implements ModInitializer {
         INSTANCE = this;
 
         config = JjkConfig.load();
+        // techniques.json 로드 — 스킬 CE/데미지/쿨다운 + characterStats(CE풀·재생·HP) 적용.
+        // (미로드 시 TechniqueLoader 게터가 기본값을 반환 → 데이터 주도 스킬셋 무력화)
+        com.jjk.combat.TechniqueLoader.load(java.nio.file.Path.of("config/jjk/techniques.json"));
         playerRepository = new PlayerRepository();
         teamManager = new TeamManager();
         ceManager = new CEManager(config);

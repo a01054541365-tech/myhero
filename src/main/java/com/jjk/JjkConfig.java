@@ -64,7 +64,7 @@ public class JjkConfig {
         "raidEventIntervalTicks", "selectionBookCommandPermission",
         "buildingSpawnEnabled", "buildingMinDistanceBlocks",
         "jujutsuHighTokyoCount", "detentionFacilityCount",
-        "shibuyaUndergroundCount", "nanamiOfficeCount",
+        "shibuyaUndergroundCount", "nanamiOfficeCount", "shibuyaCityCount",
         "unlimitedVoidCeDrainRatio", "rikaMeleeDamage"
     };
 
@@ -91,9 +91,9 @@ public class JjkConfig {
     public float   xpMultiplierGradeDiff           = 1.5f;
     public boolean allowCharacterReselect          = false;
     public int     rikaLifetimeTicks               = 200;    // §LOCK
-    public int     maharagaThreshold               = 5;      // §LOCK decisions §2-1
+    public int     maharagaThreshold               = 3;      // 밸런스 패스 2026-06-11: 5→3 (마허라 소환 현실화)
     public int     sealDurationTicks               = 400;    // §LOCK decisions §2-2 (600 사용 금지 → 400으로 교체 확정 2026-05-28)
-    public int     zoneDurationTicks               = 200;    // §LOCK decisions §2-3
+    public int     zoneDurationTicks               = 300;    // 밸런스 패스 2026-06-11: 200→300 (흑섬 존 15초)
     public float   ceRegenOutOfCombat              = 1.0f;   // decisions §2-4
     public float   ceRegenInCombat                 = 0.2f;   // decisions §2-4
     public int     zoneEntryBlackFlashCount        = 1;      // 흑섬 1회 즉시 진입
@@ -105,9 +105,9 @@ public class JjkConfig {
     public int     blackFlashZoneAtkBonus          = 15;    // Zone 내 공격력 %
     public int     blackFlashZoneSkillBonus        = 10;    // Zone 내 스킬 데미지 %
     public int     fingerStatBonusPercent          = 5;     // 스쿠나 손가락 1개당 %
-    public float   awakeningHpThreshold            = 0.05f; // §LOCK 각성 발동 HP 비율 (5%)
-    public int     awakeningDurationTicks          = 160;   // §LOCK decisions
-    public float   awakeningMultiplier             = 1.5f;  // §LOCK 각성 배율
+    public float   awakeningHpThreshold            = 0.30f; // 밸런스 패스 2026-06-11: 0.05→0.30 (역전 기믹으로 실사용화)
+    public int     awakeningDurationTicks          = 160;
+    public float   awakeningMultiplier             = 1.5f;
     public int     awakeningCooldownTicks          = 2400;  // §LOCK decisions
     public float   shieldCeDrainRatio              = 0.005f;
     public float   shieldDamageReduction           = 0.02f;
@@ -176,12 +176,12 @@ public class JjkConfig {
     public int     chantMaxTicks                   = 60;
     public float   chantMaxMultiplier              = 2.0f;
     public float   chantCeDrainRatio               = 0.20f;
-    public int     curtainBasicCeCost              = 800;
+    public int     curtainBasicCeCost              = 500;   // 밸런스 패스 2026-06-11: 800→500 (저CE풀 캐릭터도 사용 가능)
     public float   curtainBasicCePerTick           = 0.8f;
     public int     curtainBasicDurationTicks       = 4000;
     public int     curtainBasicRadius              = 25;
     public int     curtainBasicCooldownTicks       = 600;
-    public int     curtainSpecialCeCost            = 2000;
+    public int     curtainSpecialCeCost            = 1500;  // 밸런스 패스 2026-06-11: 2000→1500
     public float   curtainSpecialCePerTick         = 1.5f;
     public int     curtainSpecialDurationTicks     = 8000;
     public int     curtainSpecialRadius            = 45;
@@ -195,6 +195,7 @@ public class JjkConfig {
     public int     detentionFacilityCount        = 2;
     public int     shibuyaUndergroundCount       = 1;
     public int     nanamiOfficeCount             = 1;
+    public int     shibuyaCityCount              = 1;
 
     public int    gradeProtectionDiff            = 3;
     public float  gradeProtectionXpMultiplier    = 3.0f;
@@ -202,7 +203,7 @@ public class JjkConfig {
     public int    selectionBookCommandPermission = 2;
 
     public float  unlimitedVoidCeDrainRatio      = 0.02f;  // 무량공처 내부 매 틱 CE 강제 소진 비율 (ceMax 대비)
-    public int    rikaMeleeDamage                = 20;     // 리카 근접 공격 데미지
+    public int    rikaMeleeDamage                = 8;      // 밸런스 패스 2026-06-11: 20→8 (소환수가 본체보다 강하던 문제)
 
     public static JjkConfig load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -333,6 +334,7 @@ public class JjkConfig {
         this.detentionFacilityCount              = fresh.detentionFacilityCount;
         this.shibuyaUndergroundCount             = fresh.shibuyaUndergroundCount;
         this.nanamiOfficeCount                   = fresh.nanamiOfficeCount;
+        this.shibuyaCityCount                    = fresh.shibuyaCityCount;
         this.nonSorcMult                         = fresh.nonSorcMult;
         this.nonSorcMultExtreme                  = fresh.nonSorcMultExtreme;
         this.buildingsGenerated                  = fresh.buildingsGenerated;

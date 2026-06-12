@@ -72,12 +72,16 @@ public final class CEAuraRenderer {
 
             float ratio = Math.min(1f, Math.max(0f, cePercent));
 
-            // CE > 30%: 청색, <= 30%: 붉은색
+            // 색상 구간은 서버 보스바(CeBossBarManager.colorFor)와 동일: 70/40/20%
             int r, g, b;
-            if (ratio > 0.30f) {
-                r = 30; g = 100; b = 255;
+            if (ratio >= 0.70f) {
+                r = 30; g = 100; b = 255;   // BLUE
+            } else if (ratio >= 0.40f) {
+                r = 60; g = 200; b = 90;    // GREEN
+            } else if (ratio >= 0.20f) {
+                r = 230; g = 200; b = 40;   // YELLOW
             } else {
-                r = 255; g = 50; b = 50;
+                r = 255; g = 50; b = 50;    // RED
             }
             // 두께: CE 비율에 비례 (inner 고정, outer 비례)
             float outerR = RING_INNER_RADIUS + (RING_OUTER_RADIUS - RING_INNER_RADIUS) * ratio;
