@@ -117,9 +117,20 @@ public class FingerSystem {
      * sourceType: "player_sukuna" (Phase 3 확장: "cursed_spirit")
      */
     public void tryDropFromKill(UUID sourceUuid, UUID killerUuid, String sourceType) {
+        tryDropFromKillInternal(sourceUuid, killerUuid, sourceType, config.fingerDropRate);
+    }
+
+    /** FingerBearerEntity 등 2배 확률 드롭 전용 오버로드. */
+    public void tryDropFromKill(UUID sourceUuid, UUID killerUuid, String sourceType,
+                                float customRate) {
+        tryDropFromKillInternal(sourceUuid, killerUuid, sourceType, customRate);
+    }
+
+    private void tryDropFromKillInternal(UUID sourceUuid, UUID killerUuid, String sourceType,
+                                          float rate) {
         synchronized (fingerLock) {
             if (droppedMobs.contains(sourceUuid.toString())) return;
-            if (Math.random() >= config.fingerDropRate) return;
+            if (Math.random() >= rate) return;
             droppedMobs.add(sourceUuid.toString());
         }
 
@@ -145,6 +156,11 @@ public class FingerSystem {
                 ServerPlayNetworking.send(killer,
                     new FingerDropS2CPacket(killerData.fingerCount, maxReached));
                 AdvancementTriggerManager.onFingerCollect(killer, killerData.fingerCount);
+                if (JJKMod.getAchievementManager() != null) {
+                    if (killerData.fingerCount == 1)  JJKMod.getAchievementManager().unlock(killer, "first_finger");
+                    if (killerData.fingerCount == 10) JJKMod.getAchievementManager().unlock(killer, "ten_fingers");
+                    if (killerData.fingerCount >= 20) JJKMod.getAchievementManager().unlock(killer, "all_fingers");
+                }
             }
             if (maxReached) {
                 FullRevivalEvents.trigger(killerUuid, server);

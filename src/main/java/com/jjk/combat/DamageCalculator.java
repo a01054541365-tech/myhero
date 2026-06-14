@@ -4,6 +4,7 @@ import com.jjk.JJKMod;
 import com.jjk.JjkConfig;
 import com.jjk.data.PlayerData;
 import com.jjk.finger.FingerSystem;
+import com.jjk.item.cursedtool.CursedToolEffect;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 
@@ -21,6 +22,7 @@ public class DamageCalculator {
     private static final float MAX_FINAL_MULT       = 4.0f;
 
     private final Map<UUID, TickDamageTracker> tickAccum = new HashMap<>();
+    private final ResonanceTracker resonanceTracker = new ResonanceTracker();
 
     private record TickDamageTracker(long tick, float accumulated) {}
 
@@ -99,6 +101,12 @@ public class DamageCalculator {
                 && "nanami".equals(getCharId(ctx.attacker))) {
             PlayerData d = JJKMod.getPlayerRepository().load(ctx.attacker.getUuid());
             if (d.overtimeWork) damage *= 1.20f;
+        }
+
+        // CE 공명 보너스 (clamp 이전 합산)
+        if (ctx.target != null && ctx.skillName != null) {
+            damage += resonanceTracker.checkAndApply(
+                    ctx.target.getUuid(), ctx.skillName, ctx.baseDamage);
         }
 
         // §LOCK: finalMultiplier 클램프 ×4.0
@@ -191,11 +199,34 @@ public class DamageCalculator {
         // §4-6: 배율 클램프 ×0.25 ~ ×4.0 (§LOCK)
         float totalMult = Math.max(CLAMP_MIN, Math.min(attackMult * gradeMult * condMult * comboMult, CLAMP_MAX));
 
+        // Stage 4b — 주구 보너스 적용 (클램프 이후, cursedToolBonus.damageMultiplier는 캡 외부 적용)
+        boolean cursedNullifyDef = false;
+        if (ctx != null && ctx.cursedToolBonus != null) {
+            CursedToolEffect eff = ctx.cursedToolBonus.effect();
+            totalMult *= eff.damageMultiplier();
+            if (eff.nullifyTechnique()) {
+                cursedNullifyDef = true;
+            }
+            if (eff.isSoulDirect()) {
+                ctx.isSoulDirect = true;
+            }
+            // 드래곤본 공명: resonanceCharges 회 이후 타격에 ×3.0 적용
+            if (eff.resonanceCharges() > 0 && attacker != null) {
+                String toolId = ctx.cursedToolBonus.toolId();
+                int hits = attacker.toolResonanceStacks.getOrDefault(toolId, 0) + 1;
+                if (hits > eff.resonanceCharges()) {
+                    totalMult *= 3.0f;
+                    hits = 0;
+                }
+                attacker.toolResonanceStacks.put(toolId, hits);
+            }
+        }
+
         float rawDamage = effectiveBase * totalMult;
         if (ctx != null) ctx.rawDamage = rawDamage;
 
         // §4-4: 방어 처리 (defenseMultiplier < 1.0 = 방어 관통)
-        float effectiveDefense = (ctx != null && ctx.isSoulDirect)
+        float effectiveDefense = (cursedNullifyDef || (ctx != null && ctx.isSoulDirect))
                 ? 0f
                 : (target != null ? target.defenseStat * target.defenseBoostMultiplier : 0f)
                   * (ctx != null ? ctx.defenseMultiplier : 1.0f);

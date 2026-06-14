@@ -277,6 +277,9 @@ public class DomainManager {
         instance.deployedAtTick = currentTick;
         activeDomains.put(instance.instanceId, instance);
         AdvancementTriggerManager.onDomainDeploy(owner);
+        if (JJKMod.getAchievementManager() != null) {
+            JJKMod.getAchievementManager().unlock(owner, "first_domain");
+        }
 
         // Set cooldown and save
         data.domainCooldownUntil = currentTick + def.cooldownTicks;

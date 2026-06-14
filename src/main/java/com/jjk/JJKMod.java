@@ -1,5 +1,6 @@
 package com.jjk;
 
+import com.jjk.achievement.AchievementManager;
 import com.jjk.bossbar.CeBossBarManager;
 import com.jjk.dungeon.DungeonManager;
 import com.jjk.economy.CursedStoneManager;
@@ -9,9 +10,14 @@ import com.jjk.server.AutoAnnouncer;
 import com.jjk.server.BackupScheduler;
 import com.jjk.server.SeasonManager;
 import com.jjk.server.WelcomeHandler;
+import com.jjk.world.ChunkForceLoader;
+import com.jjk.world.StructureManager;
 import com.jjk.world.WorldGenerationManager;
+import com.jjk.event.EasterEggManager;
+import com.jjk.event.NightEventManager;
 import com.jjk.event.PotionUseHandler;
 import com.jjk.event.RaidEventManager;
+import com.jjk.event.WeatherPassiveManager;
 import com.jjk.item.GuideBookItem;
 import com.jjk.chant.ChantingHandler;
 import com.jjk.quest.QuestManager;
@@ -50,7 +56,6 @@ import com.jjk.entity.CursedSpiritEntityTypes;
 import com.jjk.entity.CursedSpiritSpawnManager;
 import com.jjk.entity.ShikigamiEntityTypes;
 import com.jjk.item.CostumeItemRegistry;
-import com.jjk.item.CursedToolRegistry;
 import com.jjk.effect.EffectDeferQueue;
 import com.jjk.effect.FireEffectManager;
 import com.jjk.finger.FingerSystem;
@@ -100,10 +105,14 @@ public class JJKMod implements ModInitializer {
     private CursedStoneManager cursedStoneManager;
     private QuestManager questManager;
     private DungeonManager dungeonManager;
+    private AchievementManager achievementManager;
     private RaidEventManager raidEventManager;
+    private NightEventManager nightEventManager;
+    private WeatherPassiveManager weatherPassiveManager;
     private final ComboTracker comboTracker = new ComboTracker();
     private TickScheduler tickScheduler;
     private MinecraftServer server;
+    private StructureManager structureManager;
 
     @Override
     public void onInitialize() {
@@ -139,12 +148,14 @@ public class JJKMod implements ModInitializer {
         cursedStoneManager = new CursedStoneManager(playerRepository);
         questManager = new QuestManager();
         dungeonManager = new DungeonManager();
+        achievementManager = new AchievementManager();
         raidEventManager = new RaidEventManager();
+        nightEventManager = new NightEventManager();
+        weatherPassiveManager = new WeatherPassiveManager();
 
         ShikigamiEntityTypes.register();
         CursedSpiritEntityTypes.register();
         com.jjk.entity.JJKEntities.register();
-        CursedToolRegistry.registerItems();
         com.jjk.item.CursedCrystalItem.register();
         CostumeItemRegistry.register();
         com.jjk.item.JJKItems.register();
@@ -216,8 +227,14 @@ public class JJKMod implements ModInitializer {
         }, 20 * 60 * 60 * 24);
         tickScheduler.registerServerTask(BackupScheduler::tick, BackupScheduler.INTERVAL_TICKS);
         tickScheduler.registerServerTask(DiscordReporter::sendPeriodicReport, DiscordReporter.INTERVAL_TICKS);
+        tickScheduler.registerServerTask(com.jjk.world.spawn.CursedSpiritSpawnManager::tick, 100);
+        tickScheduler.registerServerTask(com.jjk.world.spawn.SorcererNPCSpawnManager::tick, 200);
+        tickScheduler.registerServerTask(nightEventManager::tick, 100);
+        tickScheduler.registerServerTask(weatherPassiveManager::tick, 200);
+        tickScheduler.registerServerTask(EasterEggManager::tickFingerRadar, 20);
 
         Packets.register();
+        EasterEggManager.register();
         PotionUseHandler.register();
         WelcomeHandler.register();
         LOGGER.info("[JJK] 초기화 완료. schemaVersion={}", Migrator.CURRENT_VERSION);
@@ -328,6 +345,10 @@ public class JJKMod implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(sv -> {
             if (domainBlockQueue != null) domainBlockQueue.recoverFromDB(sv);
         });
+        ServerLifecycleEvents.SERVER_STARTED.register(sv -> {
+            structureManager = new StructureManager(playerRepository.getConnection());
+            structureManager.initialize(sv);
+        });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
                 ceBossBarManager.onPlayerJoin(handler.player);
                 // 일일 접속 XP
@@ -370,6 +391,7 @@ public class JJKMod implements ModInitializer {
                         }
                     }
                 });
+                ChunkForceLoader.forceLoadForPlayer(handler.player);
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
                 playerRepository.evict(handler.player.getUuid());
@@ -489,6 +511,8 @@ public class JJKMod implements ModInitializer {
     public static CursedStoneManager getCursedStoneManager() { return INSTANCE.cursedStoneManager; }
     public static QuestManager getQuestManager() { return INSTANCE.questManager; }
     public static DungeonManager getDungeonManager() { return INSTANCE.dungeonManager; }
+    public static AchievementManager getAchievementManager() { return INSTANCE.achievementManager; }
+    public StructureManager getStructureManager() { return structureManager; }
 
     /** 테스트용: 최소 JJKMod 상태 초기화. 프로덕션 코드에서 호출 금지. */
     public static void initForTest(CursedStoneManager csm, PlayerRepository repo) {

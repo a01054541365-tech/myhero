@@ -69,3 +69,11 @@ local.properties
 *.tmp
 *.bak
 *.orig
+
+# Fabric mod template placeholder (empty directory, actual assets are under assets/jjk/)
+src/main/resources/assets/modid/
+
+# SQLite runtime databases (generated in run/world/jjk/ — already covered by run/)
+*.db
+*.db-shm
+*.db-wal

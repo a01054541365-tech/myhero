@@ -1,6 +1,7 @@
 package com.jjk.combat;
 
 import com.jjk.api.combat.IDamageSource;
+import com.jjk.item.cursedtool.CursedToolBonus;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import java.util.UUID;
@@ -13,6 +14,8 @@ public class DamageContext {
     // Stage 4b 주구 효과 출력 필드
     public float rangeMultiplier      = 1.0f;  // 스킬 범위 배율 (HitValidator에서 읽음)
     public int   extraBlackFlashBonus = 0;     // 주구 흑섬 확률 추가
+    // Stage 4b 주구 보너스 입력 — 외부에서 주입, calculatePure() 내에서 적용
+    public CursedToolBonus cursedToolBonus = null;
 
     public final ServerPlayerEntity attacker;
     public final LivingEntity target;

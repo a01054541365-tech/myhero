@@ -34,6 +34,7 @@ import com.jjk.client.hud.CEAuraRenderer;
 import com.jjk.client.hud.EntityHealthBarRenderer;
 import com.jjk.network.s2c.BlackFlashTimingS2CPacket;
 import com.jjk.network.s2c.CEAuraSyncS2CPacket;
+import com.jjk.network.s2c.FingerRadarPulseS2CPacket;
 import com.jjk.network.s2c.CostumeSyncS2CPacket;
 import com.jjk.network.s2c.EntityHealthSyncS2CPacket;
 import com.jjk.network.s2c.HudSyncS2CPacket;
@@ -305,8 +306,7 @@ public class JJKModClient implements ClientModInitializer {
         // CharacterSelectS2CPacket — 캐릭터 선택 화면 열기 (TASK-31)
         ClientPlayNetworking.registerGlobalReceiver(CharacterSelectS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() ->
-                        ctx.client().setScreen(
-                                new CharacterSelectScreen(pkt.availableCharacters()))));
+                        MinecraftClient.getInstance().setScreen(new CharacterSelectScreen())));
 
         // CharacterInfoS2CPacket — 클라이언트 상태 갱신 (TASK-26)
         ClientPlayNetworking.registerGlobalReceiver(CharacterInfoS2CPacket.ID, (pkt, ctx) ->
@@ -435,6 +435,22 @@ public class JJKModClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(VerdictS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() ->
                         JjkHudRenderer.INSTANCE.showVerdict(pkt.guilty(), pkt.sealedSkillId())));
+
+        // FingerRadarPulseS2CPacket — 스쿠나 레이더: 소스 위치에 파티클 + 액션바 알림
+        ClientPlayNetworking.registerGlobalReceiver(FingerRadarPulseS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    MinecraftClient mc = ctx.client();
+                    if (mc.world == null || mc.player == null) return;
+                    Vec3d pos = Vec3d.ofCenter(pkt.sourcePos());
+                    for (int i = 0; i < 12; i++) {
+                        mc.world.addParticle(ParticleTypes.SOUL,
+                                pos.x + (mc.world.random.nextDouble() - 0.5) * 2.0,
+                                pos.y + mc.world.random.nextDouble() * 2.0,
+                                pos.z + (mc.world.random.nextDouble() - 0.5) * 2.0,
+                                0.0, 0.05, 0.0);
+                    }
+                    mc.player.sendMessage(Text.literal("§4⚡ [저주] 스쿠나의 기운이 느껴진다…"), true);
+                }));
 
         // DomainDeployFailS2CPacket — 영역 전개 실패 사유 알림
         ClientPlayNetworking.registerGlobalReceiver(DomainDeployFailS2CPacket.ID, (pkt, ctx) ->

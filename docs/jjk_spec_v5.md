@@ -1217,7 +1217,7 @@ public final class FingerSystem {
 - 영역 진영별 2개 제한 체크
 - 등급 차이 2 이상 전투 시 XP × `config.xpMultiplierGradeDiff` 적용
 
-### 26-6. AnimationRegistry (animId 0~59)
+### 26-6. AnimationRegistry (animId 0~71)
 
 | animId | 애니메이션 | animId | 애니메이션 |
 |--------|-----------|--------|-----------|
@@ -1251,8 +1251,18 @@ public final class FingerSystem {
 | 27 | megumi_r | 57 | awakening_enter |
 | 28 | megumi_shift_r | 58 | zone_enter |
 | 29 | megumi_v | 59 | itadori_domain_startup |
+| 60 | nanami_dismantle | 66 | choso_shift_r |
+| 61 | nanami_overtime | 67 | todo_f |
+| 62 | nanami_ten_puncture | 68 | todo_shift_f |
+| 63 | higuruma_argument | 69 | todo_r |
+| 64 | higuruma_evidence | 70 | todo_shift_r |
+| 65 | inumaki_r_scatter | 71 | todo_v |
 
-animId 60~127: 신규 캐릭터 예약. keyId 범위: byte 0~127 (현재 0~10 사용).
+> animId 이름은 AnimationRegistry.java 실측 기준이다.
+> animId 60~65: 나나미·히구루마·이누마키 신규 스킬용. choso(60~63)·todo(64)가 전용 슬롯 마련 전까지 이 ID를 재사용 중(placeholder, FABLE_NOTES 미결 항목).
+> animId 66: choso_shift_r (혈도폭쇄, TASK-1 신설).
+> animId 67~71: todo 전용 예약 (TASK-2, Blockbench 완료 후 keyframe 연결).
+> animId 72~127: 미사용 예약. keyId 범위: byte 0~127.
 
 ### 26-7. S2C 패킷 전체 목록
 

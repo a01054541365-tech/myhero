@@ -12,11 +12,11 @@ import net.minecraft.util.Identifier;
 @Environment(EnvType.CLIENT)
 public final class CEBarRenderer {
 
-    // 색상 구간은 서버 보스바(CeBossBarManager.colorFor)와 동일: 70/40/20%
-    private static final int CE_COLOR_HIGH   = 0xFF4A90D9; // CE ≥ 70% — 파란색 (BLUE)
-    private static final int CE_COLOR_MID    = 0xFF55CC55; // CE 40–69% — 초록색 (GREEN)
-    private static final int CE_COLOR_WARN   = 0xFFE5C525; // CE 20–39% — 노란색 (YELLOW)
-    private static final int CE_COLOR_LOW    = 0xFFFF2222; // CE < 20% — 빨간색 (RED)
+    // CE 바는 보라색 (#9B59FF) 단일 계열. 경고/위기 구간만 노랑/빨강으로 강조.
+    private static final int CE_COLOR_HIGH   = 0xFF9B59FF; // CE ≥ 70% — 보라색
+    private static final int CE_COLOR_MID    = 0xFF9B59FF; // CE 40–69% — 보라색
+    private static final int CE_COLOR_WARN   = 0xFFE5C525; // CE 20–39% — 노란색
+    private static final int CE_COLOR_LOW    = 0xFFFF2222; // CE < 20% — 빨간색
     private static final int CE_COLOR_BG     = 0xFF333333;
     private static final int VIGNETTE_COLOR  = 0x66FF0000; // semi-transparent red
     private static final int VIGNETTE_SIZE   = 20;
@@ -24,10 +24,10 @@ public final class CEBarRenderer {
     private boolean ceWarningBlink = false;
     private int blinkTimer = 0;
 
-    // CE 바 위치: 화면 하단, 체력바 위 (체력바 -55, 쿨다운 슬롯 -84 사이)
+    // CE 바 위치: 바닐라 체력바(screenH - 49) 기준 12px 위 = screenH - 61
     private static final int BAR_WIDTH  = 182;
     private static final int BAR_HEIGHT = 5;
-    private static final int BAR_OFFSET_Y = 62; // screenH - 62
+    private static final int BAR_OFFSET_Y = 61; // screenH - 61
 
     public void tick() {
         blinkTimer++;

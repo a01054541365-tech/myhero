@@ -127,6 +127,9 @@ public class PlayerData {
     // === 히구루마 재판 대상 UUID (TASK-34) ===
     public String trialTargetUuid;  // null = 없음
 
+    // === 발전과제 달성 목록 ===
+    public Set<String> unlockedAchievements = new HashSet<>();
+
     // === 히구루마 단일-스킬 봉인 (Phase I-2) ===
     public Set<String> sealedSkills = new HashSet<>();
     public long sealExpireTick = 0L;
@@ -180,6 +183,13 @@ public class PlayerData {
 
     // === 튜토리얼 완료 여부 (G-5-2) ===
     public boolean hasCompletedTutorial      = false;
+
+    // === 캐릭터 재선택 누적 횟수 ===
+    public int reselectCount = 0;
+
+    // === 주구 장착 ID + 공명 스택 ===
+    public String equippedToolId = null;
+    public Map<String, Integer> toolResonanceStacks = new HashMap<>();
 
     // === 비술사(천여주박) 신체능력 강화 ===
     public long  nsBurstExpireTick      = 0L;
@@ -276,6 +286,7 @@ public class PlayerData {
         copy.blackFlashCooldownUntil     = this.blackFlashCooldownUntil;
         copy.receivedGuideBook           = this.receivedGuideBook;
         copy.trialTargetUuid             = this.trialTargetUuid;
+        copy.unlockedAchievements        = new HashSet<>(this.unlockedAchievements);
         copy.sealedSkills                = new HashSet<>(this.sealedSkills);
         copy.sealExpireTick              = this.sealExpireTick;
         copy.lastUsedSkillId             = this.lastUsedSkillId;
@@ -302,6 +313,9 @@ public class PlayerData {
         copy.pendingBindingVowStartTick  = this.pendingBindingVowStartTick;
         copy.vowSkillUsedThisVow         = this.vowSkillUsedThisVow;
         copy.hasCompletedTutorial        = this.hasCompletedTutorial;
+        copy.reselectCount               = this.reselectCount;
+        copy.equippedToolId              = this.equippedToolId;
+        copy.toolResonanceStacks         = new HashMap<>(this.toolResonanceStacks);
         copy.nsBurstExpireTick           = this.nsBurstExpireTick;
         copy.attackBoostMultiplier       = this.attackBoostMultiplier;
         copy.defenseBoostMultiplier      = this.defenseBoostMultiplier;

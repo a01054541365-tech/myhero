@@ -8,6 +8,8 @@ import com.jjk.combat.DamageContext;
 import com.jjk.combat.TickDamageCap;
 import com.jjk.data.Grade;
 import com.jjk.data.PlayerData;
+import com.jjk.item.cursedtool.CursedToolBonus;
+import com.jjk.item.cursedtool.CursedToolEffect;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -272,6 +274,81 @@ class DamageCalculatorTest {
         assertEquals(42f * 0.75f, results[2], 0.001f, "shrine 3타: decay=0.75 → 31.5");
         assertTrue(results[0] > results[1] && results[1] > results[2],
                 "shrine 다단히트 데미지 감소 확인");
+    }
+
+    // ─── 주구 보너스 테스트 ──────────────────────────────────────────────────
+
+    @Test
+    void cursedToolBonus_damageMultiplierApplied() {
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 0;
+        attacker.grade = Grade.GRADE_4;
+
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 0;
+
+        JjkConfig config = new JjkConfig();
+        float base = 100f;
+
+        // 보너스 없는 기준 데미지 (grade4, attack0, pve → totalMult=1.0 → 100f)
+        DamageContext ctxBase = DamageContext.builder(null, null, IDamageSource.NORMAL_TECHNIQUE, base).build();
+        float baseResult = calculator.calculatePure(ctxBase, attacker, target, base, config, 0L);
+
+        // 주구 ×2.0 적용 → 100f × 2.0 = 200f
+        CursedToolEffect effect = CursedToolEffect.builder().damageMultiplier(2.0f).build();
+        DamageContext ctxTool = DamageContext.builder(null, null, IDamageSource.NORMAL_TECHNIQUE, base).build();
+        ctxTool.cursedToolBonus = new CursedToolBonus(effect, "playful_cloud");
+        float toolResult = calculator.calculatePure(ctxTool, attacker, target, base, config, 0L);
+
+        assertEquals(baseResult * 2.0f, toolResult, 0.001f, "주구 damageMultiplier ×2.0 적용 확인");
+    }
+
+    @Test
+    void cursedToolBonus_nullifyTechnique_bypassesDefense() {
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 0;
+        attacker.grade = Grade.GRADE_4;
+
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 500; // 매우 높은 방어력
+
+        JjkConfig config = new JjkConfig();
+        float base = 50f;
+
+        // nullifyTechnique → effectiveDefense=0 → damage=50
+        CursedToolEffect effect = CursedToolEffect.builder().nullifyTechnique().build();
+        DamageContext ctx = DamageContext.builder(null, null, IDamageSource.NORMAL_TECHNIQUE, base).build();
+        ctx.cursedToolBonus = new CursedToolBonus(effect, "chokoku");
+        float result = calculator.calculatePure(ctx, attacker, target, base, config, 0L);
+
+        assertEquals(50f, result, 0.001f, "nullifyTechnique → 방어력 500 무시, 50 데미지");
+    }
+
+    @Test
+    void cursedToolBonus_resonanceCharges_triggersOnFourthHit() {
+        PlayerData attacker = PlayerData.createDefault(UUID.randomUUID());
+        attacker.attackStat = 0;
+        attacker.grade = Grade.GRADE_4;
+
+        PlayerData target = PlayerData.createDefault(UUID.randomUUID());
+        target.defenseStat = 0;
+
+        JjkConfig config = new JjkConfig();
+        float base = 100f;
+        CursedToolEffect effect = CursedToolEffect.builder().resonanceCharges(3).build();
+
+        float[] results = new float[4];
+        for (int i = 0; i < 4; i++) {
+            DamageContext ctx = DamageContext.builder(null, null, IDamageSource.NORMAL_TECHNIQUE, base).build();
+            ctx.cursedToolBonus = new CursedToolBonus(effect, "dragon_bone");
+            results[i] = calculator.calculatePure(ctx, attacker, target, base, config, 0L);
+        }
+
+        // 1~3타: 100f, 4타: 100f × 3.0 = 300f
+        assertEquals(100f, results[0], 0.001f, "드래곤본 1타: 일반 데미지");
+        assertEquals(100f, results[1], 0.001f, "드래곤본 2타: 일반 데미지");
+        assertEquals(100f, results[2], 0.001f, "드래곤본 3타: 일반 데미지");
+        assertEquals(300f, results[3], 0.001f, "드래곤본 4타: 공명 ×3.0 적용");
     }
 
     @Test

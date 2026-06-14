@@ -17,6 +17,9 @@ import java.util.List;
 
 public final class CursedSpiritSpawnManager {
 
+    /** NightEventManager가 야간 시 1.5f 로 설정. 기본 1.0f. */
+    public static float nightMultiplier = 1.0f;
+
     private CursedSpiritSpawnManager() {}
 
     // TickScheduler.register(CursedSpiritSpawnManager::tick, 200) 로 등록

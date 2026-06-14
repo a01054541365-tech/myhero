@@ -79,6 +79,12 @@ public final class AnimationRegistry {
         m.put(63, "higuruma_argument");
         m.put(64, "higuruma_evidence");
         m.put(65, "inumaki_r_scatter");
+        m.put(66, "choso_shift_r");
+        m.put(67, "todo_f");
+        m.put(68, "todo_shift_f");
+        m.put(69, "todo_r");
+        m.put(70, "todo_shift_r");
+        m.put(71, "todo_v");
         return m;
     }
 

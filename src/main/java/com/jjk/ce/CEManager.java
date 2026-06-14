@@ -7,6 +7,9 @@ import net.minecraft.server.network.ServerPlayerEntity;
 
 public class CEManager {
 
+    /** 날씨 패시브 보너스 (WeatherPassiveManager가 설정). §LOCK 수치 외부 보너스. */
+    public static float weatherRegenBonus = 0.0f;
+
     private final JjkConfig config;
     private final CEPool pool = new CEPool();
 
@@ -20,7 +23,13 @@ public class CEManager {
 
         long currentTick = player.getWorld().getTime();
         CERegenRule rule = pool.getRule(data.characterId);
-        float rate = rule.regenPerTick(data, currentTick, config);
+        float rate = rule.regenPerTick(data, currentTick, config) + weatherRegenBonus;
+
+        // CE 재생 디버프 체크 (SmallpoxDeityEntity 등 — -50% 재생)
+        Long ceDebuffUntil = data.cooldowns.get("ce_regen_debuff_until");
+        if (ceDebuffUntil != null && currentTick < ceDebuffUntil) {
+            rate *= 0.5f;
+        }
 
         float before = data.ceCurrent;
         data.ceCurrent = Math.min(data.ceCurrent + rate, data.ceMax);
@@ -88,5 +97,13 @@ public class CEManager {
 
     public void refundCE(PlayerData data, float amount) {
         data.ceCurrent = Math.min(data.ceCurrent + amount, data.ceMax);
+    }
+
+    /** SmallpoxDeityEntity 전용: CE 재생 -50% 디버프 (durationTicks 동안 유지). */
+    public void applyCeRegenDebuff(ServerPlayerEntity target, int durationTicks) {
+        PlayerData data = JJKMod.getPlayerRepository().load(target.getUuid());
+        long expiry = target.getWorld().getTime() + durationTicks;
+        data.cooldowns.merge("ce_regen_debuff_until", expiry, Math::max);
+        JJKMod.getPlayerRepository().save(data);
     }
 }

@@ -80,6 +80,11 @@ public class GradeManager {
                                ServerPlayerEntity player) {
         data.grade = com.jjk.data.Grade.fromKey(to.label);
 
+        if (from == Grade.GRADE_4 && to == Grade.GRADE_3 && player != null
+                && JJKMod.getAchievementManager() != null) {
+            JJKMod.getAchievementManager().unlock(player, "first_grade_up");
+        }
+
         // 특급 달성 시 ceControl +0.20 (P3-2)
         if (to == Grade.SPECIAL) {
             data.ceControl = Math.min(data.ceControl + 0.20f, 2.0f);

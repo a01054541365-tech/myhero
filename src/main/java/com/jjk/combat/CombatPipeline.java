@@ -425,6 +425,9 @@ public class CombatPipeline {
                 if (ctx.isBlackFlash) {
                     gm.onBlackFlash(atkXpData, attackerPlayer);
                     AdvancementTriggerManager.onBlackFlash(attackerPlayer, ctx.blackFlashPerfect);
+                    if (JJKMod.getZoneStateManager() != null) {
+                        JJKMod.getZoneStateManager().onBlackFlash(attackerPlayer, xpTick);
+                    }
                 }
                 if (ctx.target.getHealth() <= 0f) {
                     gm.onKill(atkXpData, targetData, attackerPlayer, xpTick);
@@ -439,6 +442,9 @@ public class CombatPipeline {
                                 JJKMod.getCursedStoneManager().addBounty(atkXpData, 50L);
                             }
                         } else if (ctx.target instanceof CursedSpiritEntity spirit) {
+                            if (JJKMod.getAchievementManager() != null) {
+                                JJKMod.getAchievementManager().unlock(attackerPlayer, "first_kill");
+                            }
                             stonesReward = switch (spirit.getGrade()) {
                                 case GRADE_4      -> 40L;
                                 case GRADE_3      -> 60L;

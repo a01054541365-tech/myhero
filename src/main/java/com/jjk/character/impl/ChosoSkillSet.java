@@ -19,12 +19,17 @@ import net.minecraft.util.math.Vec3d;
 import java.util.List;
 
 // §6 쵸소 스킬셋 — 혈도조술 캐릭터
-// key 0=천혈, 1=적린약동, 2=사혈, 3=NOT_IMPLEMENTED, 4=혈도이동
+// key 0=천혈, 1=적린약동, 2=사혈, 3=혈도폭쇄, 4=혈도이동
 public class ChosoSkillSet implements ISkillSet {
 
     // 수치는 techniques.json 단일 기준 (2026-06-11 데이터 주도 전환)
     private static final String CHAR_ID = "choso";
-    private static final int ANIM_0 = 60, ANIM_1 = 61, ANIM_2 = 62, ANIM_4 = 63;
+    private static final int ANIM_0 = 60, ANIM_1 = 61, ANIM_2 = 62, ANIM_3 = 66, ANIM_4 = 63;
+
+    // 혈도폭쇄(key 3): 전방 원뿔(폭 45°, 깊이 4블록) + 명중 시 SLOW 40틱(2초)
+    private static final double HYEOLDO_CONE_DEPTH = 4.0;
+    private static final float  HYEOLDO_CONE_ANGLE = 45f;
+    private static final long   SLOW_DURATION_TICKS = 40L;
 
     private static float bd(int keyId) { return com.jjk.combat.TechniqueLoader.getBaseDamage(CHAR_ID, keyId); }
     private static int   ce(int keyId) { return (int) com.jjk.combat.TechniqueLoader.getCeCost(CHAR_ID, keyId); }
@@ -39,6 +44,8 @@ public class ChosoSkillSet implements ISkillSet {
             case 0 -> useCheonHyeol(player);
             case 1 -> useJeoklInYakDong(player);
             case 2 -> useSaHyeol(player);
+            case 3 -> useHyeoldoPokswae(
+                    JJKMod.getPlayerRepository().load(player.getUuid()), player, player.getWorld().getTime());
             case 4 -> useHyeoldoMove(player);
             default -> SkillResult.NOT_IMPLEMENTED;
         };
@@ -56,21 +63,21 @@ public class ChosoSkillSet implements ISkillSet {
     @Override
     public int getCooldownTicks(int keyId) {
         return switch (keyId) {
-            case 0 -> cd(0); case 1 -> cd(1); case 2 -> cd(2); case 4 -> cd(4); default -> 0;
+            case 0 -> cd(0); case 1 -> cd(1); case 2 -> cd(2); case 3 -> cd(3); case 4 -> cd(4); default -> 0;
         };
     }
 
     @Override
     public int getCeCost(int keyId) {
         return switch (keyId) {
-            case 0 -> ce(0); case 1 -> ce(1); case 2 -> ce(2); case 4 -> ce(4); default -> 0;
+            case 0 -> ce(0); case 1 -> ce(1); case 2 -> ce(2); case 3 -> ce(3); case 4 -> ce(4); default -> 0;
         };
     }
 
     @Override
     public String getSkillName(int keyId) {
         return switch (keyId) {
-            case 0 -> "천혈"; case 1 -> "적린약동"; case 2 -> "사혈"; case 4 -> "혈도_이동";
+            case 0 -> "천혈"; case 1 -> "적린약동"; case 2 -> "사혈"; case 3 -> "혈도폭쇄"; case 4 -> "혈도_이동";
             default -> "unknown";
         };
     }
@@ -164,6 +171,44 @@ public class ChosoSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
+    // ─── key 3: 혈도폭쇄 — 전방 원뿔(45°, 4블록) 피해 + 명중 시 SLOW 40틱 ───────
+    // data.ceCurrent 직접 경로 (player=null 허용, 테스트 가능). 수치는 techniques.json 로드.
+    private SkillResult useHyeoldoPokswae(PlayerData data, ServerPlayerEntity player, long tick) {
+        // 2단계: 쿨타임 검증 (decisions §3-1)
+        if (!CooldownManager.isReady(data, cdKey(3), tick)) return SkillResult.ON_COOLDOWN;
+        // CE 검증 — 부족 시 차감 없이 즉시 반환
+        if (data.ceCurrent < ce(3)) return SkillResult.CE_INSUFFICIENT;
+
+        // 발동 확정: CE 소모 + 쿨타임 설정 (범위 내 대상 없어도 발동 성공으로 처리)
+        data.ceCurrent -= ce(3);
+        CooldownManager.set(data, cdKey(3), tick, cd(3));
+
+        if (player != null) {
+            // 전방 원뿔: 같은 진영 제외는 HitValidator.getNearbyArc(TeamManager) 내부에서 처리
+            List<LivingEntity> targets =
+                    HitValidator.getNearbyArc(player, HYEOLDO_CONE_DEPTH, HYEOLDO_CONE_ANGLE);
+            for (LivingEntity target : targets) {
+                DamageContext ctx = DamageContext.builder(player, target,
+                                IDamageSource.NORMAL_TECHNIQUE, bd(3))
+                        .keyId(3)
+                        .skillName("혈도폭쇄")
+                        .build();
+                JJKMod.getCombatPipeline().process(ctx);
+                // 명중 시 SLOW 40틱 — PlayerData 보유 대상(플레이어)에만 부여
+                if (target instanceof ServerPlayerEntity tp) {
+                    applySlow(JJKMod.getPlayerRepository().load(tp.getUuid()), tick);
+                }
+            }
+            broadcastAnim(player, ANIM_3);
+        }
+        return SkillResult.SUCCESS;
+    }
+
+    // 명중 대상에게 SLOW 상태이상 부여 — cooldowns "status_slow" 만료 틱 = tick + 40
+    public static void applySlow(PlayerData target, long tick) {
+        target.cooldowns.put("status_slow", tick + SLOW_DURATION_TICKS);
+    }
+
     // ─── key 4: 혈도 이동 — 전방 돌진 + 혈액 자원 +1 ──────────────────────────
     private SkillResult useHyeoldoMove(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
@@ -199,7 +244,7 @@ public class ChosoSkillSet implements ISkillSet {
         return player == null ? SkillResult.SUCCESS : useSaHyeol(player);
     }
     @Override public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) {
-        return SkillResult.NOT_IMPLEMENTED;
+        return useHyeoldoPokswae(data, player, tick);
     }
     @Override public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick) {
         if (player == null) {

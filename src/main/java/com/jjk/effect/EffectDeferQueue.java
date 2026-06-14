@@ -21,7 +21,8 @@ public class EffectDeferQueue {
         long dueTick,
         BlockPos targetPos,
         float damage,
-        UUID attackerUuid
+        UUID attackerUuid,  // null = 몹 발생 DoT (DamageCalculator 미적용, 직접 데미지)
+        double radius
     ) {}
 
     // dueTick 오름차순. 서버 메인 스레드에서만 접근하므로 synchronized 불필요.
@@ -40,9 +41,16 @@ public class EffectDeferQueue {
         return particleRate;
     }
 
+    private static final double DEFAULT_RADIUS = 3.0;
+
     public void schedule(BlockPos pos, float damage,
             int delayTicks, UUID attackerUuid, long currentTick) {
-        queue.add(new DeferredEffect(currentTick + delayTicks, pos, damage, attackerUuid));
+        queue.add(new DeferredEffect(currentTick + delayTicks, pos, damage, attackerUuid, DEFAULT_RADIUS));
+    }
+
+    public void schedule(BlockPos pos, float damage,
+            int delayTicks, UUID attackerUuid, long currentTick, double radius) {
+        queue.add(new DeferredEffect(currentTick + delayTicks, pos, damage, attackerUuid, radius));
     }
 
     public void tickWorld(long currentTick) {
@@ -54,20 +62,28 @@ public class EffectDeferQueue {
     private void executeEffect(DeferredEffect effect, long currentTick) {
         MinecraftServer server = JJKMod.getServer();
         if (server == null) return;
-        ServerPlayerEntity attacker = server.getPlayerManager().getPlayer(effect.attackerUuid());
-        if (attacker == null) return;
-        ServerWorld world = attacker.getServerWorld();
-        Box box = new Box(effect.targetPos()).expand(3.0);
+        // null attackerUuid = 몹 발생 DoT
+        ServerPlayerEntity attacker = effect.attackerUuid() != null
+                ? server.getPlayerManager().getPlayer(effect.attackerUuid())
+                : null;
+        if (effect.attackerUuid() != null && attacker == null) return; // 플레이어 로그아웃
+        ServerWorld world = attacker != null ? attacker.getServerWorld() : server.getOverworld();
+        Box box = new Box(effect.targetPos()).expand(effect.radius());
         List<LivingEntity> targets = world.getEntitiesByClass(
             LivingEntity.class, box,
-            e -> e.isAlive() && !e.getUuid().equals(effect.attackerUuid()));
+            e -> e.isAlive() && (attacker == null || !e.getUuid().equals(attacker.getUuid())));
         for (LivingEntity target : targets) {
-            DamageContext ctx = DamageContext.builder(
-                attacker, target,
-                IDamageSource.NORMAL_TECHNIQUE, effect.damage())
-                .skillName("deferred")
-                .build();
-            JJKMod.getCombatPipeline().process(ctx);
+            if (attacker != null) {
+                DamageContext ctx = DamageContext.builder(
+                    attacker, target,
+                    IDamageSource.NORMAL_TECHNIQUE, effect.damage())
+                    .skillName("deferred")
+                    .build();
+                JJKMod.getCombatPipeline().process(ctx);
+            } else {
+                // 몹 발생 DoT: 직접 데미지 (공격자가 ServerPlayerEntity가 아님)
+                target.damage(world.getDamageSources().generic(), effect.damage());
+            }
         }
     }
 }

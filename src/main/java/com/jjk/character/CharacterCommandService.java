@@ -123,6 +123,9 @@ public class CharacterCommandService {
         }
 
         JJKMod.getPlayerRepository().saveImmediate(data);
+        if (!isReselect && JJKMod.getInstance() != null && JJKMod.getAchievementManager() != null) {
+            JJKMod.getAchievementManager().unlock(player, "first_character");
+        }
         return SelectResult.OK;
     }
 

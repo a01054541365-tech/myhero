@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class Migrator {
 
-    public static final int CURRENT_VERSION = 23;
+    public static final int CURRENT_VERSION = 26;
 
     private static final String DDL_PLAYER_DATA = """
             CREATE TABLE IF NOT EXISTS player_data (
@@ -90,7 +90,11 @@ public class Migrator {
                 pending_binding_vow_skill_id TEXT,
                 pending_binding_vow_start_tick INTEGER NOT NULL DEFAULT 0,
                 vow_skill_used_this_vow     INTEGER NOT NULL DEFAULT 0,
-                has_completed_tutorial      INTEGER NOT NULL DEFAULT 0
+                has_completed_tutorial      INTEGER NOT NULL DEFAULT 0,
+                reselect_count              INTEGER NOT NULL DEFAULT 0,
+                equipped_tool_id            TEXT,
+                tool_resonance_stacks       TEXT    NOT NULL DEFAULT '{}',
+                unlocked_achievements       TEXT    NOT NULL DEFAULT '[]'
             )""";
 
     private static final String DDL_AUDIT_LOG = """
@@ -304,6 +308,25 @@ public class Migrator {
                 // 흑섬 연속 발동 쿨다운 (구현 C-2)
                 try (Statement st = conn.createStatement()) {
                     try { st.execute("ALTER TABLE player_data ADD COLUMN black_flash_cooldown_until INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 24 -> {
+                // 캐릭터 재선택 누적 횟수
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN reselect_count INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
+                }
+            }
+            case 25 -> {
+                // 주구 장착 ID + 드래곤본 공명 스택
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN equipped_tool_id TEXT"); } catch (SQLException ignored) {}
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN tool_resonance_stacks TEXT NOT NULL DEFAULT '{}'"); } catch (SQLException ignored) {}
+                }
+            }
+            case 26 -> {
+                // 발전과제 달성 목록
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN unlocked_achievements TEXT NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
                 }
             }
         }

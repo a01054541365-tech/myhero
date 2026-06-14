@@ -41,6 +41,9 @@ public abstract class NpcEntity extends MobEntity {
 
     @Override
     public boolean damage(net.minecraft.entity.damage.DamageSource source, float amount) {
+        if (source.getAttacker() instanceof ServerPlayerEntity attacker) {
+            com.jjk.event.EasterEggManager.onNpcAttacked(npcId, attacker);
+        }
         return false;
     }
 

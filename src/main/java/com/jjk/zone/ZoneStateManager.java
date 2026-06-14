@@ -8,8 +8,10 @@ import com.jjk.network.s2c.ZoneExitS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,6 +21,7 @@ public class ZoneStateManager {
 
     private final Set<UUID> playersInZone = new HashSet<>();
     private final Map<UUID, String> activeDomainIds = new HashMap<>();
+    private final Map<UUID, List<Long>> recentBlackFlashTicks = new HashMap<>();
 
     public void tick(ServerPlayerEntity player) {
         UUID uuid = player.getUuid();
@@ -53,6 +56,20 @@ public class ZoneStateManager {
         data.zoneEntryTick = currentTick;
         JJKMod.getPlayerRepository().save(data);
         ServerPlayNetworking.send(player, new ZoneEnterS2CPacket("black_flash_zone"));
+
+        if (JJKMod.getAchievementManager() != null) {
+            JJKMod.getAchievementManager().unlock(player, "zone_entry");
+            checkTripleBlackFlash(player, currentTick);
+        }
+    }
+
+    private void checkTripleBlackFlash(ServerPlayerEntity player, long currentTick) {
+        List<Long> ticks = recentBlackFlashTicks.computeIfAbsent(player.getUuid(), k -> new ArrayList<>());
+        ticks.add(currentTick);
+        ticks.removeIf(t -> currentTick - t > 200L);
+        if (ticks.size() >= 3) {
+            JJKMod.getAchievementManager().unlock(player, "triple_black_flash");
+        }
     }
 
     // ─── Pure-data methods (CombatPipeline.processData 및 death reset용) ──────

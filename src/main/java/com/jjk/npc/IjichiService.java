@@ -2,14 +2,18 @@ package com.jjk.npc;
 
 import com.jjk.JJKMod;
 import com.jjk.api.skill.SkillResult;
+import com.jjk.character.CharacterRegistry;
 import com.jjk.data.PlayerData;
 import com.jjk.economy.CursedStoneManager;
 import com.jjk.network.c2s.NpcServiceC2SPacket;
+import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.jjk.network.s2c.NpcOpenGuiS2CPacket;
 import com.jjk.quest.QuestDef;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.Vec3d;
+
+import java.util.ArrayList;
 
 public final class IjichiService {
 
@@ -26,6 +30,7 @@ public final class IjichiService {
             case "get_quest"        -> getQuest(data, player);
             case "get_weekly_quest" -> getWeeklyQuest(data, player);
             case "teleport"         -> teleport(packet.param(), data, player, csm);
+            case "reselect"         -> reselect(data, player);
             default                 -> SkillResult.FAIL;
         };
     }
@@ -93,6 +98,31 @@ public final class IjichiService {
             player.requestTeleport(pos.x, pos.y, pos.z);
         }
         return SkillResult.SUCCESS;
+    }
+
+    private static SkillResult reselect(PlayerData data, ServerPlayerEntity player) {
+        if (!JJKMod.getConfig().allowCharacterReselect) {
+            return SkillResult.FAIL;
+        }
+        float ceCost = calculateReselectCost(data);
+        if (ceCost > 0f && !JJKMod.getCEManager().consume(player, ceCost)) {
+            return SkillResult.CE_INSUFFICIENT;
+        }
+        data.reselectCount++;
+        JJKMod.getPlayerRepository().save(data);
+        if (player != null) {
+            ServerPlayNetworking.send(player,
+                new CharacterSelectS2CPacket(new ArrayList<>(CharacterRegistry.ids())));
+        }
+        return SkillResult.SUCCESS;
+    }
+
+    private static float calculateReselectCost(PlayerData data) {
+        return switch (data.reselectCount) {
+            case 0 -> 0f;
+            case 1 -> data.ceMax * 0.5f;
+            default -> data.ceMax;
+        };
     }
 
     private IjichiService() {}

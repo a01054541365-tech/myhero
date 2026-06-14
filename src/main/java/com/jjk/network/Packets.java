@@ -3,11 +3,13 @@ package com.jjk.network;
 import com.jjk.network.c2s.BlackFlashInputC2SPacket;
 import com.jjk.network.c2s.CaptureAttemptC2SPacket;
 import com.jjk.network.c2s.ChantingC2SPacket;
+import com.jjk.network.c2s.CharacterReselectRequestC2SPacket;
 import com.jjk.network.c2s.CharacterSelectC2SPacket;
 import com.jjk.network.c2s.NpcServiceC2SPacket;
 import com.jjk.network.c2s.ShieldToggleC2SPacket;
 import com.jjk.network.c2s.SkillUseC2SPacket;
 import com.jjk.network.s2c.*;
+import com.jjk.network.s2c.AchievementUnlockS2CPacket;
 import com.jjk.network.s2c.CEAuraSyncS2CPacket;
 import com.jjk.network.s2c.BossBarUpdateS2CPacket;
 import com.jjk.network.s2c.OpenCharacterSelectS2CPacket;
@@ -31,6 +33,7 @@ public class Packets {
         PayloadTypeRegistry.playC2S().register(NpcServiceC2SPacket.ID, NpcServiceC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(CaptureAttemptC2SPacket.ID, CaptureAttemptC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(BlackFlashInputC2SPacket.ID, BlackFlashInputC2SPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(CharacterReselectRequestC2SPacket.ID, CharacterReselectRequestC2SPacket.CODEC);
 
         PayloadTypeRegistry.playS2C().register(SkillResultS2CPacket.ID, SkillResultS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(NpcOpenGuiS2CPacket.ID, NpcOpenGuiS2CPacket.CODEC);
@@ -60,6 +63,8 @@ public class Packets {
         PayloadTypeRegistry.playS2C().register(CEAuraSyncS2CPacket.ID, CEAuraSyncS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(SealedSkillSyncS2CPacket.ID, SealedSkillSyncS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(VerdictS2CPacket.ID, VerdictS2CPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(AchievementUnlockS2CPacket.ID, AchievementUnlockS2CPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(FingerRadarPulseS2CPacket.ID, FingerRadarPulseS2CPacket.CODEC);
 
         ServerPlayNetworking.registerGlobalReceiver(SkillUseC2SPacket.ID, SkillUseC2SPacket::handle);
         ServerPlayNetworking.registerGlobalReceiver(CharacterSelectC2SPacket.ID, CharacterSelectC2SPacket::handle);
@@ -68,5 +73,6 @@ public class Packets {
         ServerPlayNetworking.registerGlobalReceiver(NpcServiceC2SPacket.ID, NpcServiceC2SPacket::handle);
         ServerPlayNetworking.registerGlobalReceiver(CaptureAttemptC2SPacket.ID, CaptureAttemptC2SPacket::handle);
         ServerPlayNetworking.registerGlobalReceiver(BlackFlashInputC2SPacket.ID, BlackFlashInputC2SPacket::handle);
+        ServerPlayNetworking.registerGlobalReceiver(CharacterReselectRequestC2SPacket.ID, CharacterReselectRequestC2SPacket::handle);
     }
 }

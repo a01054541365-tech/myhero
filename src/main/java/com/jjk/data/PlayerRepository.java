@@ -304,6 +304,10 @@ public class PlayerRepository {
         } catch (SQLException ignored) {}
         try { d.quarantined = rs.getInt("quarantined") != 0; } catch (SQLException ignored) {}
         try { d.blackFlashCooldownUntil = rs.getLong("black_flash_cooldown_until"); } catch (SQLException ignored) {}
+        try {
+            String ua = rs.getString("unlocked_achievements");
+            d.unlockedAchievements = ua != null ? new HashSet<>(GSON.fromJson(ua, LIST_TYPE)) : new HashSet<>();
+        } catch (SQLException ignored) {}
         if (d.unlockedSkills == null)        d.unlockedSkills = new ArrayList<>();
         if (d.cooldowns == null)             d.cooldowns = new HashMap<>();
         if (d.deadShikigamiIds == null)      d.deadShikigamiIds = new ArrayList<>();
@@ -311,6 +315,7 @@ public class PlayerRepository {
         if (d.completedDailyQuests == null)  d.completedDailyQuests = new HashSet<>();
         if (d.completedWeeklyQuests == null) d.completedWeeklyQuests = new HashSet<>();
         if (d.sealedSkills == null)          d.sealedSkills = new HashSet<>();
+        if (d.unlockedAchievements == null)  d.unlockedAchievements = new HashSet<>();
         return d;
     }
 
@@ -396,6 +401,7 @@ public class PlayerRepository {
             ps.setString(78, GSON.toJson(d.antiAbuseFlags != null ? d.antiAbuseFlags : List.of()));
             ps.setInt(79,    d.quarantined ? 1 : 0);
             ps.setLong(80,   d.blackFlashCooldownUntil);
+            ps.setString(81, GSON.toJson(d.unlockedAchievements != null ? d.unlockedAchievements : Set.of()));
             ps.executeUpdate();
         }
     }
@@ -525,7 +531,8 @@ public class PlayerRepository {
                 evidence_amplify_active,
                 anti_abuse_flags,
                 quarantined,
-                black_flash_cooldown_until
+                black_flash_cooldown_until,
+                unlocked_achievements
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
                 ?,?, ?,?,?,?,
@@ -543,6 +550,7 @@ public class PlayerRepository {
                 ?,?,?,?,?,
                 ?,?,?,?,
                 ?,?,
+                ?,
                 ?
             )
             ON CONFLICT(uuid) DO UPDATE SET
@@ -624,6 +632,7 @@ public class PlayerRepository {
                 evidence_amplify_active        = excluded.evidence_amplify_active,
                 anti_abuse_flags               = excluded.anti_abuse_flags,
                 quarantined                    = excluded.quarantined,
-                black_flash_cooldown_until     = excluded.black_flash_cooldown_until
+                black_flash_cooldown_until     = excluded.black_flash_cooldown_until,
+                unlocked_achievements          = excluded.unlocked_achievements
             """;
 }

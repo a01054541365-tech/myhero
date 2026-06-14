@@ -5,14 +5,17 @@ import com.jjk.JjkConfig;
 import com.jjk.data.PlayerData;
 import com.jjk.grade.GradeManager;
 import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.Identifier;
 
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * @deprecated TASK-04에서 com.jjk.item.cursedtool.CursedToolRegistry로 대체됨.
+ * 아이템 등록(registerItems)은 제거됨. getEffect/getActiveEffect/static 필드는
+ * 기존 참조 코드 유지를 위해 남겨둠. 참조 제거 확인 후 삭제 가능.
+ */
+@Deprecated
 public final class CursedToolRegistry {
 
     public static CursedToolItem CURSED_DAGGER;
@@ -59,27 +62,6 @@ public final class CursedToolRegistry {
             cfg.cursedToolBlackFlashBonus_soul(),
             0, true,
             GradeManager.Grade.SPECIAL.rank));
-    }
-
-    /** JJKMod.onInitialize()에서 호출 — Registries에 아이템 등록 */
-    public static void registerItems() {
-        CURSED_DAGGER    = registerItem("cursed_dagger");
-        THOUSAND_SPEAR   = registerItem("thousand_spear");
-        PLAYFUL_CLOUD    = registerItem("playful_cloud");
-        INVERTED_SPEAR   = registerItem("inverted_spear");
-        SPLIT_SOUL_BLADE = registerItem("split_soul_blade");
-        // config 재적용 (런타임 config 반영)
-        if (JJKMod.getInstance() != null) {
-            EFFECTS.clear();
-            initEffects(JJKMod.getConfig());
-        }
-    }
-
-    private static CursedToolItem registerItem(String id) {
-        return Registry.register(
-            Registries.ITEM,
-            Identifier.of("jjk", id),
-            new CursedToolItem(id, new net.minecraft.item.Item.Settings().maxCount(1)));
     }
 
     public static CursedToolEffect getEffect(String toolId) {
