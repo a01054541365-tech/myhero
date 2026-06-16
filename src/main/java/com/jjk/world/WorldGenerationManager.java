@@ -126,6 +126,9 @@ public final class WorldGenerationManager {
 
             if (isTooClose(x, z, placed, minDist)) continue;
 
+            int spawnMin = minSpawnDist(type);
+            if (spawnMin > 0 && (long) x * x + (long) z * z < (long) spawnMin * spawnMin) continue;
+
             // 청크 강제 로드 후 지면 높이 조회
             world.getChunk(x >> 4, z >> 4, ChunkStatus.FULL, true);
             int y = "shibuya_underground".equals(type)
@@ -144,5 +147,17 @@ public final class WorldGenerationManager {
             if (dx * dx + dz * dz < minDistSq) return true;
         }
         return false;
+    }
+
+    // 건물 타입별 스폰 지점(0,0)으로부터의 최소 거리
+    private static int minSpawnDist(String type) {
+        return switch (type) {
+            case "jujutsu_high_tokyo", "jujutsu_high_kyoto" -> 0;   // 스폰 인근 유지
+            case "training_dojo"    -> 150;
+            case "nanami_office"    -> 100;
+            case "black_market", "shibuya_underground" -> 200;
+            case "shibuya_city"     -> 300;
+            default                 -> 120;
+        };
     }
 }

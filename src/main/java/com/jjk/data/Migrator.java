@@ -7,7 +7,7 @@ import java.sql.Statement;
 
 public class Migrator {
 
-    public static final int CURRENT_VERSION = 26;
+    public static final int CURRENT_VERSION = 28;
 
     private static final String DDL_PLAYER_DATA = """
             CREATE TABLE IF NOT EXISTS player_data (
@@ -94,7 +94,9 @@ public class Migrator {
                 reselect_count              INTEGER NOT NULL DEFAULT 0,
                 equipped_tool_id            TEXT,
                 tool_resonance_stacks       TEXT    NOT NULL DEFAULT '{}',
-                unlocked_achievements       TEXT    NOT NULL DEFAULT '[]'
+                unlocked_achievements       TEXT    NOT NULL DEFAULT '[]',
+                infusion_end_tick           INTEGER NOT NULL DEFAULT -1,
+                domain_amplification_active INTEGER NOT NULL DEFAULT 0
             )""";
 
     private static final String DDL_AUDIT_LOG = """
@@ -327,6 +329,18 @@ public class Migrator {
                 // 발전과제 달성 목록
                 try (Statement st = conn.createStatement()) {
                     try { st.execute("ALTER TABLE player_data ADD COLUMN unlocked_achievements TEXT NOT NULL DEFAULT '[]'"); } catch (SQLException ignored) {}
+                }
+            }
+            case 27 -> {
+                // CE 무기 주입 만료 틱
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN infusion_end_tick INTEGER NOT NULL DEFAULT -1"); } catch (SQLException ignored) {}
+                }
+            }
+            case 28 -> {
+                // 영역전연 활성 플래그
+                try (Statement st = conn.createStatement()) {
+                    try { st.execute("ALTER TABLE player_data ADD COLUMN domain_amplification_active INTEGER NOT NULL DEFAULT 0"); } catch (SQLException ignored) {}
                 }
             }
         }

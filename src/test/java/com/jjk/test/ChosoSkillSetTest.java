@@ -38,10 +38,10 @@ class ChosoSkillSetTest {
     // ── 0. 수치는 JSON에서 로드 (하드코딩 아님) ──────────────────────────────
     @Test
     void values_loadedFromJson() {
-        assertEquals(420, skill().getCeCost(KEY),       "ceCost는 techniques.json에서 로드");
-        assertEquals(120, skill().getCooldownTicks(KEY), "cooldownTicks는 techniques.json에서 로드");
+        assertEquals(320, skill().getCeCost(KEY),       "ceCost는 techniques.json에서 로드");
+        assertEquals(40,  skill().getCooldownTicks(KEY), "cooldownTicks는 techniques.json에서 로드");
         assertEquals("혈도폭쇄", skill().getSkillName(KEY), "skillName");
-        assertEquals(55f, TechniqueLoader.getBaseDamage("choso", KEY), 0.001f, "baseDamage");
+        assertEquals(34f, TechniqueLoader.getBaseDamage("choso", KEY), 0.001f, "baseDamage");
     }
 
     // ── 0b. animId 66 등록 확인 ──────────────────────────────────────────────
@@ -61,8 +61,8 @@ class ChosoSkillSetTest {
 
         assertNotEquals(SkillResult.NOT_IMPLEMENTED, result, "더 이상 NOT_IMPLEMENTED 아님");
         assertEquals(SkillResult.SUCCESS, result, "발동 성공 (범위 내 대상 없어도 성공)");
-        assertEquals(80f, data.ceCurrent, 0.001f, "CE 420 차감 → 500-420=80");
-        assertEquals(tick + 120L, data.cooldowns.get("cd_choso_3"), "쿨타임 120틱 설정");
+        assertEquals(180f, data.ceCurrent, 0.001f, "CE 320 차감 → 500-320=180");
+        assertEquals(tick + 40L, data.cooldowns.get("cd_choso_3"), "쿨타임 40틱 설정");
     }
 
     // ── 2. CE 부족 → CE_INSUFFICIENT, CE 차감 없음 ──────────────────────────

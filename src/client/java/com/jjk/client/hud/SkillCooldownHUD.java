@@ -25,7 +25,7 @@ public final class SkillCooldownHUD {
     private static final int SLOT_GAP   = 4;
     private static final int SLOT_COUNT = 6;
     private static final int TOTAL_W    = SLOT_COUNT * SLOT_SIZE + (SLOT_COUNT - 1) * SLOT_GAP;
-    private static final int SLOT_OFFSET_Y = 84; // screenH - 84 (CE바 -62, 체력바 -55 위)
+    private static final int SLOT_OFFSET_Y = 87; // screenH - 87 (CE바 배경 상단 -68 기준 1px 여백)
 
     private static final int COLOR_SLOT_BG      = 0xFF222222;
     private static final int COLOR_SLOT_BORDER   = 0xFF888888;

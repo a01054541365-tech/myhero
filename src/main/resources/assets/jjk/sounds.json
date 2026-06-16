@@ -18,5 +18,105 @@
   "awakening": {
     "category": "player",
     "sounds": []
+  },
+  "skill.gojo.blue": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "고죠 - 창"
+  },
+  "skill.gojo.red": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "고죠 - 홍"
+  },
+  "skill.gojo.purple": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "고죠 - 무량공처"
+  },
+  "skill.black_flash": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "흑섬"
+  },
+  "skill.domain_open": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "영역 전개"
+  },
+  "skill.domain_close": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "영역 종료"
+  },
+  "skill.sukuna.cleave": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "숙나 - 팔"
+  },
+  "skill.inumaki.voice": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "이누마키 - 주언"
+  },
+  "skill.capture_success": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "포획 성공"
+  },
+  "skill.trial_verdict": {
+    "category": "player",
+    "sounds": [],
+    "subtitle": "판결 선언"
+  },
+  "ambient.cursed_night": {
+    "category": "ambient",
+    "sounds": [],
+    "subtitle": "주령 출현"
+  },
+  "ambient.domain": {
+    "category": "ambient",
+    "sounds": [],
+    "subtitle": "영역 내부"
+  },
+  "ambient.raid_start": {
+    "category": "ambient",
+    "sounds": [],
+    "subtitle": "레이드 시작"
+  },
+  "ui.character_select": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "캐릭터 선택"
+  },
+  "ui.grade_up": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "등급 상승"
+  },
+  "ui.advancement": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "도전과제 해금"
+  },
+  "ui.skill_sealed": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "술식 봉인"
+  },
+  "ui.skill_ready": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "쿨타임 완료"
+  },
+  "ui.binding_vow": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "속박 선언"
+  },
+  "ui.binding_penalty": {
+    "category": "master",
+    "sounds": [],
+    "subtitle": "속박 패널티"
   }
 }

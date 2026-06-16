@@ -25,11 +25,24 @@ public final class BuildingNpcSpawner {
 
     private BuildingNpcSpawner() {}
 
+    // 기존 buildings.json에 NPC가 없는 건물 타입을 위한 canonical 정의
+    private static final java.util.Map<String, List<NpcSpawnPoint>> CANONICAL_NPCS =
+        java.util.Map.of(
+            "training_dojo", List.of(new NpcSpawnPoint("kusakabe",   "쿠사카베 아츠야", 0, 1, 0, 180f)),
+            "black_market",  List.of(new NpcSpawnPoint("gojo_shiyu", "공시우",          0, 1, 0,   0f))
+        );
+
+    private static List<NpcSpawnPoint> effectiveNpcs(BuildingInstance b) {
+        return b.npcSpawnPoints.isEmpty()
+            ? CANONICAL_NPCS.getOrDefault(b.type, List.of())
+            : b.npcSpawnPoints;
+    }
+
     /** 등록된 모든 건물의 NPC를 점검하고 없으면 재스폰. */
     public static void recheckAndRespawn(ServerWorld world, BuildingRegistry registry) {
         int spawned = 0;
         for (BuildingInstance b : registry.getAll()) {
-            for (NpcSpawnPoint sp : b.npcSpawnPoints) {
+            for (NpcSpawnPoint sp : effectiveNpcs(b)) {
                 int ax = b.x + sp.dx();
                 int ay = b.y + sp.dy();
                 int az = b.z + sp.dz();

@@ -54,7 +54,7 @@ class HigurumaTrialTest {
     void testCulpableHitMetadata() {
         HigurumaSkillSet skill = new HigurumaSkillSet();
         assertEquals("culpable_hit", skill.getSkillName(1));
-        assertEquals(140, skill.getCeCost(1));        // techniques.json higuruma keyId1
+        assertEquals(160, skill.getCeCost(1));        // techniques.json higuruma keyId1
         assertEquals(18, skill.getCooldownTicks(1));
     }
 

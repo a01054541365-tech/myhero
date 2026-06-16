@@ -11,13 +11,12 @@ import com.jjk.data.PlayerData;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributeInstance;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
@@ -29,14 +28,14 @@ public class NonSorcererSkillSet implements ISkillSet {
     public static final Identifier BURST_SPEED_MODIFIER_ID =
             Identifier.of("jjk", "non_sorcerer_burst_speed");
 
-    // key 0: 강화주먹, 1: 강화질주, 2: 파쇄격, 3: 천여주박각성, 4: 불굴
-    private static final float BD_F = 38f;   // 강화주먹
-    private static final float BD_R = 75f;   // 파쇄격
+    // key 0: 강화주먹, 1: 강화질주, 2: 파쇄격, 3: 부기우기, 4: 불굴
+    private static final float BD_F = 28f;   // 강화주먹
+    private static final float BD_R = 40f;   // 파쇄격
 
     private static final int CD_F  = 3,    ANIM_F  = 64;
     private static final int CD_SF = 40,   ANIM_SF = 64;
     private static final int CD_R  = 60,   ANIM_R  = 64;
-    private static final int CD_SR = 1200, ANIM_SR = 64;
+    private static final int CD_SR = 100,  ANIM_SR = 64;
     private static final int CD_V  = 300,  ANIM_V  = 64;
 
     private static final long  BURST_DURATION_TICKS  = 600L;
@@ -51,7 +50,7 @@ public class NonSorcererSkillSet implements ISkillSet {
             case 0 -> useEnhancedFist(player);
             case 1 -> useEnhancedDash(player);
             case 2 -> useShatteringStrike(player);
-            case 3 -> useAwakenedBody(player);
+            case 3 -> useBoogieWoogie(player);
             case 4 -> useIndomitable(player);
             default -> SkillResult.FAIL;
         };
@@ -79,7 +78,7 @@ public class NonSorcererSkillSet implements ISkillSet {
     public String getSkillName(int keyId) {
         return switch (keyId) {
             case 0 -> "enhanced_fist"; case 1 -> "enhanced_dash"; case 2 -> "shattering_strike";
-            case 3 -> "awakened_body"; case 4 -> "indomitable"; default -> "unknown";
+            case 3 -> "boogie_woogie"; case 4 -> "indomitable"; default -> "unknown";
         };
     }
 
@@ -162,24 +161,33 @@ public class NonSorcererSkillSet implements ISkillSet {
         return SkillResult.SUCCESS;
     }
 
-    // 천여주박각성 — 600틱간 공격력×1.6, 방어력×1.4, 이동속도+30%
-    private SkillResult useAwakenedBody(ServerPlayerEntity player) {
+    // 부기우기 — 6블록 이내 가장 가까운 엔티티와 위치 교체
+    private SkillResult useBoogieWoogie(ServerPlayerEntity player) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
         long tick = player.getWorld().getTime();
         if (!CooldownManager.isReady(data, cdKey(3), tick)) return SkillResult.ON_COOLDOWN;
 
-        data.nsBurstExpireTick = tick + BURST_DURATION_TICKS;
-        data.attackBoostMultiplier = BURST_ATK_MULT;
-        data.defenseBoostMultiplier = BURST_DEF_MULT;
+        Box box = player.getBoundingBox().expand(6.0);
+        List<LivingEntity> nearby = player.getServerWorld().getEntitiesByClass(
+                LivingEntity.class, box, e -> e != player && e.isAlive());
+        if (nearby.isEmpty()) {
+            player.sendMessage(Text.literal("§c[부기우기] 범위 내 대상이 없습니다."), false);
+            return SkillResult.FAIL_NO_TARGET;
+        }
+        LivingEntity target = nearby.stream()
+                .min(java.util.Comparator.comparingDouble(e -> e.squaredDistanceTo(player)))
+                .orElseThrow();
 
-        EntityAttributeInstance speedAttr = player.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
-        if (speedAttr != null) {
-            speedAttr.removeModifier(BURST_SPEED_MODIFIER_ID);
-            speedAttr.addPersistentModifier(new EntityAttributeModifier(
-                    BURST_SPEED_MODIFIER_ID,
-                    0.30,
-                    EntityAttributeModifier.Operation.ADD_MULTIPLIED_BASE
-            ));
+        Vec3d playerPos = player.getPos();
+        Vec3d targetPos = target.getPos();
+        player.teleport(player.getServerWorld(), targetPos.x, targetPos.y, targetPos.z,
+                player.getYaw(), player.getPitch());
+        if (target instanceof ServerPlayerEntity tp) {
+            tp.teleport(tp.getServerWorld(), playerPos.x, playerPos.y, playerPos.z,
+                    tp.getYaw(), tp.getPitch());
+        } else {
+            target.refreshPositionAndAngles(playerPos.x, playerPos.y, playerPos.z,
+                    target.getYaw(), target.getPitch());
         }
 
         CooldownManager.set(data, cdKey(3), tick, CD_SR);
@@ -207,6 +215,6 @@ public class NonSorcererSkillSet implements ISkillSet {
     @Override public SkillResult onF(PlayerData data, ServerPlayerEntity player, long tick)      { return player == null ? SkillResult.SUCCESS : useEnhancedFist(player); }
     @Override public SkillResult onShiftF(PlayerData data, ServerPlayerEntity player, long tick) { return player == null ? SkillResult.SUCCESS : useEnhancedDash(player); }
     @Override public SkillResult onR(PlayerData data, ServerPlayerEntity player, long tick)      { return player == null ? SkillResult.SUCCESS : useShatteringStrike(player); }
-    @Override public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) { return player == null ? SkillResult.SUCCESS : useAwakenedBody(player); }
+    @Override public SkillResult onShiftR(PlayerData data, ServerPlayerEntity player, long tick) { return player == null ? SkillResult.SUCCESS : useBoogieWoogie(player); }
     @Override public SkillResult onV(PlayerData data, ServerPlayerEntity player, long tick)      { return player == null ? SkillResult.SUCCESS : useIndomitable(player); }
 }

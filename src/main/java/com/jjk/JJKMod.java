@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import net.minecraft.server.MinecraftServer;
 import com.jjk.audit.AuditLogger;
 import com.jjk.awakening.AwakeningManager;
+import com.jjk.combat.WeaponInfusionManager;
 import com.jjk.burden.BurdenManager;
 import com.jjk.ce.CEManager;
 import com.jjk.character.CharacterRegistry;
@@ -97,6 +98,7 @@ public class JJKMod implements ModInitializer {
     private com.jjk.combat.BlackFlashHandler blackFlashHandler;
     private com.jjk.data.backup.RotatingBackup rotatingBackup;
     private com.jjk.combat.BindingVowSystem bindingVowSystem;
+    private WeaponInfusionManager weaponInfusionManager;
     private ShadowMarkerRegistry shadowMarkerRegistry;
     private CeBossBarManager ceBossBarManager;
     private GradeManager gradeManager;
@@ -139,6 +141,7 @@ public class JJKMod implements ModInitializer {
         blackFlashHandler = new com.jjk.combat.BlackFlashHandler();
         rotatingBackup = new com.jjk.data.backup.RotatingBackup();
         bindingVowSystem = new com.jjk.combat.BindingVowSystem();
+        weaponInfusionManager = new WeaponInfusionManager(config);
         shadowMarkerRegistry = new ShadowMarkerRegistry(config);
         ceBossBarManager = new CeBossBarManager();
         gradeManager = new GradeManager();
@@ -273,7 +276,7 @@ public class JJKMod implements ModInitializer {
                                         return 0;
                                     }
                                     CharacterCommandService.SelectResult result =
-                                            new CharacterCommandService().select(target, charId);
+                                            new CharacterCommandService().select(target, charId, true); // OP override: 등급 체크 건너뜀
                                     switch (result) {
                                         case OK ->
                                             source.sendFeedback(() -> Text.literal(
@@ -293,7 +296,7 @@ public class JJKMod implements ModInitializer {
                         )
                     )
 
-                    // /jj data save <player> (OP 2)
+                    // /jj data save <player> + /jj data get <player> (OP 2)
                     .then(CommandManager.literal("data")
                         .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.literal("save")
@@ -310,9 +313,28 @@ public class JJKMod implements ModInitializer {
                                 })
                             )
                         )
+                        .then(CommandManager.literal("get")
+                            .then(CommandManager.argument("player", EntityArgumentType.player())
+                                .executes(ctx -> {
+                                    var source = ctx.getSource();
+                                    var target = EntityArgumentType.getPlayer(ctx, "player");
+                                    com.jjk.data.PlayerData pd =
+                                            JJKMod.getPlayerRepository().load(target.getUuid());
+                                    source.sendFeedback(() -> Text.literal("=== [JJK] " + target.getName().getString() + " ==="), false);
+                                    source.sendFeedback(() -> Text.literal("characterId: " + pd.characterId), false);
+                                    source.sendFeedback(() -> Text.literal("grade: " + (pd.grade != null ? pd.grade.display : "null")), false);
+                                    source.sendFeedback(() -> Text.literal("CE: " + (int)pd.ceCurrent + "/" + (int)pd.ceMax), false);
+                                    source.sendFeedback(() -> Text.literal("HP: " + (int)pd.hpCurrent + "/" + (int)pd.hpMax), false);
+                                    source.sendFeedback(() -> Text.literal("mastery: " + pd.mastery + " | fingers: " + pd.fingerCount), false);
+                                    source.sendFeedback(() -> Text.literal("awakening: " + pd.awakeningActive + " | zone: " + pd.zoneActive), false);
+                                    source.sendFeedback(() -> Text.literal("quarantined: " + pd.quarantined), false);
+                                    return 1;
+                                })
+                            )
+                        )
                     )
 
-                    // /jj domain clear (OP 2)
+                    // /jj domain clear [player] (OP 2)
                     .then(CommandManager.literal("domain")
                         .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.literal("clear")
@@ -322,6 +344,89 @@ public class JJKMod implements ModInitializer {
                                         () -> Text.literal("[JJK] All domains cleared."), true);
                                 return 1;
                             })
+                            .then(CommandManager.argument("player", EntityArgumentType.player())
+                                .executes(ctx -> {
+                                    var target = EntityArgumentType.getPlayer(ctx, "player");
+                                    JJKMod.getDomainManager().collapseDomain(
+                                        target.getUuid(), target.getWorld().getTime());
+                                    ctx.getSource().sendFeedback(
+                                        () -> Text.literal("[JJK] " + target.getName().getString() + " 영역 종료"), true);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj infusion <player> <on|off> (OP 2)
+                    .then(CommandManager.literal("infusion")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.argument("player", EntityArgumentType.player())
+                            .then(CommandManager.literal("on")
+                                .executes(ctx -> {
+                                    var target = EntityArgumentType.getPlayer(ctx, "player");
+                                    JJKMod.getWeaponInfusionManager().forceOn(target);
+                                    ctx.getSource().sendFeedback(
+                                        () -> Text.literal("[JJK] 무기 주입 활성화: " + target.getName().getString()), true);
+                                    return 1;
+                                })
+                            )
+                            .then(CommandManager.literal("off")
+                                .executes(ctx -> {
+                                    var target = EntityArgumentType.getPlayer(ctx, "player");
+                                    JJKMod.getWeaponInfusionManager().forceOff(target);
+                                    ctx.getSource().sendFeedback(
+                                        () -> Text.literal("[JJK] 무기 주입 비활성화: " + target.getName().getString()), true);
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+
+                    // /jj grade set <player> <0~5> — 등급 강제 설정 (OP 2, 0=4급 5=특급)
+                    .then(CommandManager.literal("grade")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("set")
+                            .then(CommandManager.argument("player", EntityArgumentType.player())
+                                .then(CommandManager.argument("ordinal",
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 5))
+                                    .executes(ctx -> {
+                                        var source = ctx.getSource();
+                                        var target = EntityArgumentType.getPlayer(ctx, "player");
+                                        int ord = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "ordinal");
+                                        com.jjk.data.Grade grade = com.jjk.data.Grade.values()[ord];
+                                        com.jjk.data.PlayerData gd = JJKMod.getPlayerRepository().load(target.getUuid());
+                                        gd.grade = grade;
+                                        JJKMod.getGradeManager().applyGradeUnlocks(gd, grade.display);
+                                        JJKMod.getPlayerRepository().saveImmediate(gd);
+                                        source.sendFeedback(() -> Text.literal(
+                                            "[JJK] " + target.getName().getString() + " 등급 → " + grade.display), true);
+                                        return 1;
+                                    })
+                                )
+                            )
+                        )
+                    )
+
+                    // /jj ce set <player> <amount> — CE 강제 설정 (OP 2)
+                    .then(CommandManager.literal("ce")
+                        .requires(src -> src.hasPermissionLevel(2))
+                        .then(CommandManager.literal("set")
+                            .then(CommandManager.argument("player", EntityArgumentType.player())
+                                .then(CommandManager.argument("amount",
+                                        com.mojang.brigadier.arguments.IntegerArgumentType.integer(0))
+                                    .executes(ctx -> {
+                                        var source = ctx.getSource();
+                                        var target = EntityArgumentType.getPlayer(ctx, "player");
+                                        int amount = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "amount");
+                                        com.jjk.data.PlayerData cd = JJKMod.getPlayerRepository().load(target.getUuid());
+                                        cd.ceCurrent = Math.min((float) amount, cd.ceMax);
+                                        JJKMod.getPlayerRepository().saveImmediate(cd);
+                                        source.sendFeedback(() -> Text.literal(
+                                            "[JJK] " + target.getName().getString() + " CE → " + (int)cd.ceCurrent), true);
+                                        return 1;
+                                    })
+                                )
+                            )
                         )
                     )
             )
@@ -500,6 +605,7 @@ public class JJKMod implements ModInitializer {
     public static com.jjk.security.MovementValidator getMovementValidator() { return INSTANCE.movementValidator; }
     public static com.jjk.combat.BlackFlashHandler getBlackFlashHandler() { return INSTANCE.blackFlashHandler; }
     public static com.jjk.combat.BindingVowSystem getBindingVowSystem() { return INSTANCE.bindingVowSystem; }
+    public static WeaponInfusionManager getWeaponInfusionManager() { return INSTANCE.weaponInfusionManager; }
     public static ComboTracker getComboTracker() { return INSTANCE.comboTracker; }
     public static TickScheduler getTickScheduler() { return INSTANCE.tickScheduler; }
     public static MinecraftServer getServer() { return INSTANCE.server; }

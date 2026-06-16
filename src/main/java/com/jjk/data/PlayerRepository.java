@@ -308,6 +308,7 @@ public class PlayerRepository {
             String ua = rs.getString("unlocked_achievements");
             d.unlockedAchievements = ua != null ? new HashSet<>(GSON.fromJson(ua, LIST_TYPE)) : new HashSet<>();
         } catch (SQLException ignored) {}
+        try { d.domainAmplificationActive = rs.getInt("domain_amplification_active") != 0; } catch (SQLException ignored) {}
         if (d.unlockedSkills == null)        d.unlockedSkills = new ArrayList<>();
         if (d.cooldowns == null)             d.cooldowns = new HashMap<>();
         if (d.deadShikigamiIds == null)      d.deadShikigamiIds = new ArrayList<>();
@@ -402,6 +403,7 @@ public class PlayerRepository {
             ps.setInt(79,    d.quarantined ? 1 : 0);
             ps.setLong(80,   d.blackFlashCooldownUntil);
             ps.setString(81, GSON.toJson(d.unlockedAchievements != null ? d.unlockedAchievements : Set.of()));
+            ps.setInt(82,    d.domainAmplificationActive ? 1 : 0);
             ps.executeUpdate();
         }
     }
@@ -532,7 +534,8 @@ public class PlayerRepository {
                 anti_abuse_flags,
                 quarantined,
                 black_flash_cooldown_until,
-                unlocked_achievements
+                unlocked_achievements,
+                domain_amplification_active
             ) VALUES (
                 ?,?,?,?,?, ?,?,?,?, ?,?,?,?,
                 ?,?, ?,?,?,?,
@@ -550,6 +553,7 @@ public class PlayerRepository {
                 ?,?,?,?,?,
                 ?,?,?,?,
                 ?,?,
+                ?,
                 ?,
                 ?
             )
@@ -633,6 +637,7 @@ public class PlayerRepository {
                 anti_abuse_flags               = excluded.anti_abuse_flags,
                 quarantined                    = excluded.quarantined,
                 black_flash_cooldown_until     = excluded.black_flash_cooldown_until,
-                unlocked_achievements          = excluded.unlocked_achievements
+                unlocked_achievements          = excluded.unlocked_achievements,
+                domain_amplification_active    = excluded.domain_amplification_active
             """;
 }

@@ -43,8 +43,8 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion() {
-        assertEquals(26, Migrator.CURRENT_VERSION,
-            "Migrator.CURRENT_VERSION = 26 (case 14~26 포함)");
+        assertEquals(28, Migrator.CURRENT_VERSION,
+            "Migrator.CURRENT_VERSION = 28 (case 14~28 포함)");
     }
 
     @Test
@@ -316,7 +316,7 @@ class ReleaseGateTest {
 
     @Test
     void gate_migratorVersion_final() {
-        assertEquals(26, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 26");
+        assertEquals(28, Migrator.CURRENT_VERSION, "Migrator.CURRENT_VERSION = 28");
     }
 
     @Test

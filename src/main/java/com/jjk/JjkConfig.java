@@ -65,7 +65,8 @@ public class JjkConfig {
         "buildingSpawnEnabled", "buildingMinDistanceBlocks",
         "jujutsuHighTokyoCount", "detentionFacilityCount",
         "shibuyaUndergroundCount", "nanamiOfficeCount", "shibuyaCityCount",
-        "unlimitedVoidCeDrainRatio", "rikaMeleeDamage"
+        "unlimitedVoidCeDrainRatio", "rikaMeleeDamage",
+        "weaponInfusionEnabled"
     };
 
     public boolean mangaExpEnabled                 = false;
@@ -92,7 +93,7 @@ public class JjkConfig {
     public boolean allowCharacterReselect          = false;
     public int     rikaLifetimeTicks               = 200;    // §LOCK
     public int     maharagaThreshold               = 3;      // 밸런스 패스 2026-06-11: 5→3 (마허라 소환 현실화)
-    public int     sealDurationTicks               = 400;    // §LOCK decisions §2-2 (600 사용 금지 → 400으로 교체 확정 2026-05-28)
+    public int     sealDurationTicks               = 500;    // 운영자 확정 2026-06-15: 400→500틱
     public int     zoneDurationTicks               = 300;    // 밸런스 패스 2026-06-11: 200→300 (흑섬 존 15초)
     public float   ceRegenOutOfCombat              = 1.0f;   // decisions §2-4
     public float   ceRegenInCombat                 = 0.2f;   // decisions §2-4
@@ -204,6 +205,7 @@ public class JjkConfig {
 
     public float  unlimitedVoidCeDrainRatio      = 0.02f;  // 무량공처 내부 매 틱 CE 강제 소진 비율 (ceMax 대비)
     public int    rikaMeleeDamage                = 8;      // 밸런스 패스 2026-06-11: 20→8 (소환수가 본체보다 강하던 문제)
+    public boolean weaponInfusionEnabled         = true;
 
     public static JjkConfig load(Path configPath) {
         if (!Files.exists(configPath)) {
@@ -337,6 +339,7 @@ public class JjkConfig {
         this.shibuyaCityCount                    = fresh.shibuyaCityCount;
         this.nonSorcMult                         = fresh.nonSorcMult;
         this.nonSorcMultExtreme                  = fresh.nonSorcMultExtreme;
+        this.weaponInfusionEnabled               = fresh.weaponInfusionEnabled;
         this.buildingsGenerated                  = fresh.buildingsGenerated;
         this.blackmarketPos                      = fresh.blackmarketPos;
         this.cursedSpiritSpawnEnabled            = fresh.cursedSpiritSpawnEnabled;

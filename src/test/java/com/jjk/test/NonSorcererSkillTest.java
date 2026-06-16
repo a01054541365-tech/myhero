@@ -44,11 +44,11 @@ class NonSorcererSkillTest {
     // ── 2. 쿨타임 값: 강화주먹3 / 강화질주40 / 파쇄격60 / 천여주박각성1200 / 불굴300 ──
     @Test
     void cooldownTicks_matchSpec() {
-        assertEquals(3,    skill.getCooldownTicks(0), "강화주먹 CD=3");
-        assertEquals(40,   skill.getCooldownTicks(1), "강화질주 CD=40");
-        assertEquals(60,   skill.getCooldownTicks(2), "파쇄격 CD=60");
-        assertEquals(1200, skill.getCooldownTicks(3), "천여주박각성 CD=1200");
-        assertEquals(300,  skill.getCooldownTicks(4), "불굴 CD=300");
+        assertEquals(3,   skill.getCooldownTicks(0), "강화주먹 CD=3");
+        assertEquals(40,  skill.getCooldownTicks(1), "강화질주 CD=40");
+        assertEquals(60,  skill.getCooldownTicks(2), "파쇄격 CD=60");
+        assertEquals(100, skill.getCooldownTicks(3), "부기우기 CD=100");
+        assertEquals(300, skill.getCooldownTicks(4), "불굴 CD=300");
     }
 
     // ── 3. CE 0인 채로 onF~onV 호출 시 CE_INSUFFICIENT가 아니어야 함 (player=null → SUCCESS) ──

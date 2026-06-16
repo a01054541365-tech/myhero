@@ -198,6 +198,12 @@ public class PlayerData {
     public long  nsShieldExpireTick     = 0L;
     public boolean nsDeathPreventUsed   = false;
 
+    // === 영역전연 ===
+    public boolean domainAmplificationActive;
+
+    // === CE 무기 주입 ===
+    public long infusionEndTick = -1L;
+
     // === 스키마 버전 ===
     public int schemaVersion = 1;
 
@@ -321,6 +327,8 @@ public class PlayerData {
         copy.defenseBoostMultiplier      = this.defenseBoostMultiplier;
         copy.nsShieldExpireTick          = this.nsShieldExpireTick;
         copy.nsDeathPreventUsed          = this.nsDeathPreventUsed;
+        copy.domainAmplificationActive   = this.domainAmplificationActive;
+        copy.infusionEndTick             = this.infusionEndTick;
         copy.schemaVersion               = this.schemaVersion;
         return copy;
     }

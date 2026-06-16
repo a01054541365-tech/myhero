@@ -3,6 +3,7 @@ package com.jjk.domain;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerChunkEvents;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
@@ -81,6 +82,10 @@ public class DomainBlockQueue {
             BlockState original = world.getBlockState(pos);
             // 공기·유체는 기록 제외
             if (original.isAir() || !original.getFluidState().isEmpty()) continue;
+            // 보호 블록은 originalBlocks에 저장하되 덮어쓰지 않음
+            Block origBlock = original.getBlock();
+            if (origBlock == Blocks.BEDROCK || origBlock == Blocks.BARRIER
+                    || origBlock == Blocks.END_PORTAL_FRAME) continue;
             captured.add(new OriginalBlock(pos, original));
             queue.add(new QueuedChange(pos, targetState, worldKey));
             String origId = Registries.BLOCK.getId(original.getBlock()).toString();

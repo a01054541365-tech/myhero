@@ -24,6 +24,9 @@ public class DomainInstance {
     // NPC 영역 여부 — true면 tickDomains에서 플레이어 소유자 조회 스킵
     public boolean npcOwned = false;
 
+    // 전개된 월드 키 — 종료 시 블록 복구에 사용 (예: "minecraft:overworld")
+    public String worldKey;
+
     // 소유자 진영 — deployDomain 시점에 TeamManager.getTeam()으로 세팅
     public com.jjk.team.TeamManager.Team team;
 

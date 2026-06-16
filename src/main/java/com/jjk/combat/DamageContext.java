@@ -31,7 +31,9 @@ public class DamageContext {
     public final float externalBuffMult;
     public float defenseMultiplier;
     public final int keyId;
-    public final boolean nKeyApplied;
+    public boolean nKeyApplied;
+    public boolean isReflected = false;
+    public final boolean bypassPvpCap;
     // §E 2단계 CE 검증 + §13-1 복사 술식 지원
     public final boolean alreadyConsumedCE;  // true(기본) = process()가 CE/쿨타임 재검증 스킵
     public final int ceCost;                  // 스킬 CE 비용 (0 = 비전투 스킬)
@@ -57,6 +59,7 @@ public class DamageContext {
         this.ceCost = b.ceCost;
         this.cooldownTicks = b.cooldownTicks;
         this.isDomainSkill = b.isDomainSkill;
+        this.bypassPvpCap = b.bypassPvpCap;
     }
 
     public static Builder builder(ServerPlayerEntity attacker, LivingEntity target,
@@ -83,6 +86,7 @@ public class DamageContext {
         int ceCost = 0;
         int cooldownTicks = 0;
         boolean isDomainSkill = false;
+        boolean bypassPvpCap = false;
 
         private Builder(ServerPlayerEntity attacker, LivingEntity target,
                         IDamageSource sourceType, float baseDamage) {
@@ -107,6 +111,7 @@ public class DamageContext {
         public Builder ceCost(int v) { this.ceCost = v; return this; }
         public Builder cooldownTicks(int v) { this.cooldownTicks = v; return this; }
         public Builder isDomainSkill(boolean v) { this.isDomainSkill = v; return this; }
+        public Builder bypassPvpCap() { this.bypassPvpCap = true; return this; }
         public DamageContext build() { return new DamageContext(this); }
     }
 }

@@ -33,6 +33,14 @@ public class ServerPlayerEntityMixin {
             JJKMod.getPlayerRepository().save(data);
         }
 
+        // 속박 이동 제한: status_bind 활성 시 수평 속도 0으로 강제
+        Long bindUntil = data.cooldowns.get("status_bind");
+        if (bindUntil != null && tickCount < bindUntil) {
+            Vec3d v = player.getVelocity();
+            player.setVelocity(0.0, v.y, 0.0);
+            player.velocityModified = true;
+        }
+
         if (data.fallingBlossomActive && tickCount >= data.fallingBlossomUntil) {
             data.fallingBlossomActive = false;
             JJKMod.getPlayerRepository().save(data);

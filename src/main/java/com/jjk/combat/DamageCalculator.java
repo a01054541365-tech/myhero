@@ -114,8 +114,8 @@ public class DamageCalculator {
             damage = Math.min(damage, ctx.baseDamage * MAX_FINAL_MULT);
         }
 
-        // 동일 틱 누적 캡 max_hp×0.50 — PvP(플레이어 타겟)에만 적용
-        if (ctx.target instanceof ServerPlayerEntity && ctx.target != null) {
+        // 동일 틱 누적 캡 max_hp×0.50 — PvP(플레이어 타겟)에만 적용. bypassPvpCap=true면 면제(처형검)
+        if (ctx.target instanceof ServerPlayerEntity && ctx.target != null && !ctx.bypassPvpCap) {
             damage = applyTickCap(ctx, damage);
         }
 
@@ -196,8 +196,15 @@ public class DamageCalculator {
             if (lv >= 0 && lv < COMBO_DMG.length) comboMult = COMBO_DMG[lv];
         }
 
+        // CE 무기 주입 배율
+        float infusionMult = 1.0f;
+        if (attacker != null && JJKMod.getInstance() != null
+                && JJKMod.getWeaponInfusionManager() != null) {
+            infusionMult = JJKMod.getWeaponInfusionManager().getMultiplier(attacker, currentTick);
+        }
+
         // §4-6: 배율 클램프 ×0.25 ~ ×4.0 (§LOCK)
-        float totalMult = Math.max(CLAMP_MIN, Math.min(attackMult * gradeMult * condMult * comboMult, CLAMP_MAX));
+        float totalMult = Math.max(CLAMP_MIN, Math.min(attackMult * gradeMult * condMult * comboMult * infusionMult, CLAMP_MAX));
 
         // Stage 4b — 주구 보너스 적용 (클램프 이후, cursedToolBonus.damageMultiplier는 캡 외부 적용)
         boolean cursedNullifyDef = false;

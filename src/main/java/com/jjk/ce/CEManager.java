@@ -54,7 +54,17 @@ public class CEManager {
         if (data.simpleBarrierActive) {
             float drain = data.ceMax * config.simpleBarrierCostPerSecond() / 20.0f;
             data.ceCurrent = Math.max(0f, data.ceCurrent - drain);
-            if (data.ceCurrent <= 0f) data.simpleBarrierActive = false;
+            if (data.ceCurrent <= 0f) {
+                data.simpleBarrierActive = false;
+                data.fallingBlossomActive = false;
+            }
+        }
+
+        // 영역전연 CE 유지 소모: simpleBarrierCostPerSecond와 동일 비율 적용
+        if (data.domainAmplificationActive) {
+            float drain = data.ceMax * config.simpleBarrierCostPerSecond() / 20.0f;
+            data.ceCurrent = Math.max(0f, data.ceCurrent - drain);
+            if (data.ceCurrent <= 0f) data.domainAmplificationActive = false;
         }
 
         // 천여주박: CE 0 → 신체능력 버프 활성. CE 1 이상 회복 → 버프 해제.

@@ -52,7 +52,16 @@ public class CharacterCommandService {
         return true;
     }
 
+    /** 기존 호출처(CharacterSelectC2SPacket, /jj select)용 — 등급 체크 적용. */
     public SelectResult select(ServerPlayerEntity player, String characterId) {
+        return select(player, characterId, false);
+    }
+
+    /**
+     * @param isAdminOverride true면 등급 체크를 건너뜀 (/jj selectchar OP 경로 전용).
+     *                        false면 기존 플레이어 선택 경로와 동일하게 등급 체크 수행.
+     */
+    public SelectResult select(ServerPlayerEntity player, String characterId, boolean isAdminOverride) {
         PlayerData data = JJKMod.getPlayerRepository().load(player.getUuid());
 
         boolean isReselect = (data.characterId != null);
@@ -67,12 +76,15 @@ public class CharacterCommandService {
 
         CharacterRegistry.CharacterMeta meta = CharacterRegistry.get(characterId);
 
-        // grade check (§26-2): skip on first selection (characterId == null)
         if (isReselect) {
-            int requiredRank = Grade.fromKey(meta.defaultGrade()).ordinal();
-            int playerRank   = data.grade != null ? data.grade.ordinal() : 0;
-            if (playerRank < requiredRank) {
-                return SelectResult.GRADE_INSUFFICIENT;
+            // grade check (§26-2): isAdminOverride=true이면 건너뜀 (/jj selectchar OP 전용)
+            // [원본] if (playerRank < requiredRank) { return SelectResult.GRADE_INSUFFICIENT; }
+            if (!isAdminOverride) {
+                int requiredRank = Grade.fromKey(meta.defaultGrade()).ordinal();
+                int playerRank   = data.grade != null ? data.grade.ordinal() : 0;
+                if (playerRank < requiredRank) {
+                    return SelectResult.GRADE_INSUFFICIENT;
+                }
             }
             // 재선택 시 전체 초기화
             data.grade                       = Grade.GRADE_4;

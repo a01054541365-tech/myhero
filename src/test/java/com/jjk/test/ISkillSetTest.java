@@ -399,7 +399,7 @@ class ISkillSetTest {
 
     @Test
     void testMigratorCurrentVersion() {
-        assertEquals(26, Migrator.CURRENT_VERSION);
+        assertEquals(28, Migrator.CURRENT_VERSION);
     }
 
     @Test

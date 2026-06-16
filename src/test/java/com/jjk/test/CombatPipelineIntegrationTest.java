@@ -136,11 +136,12 @@ class CombatPipelineIntegrationTest {
 
         assertTrue(attacker.cooldowns.isEmpty(), "초기 쿨타임 없음");
 
-        CombatPipeline.PipelineResult result = pipeline.processData(attacker, target, 3, currentTick);
+        // keyId=1 (manji_kick): ceCost=90 ≤ attacker.ceCurrent=100
+        CombatPipeline.PipelineResult result = pipeline.processData(attacker, target, 1, currentTick);
         assertEquals(CombatPipeline.PipelineResult.SUCCESS, result);
 
-        long cooldownUntil = attacker.cooldowns.getOrDefault("3", 0L);
+        long cooldownUntil = attacker.cooldowns.getOrDefault("1", 0L);
         assertTrue(cooldownUntil > currentTick,
-                "스킬 사용 후 keyId '3' 쿨타임이 currentTick보다 커야 한다");
+                "스킬 사용 후 keyId '1' 쿨타임이 currentTick보다 커야 한다");
     }
 }

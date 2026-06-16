@@ -6,7 +6,6 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
@@ -55,10 +54,6 @@ public class CharacterSelectScreen extends Screen {
     private final String currentCharacterId;
 
     private int scrollOffset = 0;
-    private String pendingSelect = null;
-
-    private ButtonWidget confirmBtn;
-    private ButtonWidget cancelBtn;
 
     public CharacterSelectScreen() {
         super(Text.literal("캐릭터 선택"));
@@ -81,20 +76,6 @@ public class CharacterSelectScreen extends Screen {
     }
 
     @Override
-    protected void init() {
-        int cx = width / 2;
-        int cy = height / 2;
-        confirmBtn = ButtonWidget.builder(Text.literal("확인"), b -> confirmSelect())
-            .dimensions(cx - 82, cy + 22, 80, 20).build();
-        cancelBtn  = ButtonWidget.builder(Text.literal("취소"), b -> cancelSelect())
-            .dimensions(cx + 2,  cy + 22, 80, 20).build();
-        confirmBtn.visible = false;
-        cancelBtn.visible  = false;
-        addDrawableChild(confirmBtn);
-        addDrawableChild(cancelBtn);
-    }
-
-    @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         ctx.fill(0, 0, width, height, COLOR_OVERLAY);
         ctx.drawCenteredTextWithShadow(textRenderer,
@@ -109,10 +90,6 @@ public class CharacterSelectScreen extends Screen {
             if (cardX + CARD_W < 0 || cardX > width) continue;
             drawCard(ctx, card, cardX, cardsY,
                 card.id().equals(currentCharacterId), mouseX, mouseY);
-        }
-
-        if (pendingSelect != null) {
-            renderConfirmPopup(ctx);
         }
 
         super.render(ctx, mouseX, mouseY, delta);
@@ -150,7 +127,7 @@ public class CharacterSelectScreen extends Screen {
         // 선택 버튼 (수동 렌더)
         int btnX = x + (CARD_W - BTN_W) / 2;
         int btnY = y + CARD_H - BTN_H - 4;
-        boolean hover = !isCurrent && pendingSelect == null
+        boolean hover = !isCurrent
             && mx >= btnX && mx <= btnX + BTN_W && my >= btnY && my <= btnY + BTN_H;
         ctx.fill(btnX, btnY, btnX + BTN_W, btnY + BTN_H,
             hover ? COLOR_BTN_HOV : COLOR_BTN_BG);
@@ -193,7 +170,7 @@ public class CharacterSelectScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
         if (super.mouseClicked(mx, my, button)) return true;
-        if (button != 0 || pendingSelect != null) return false;
+        if (button != 0) return false;
 
         int cardsY = (height - CARD_H) / 2;
         int startX = cardsStartX();
@@ -207,7 +184,9 @@ public class CharacterSelectScreen extends Screen {
             int btnY = cardsY + CARD_H - BTN_H - 4;
             if (mx >= btnX && mx <= btnX + BTN_W && my >= btnY && my <= btnY + BTN_H) {
                 if (!card.id().equals(currentCharacterId)) {
-                    openConfirmation(card.id());
+                    // 첫 클릭에 바로 패킷 전송 — 팝업 확인 단계 없음
+                    ClientPlayNetworking.send(new CharacterSelectC2SPacket(card.id()));
+                    close();
                 }
                 return true;
             }
@@ -225,25 +204,6 @@ public class CharacterSelectScreen extends Screen {
             scrollOffset = Math.max(-maxScroll, Math.min(0, scrollOffset));
         }
         return true;
-    }
-
-    private void openConfirmation(String charId) {
-        pendingSelect = charId;
-        confirmBtn.visible = true;
-        cancelBtn.visible  = true;
-    }
-
-    private void confirmSelect() {
-        if (pendingSelect != null) {
-            ClientPlayNetworking.send(new CharacterSelectC2SPacket(pendingSelect));
-        }
-        close();
-    }
-
-    private void cancelSelect() {
-        pendingSelect = null;
-        confirmBtn.visible = false;
-        cancelBtn.visible  = false;
     }
 
     @Override

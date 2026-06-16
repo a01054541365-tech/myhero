@@ -204,6 +204,21 @@ public class CombatPipeline {
             }
         }
 
+        // Stage 2b: 도메인 필중 → nKeyApplied 세팅 (simpleBarrier/fallingBlossom 트리거용)
+        if (!ctx.nKeyApplied && ctx.attacker != null) {
+            long domainSetTick = ctx.attacker.getWorld().getTime();
+            Optional<DomainInstance> attackerDomain =
+                JJKMod.getDomainManager().getDomainAt(ctx.attacker.getBlockPos());
+            if (attackerDomain.isPresent() && attackerDomain.get().isSureHitReady(domainSetTick)) {
+                ctx.nKeyApplied = true;
+            }
+        }
+        // 영역전연 활성 수비자: 필중 속성 무효화
+        if (ctx.nKeyApplied && ctx.target instanceof ServerPlayerEntity tgtAmp) {
+            PlayerData tgtAmpData = JJKMod.getPlayerRepository().load(tgtAmp.getUuid());
+            if (tgtAmpData.domainAmplificationActive) ctx.nKeyApplied = false;
+        }
+
         // Stage 3: calculate base damage
         float damage = calculator.calculate(ctx);
         if (damage <= 0f) return;
@@ -290,6 +305,15 @@ public class CombatPipeline {
             // Stage 5: grade scaling (§LOCK multipliers — see Grade.multiplier)
             float gradeMultiplier = attackerData.grade != null ? attackerData.grade.multiplier : 1.00f;
             damage *= gradeMultiplier;
+        }
+
+        // 속박 +30%: 대상이 status_bind 상태이면 데미지 보너스
+        if (ctx.target instanceof ServerPlayerEntity boundTarget) {
+            PlayerData boundData = JJKMod.getPlayerRepository().load(boundTarget.getUuid());
+            long bindTick = ctx.target.getWorld().getTime();
+            if (boundData.cooldowns.getOrDefault("status_bind", 0L) > bindTick) {
+                damage *= 1.30f;
+            }
         }
 
         // Stage 5: check awakening trigger on target after absorbing damage (§3-7)

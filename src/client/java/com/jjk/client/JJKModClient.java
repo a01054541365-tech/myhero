@@ -44,15 +44,23 @@ import com.jjk.network.s2c.NpcOpenGuiS2CPacket;
 import com.jjk.network.s2c.SealedSkillSyncS2CPacket;
 import com.jjk.network.s2c.VerdictS2CPacket;
 import com.jjk.entity.CursedSpiritEntityTypes;
+import com.jjk.entity.JJKEntities;
 import com.jjk.entity.ShikigamiEntityTypes;
 import com.jjk.entity.npc.NpcRegistry;
 import com.jjk.entity.npc.SimpleNpcEntity;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.mob.MobEntity;
+import com.jjk.item.GuideBookItem;
+import com.jjk.network.c2s.GuideBookOpenC2SPacket;
 import com.jjk.network.c2s.SkillUseC2SPacket;
+import com.jjk.network.c2s.WeaponInfuseC2SPacket;
+import com.jjk.network.s2c.WeaponInfusionS2CPacket;
 import com.jjk.network.s2c.AnimationTriggerS2CPacket;
 import com.jjk.network.s2c.AwakeningS2CPacket;
 import com.jjk.network.s2c.CharacterConfirmS2CPacket;
 import com.jjk.network.s2c.CharacterInfoS2CPacket;
+import com.jjk.network.s2c.CharacterSelectFailS2CPacket;
 import com.jjk.network.s2c.CharacterSelectS2CPacket;
 import com.jjk.network.s2c.ChantingStateS2CPacket;
 import com.jjk.network.s2c.CurtainEnterS2CPacket;
@@ -69,19 +77,29 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback;
+import net.minecraft.client.render.entity.BipedEntityRenderer;
+import net.minecraft.client.render.entity.EntityRenderer;
+import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.render.entity.PlayerEntityRenderer;
+import net.minecraft.client.render.entity.model.BipedEntityModel;
+import net.minecraft.client.render.entity.model.EntityModelLayers;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.AbstractClientPlayerEntity;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.SwordItem;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.TypedActionResult;
 import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -102,6 +120,8 @@ public class JJKModClient implements ClientModInitializer {
     private static KeyBinding KEY_SKILL_SR;
     private static KeyBinding KEY_SKILL_V;
     private static KeyBinding KEY_SKILL_C;
+    private static KeyBinding KEY_SKILL_T;
+    private static boolean wasUseKeyDown = false;
 
     @Override
     public void onInitializeClient() {
@@ -137,6 +157,30 @@ public class JJKModClient implements ClientModInitializer {
 
         // ── CE 투사체 렌더러 등록 ──────────────────────────────────
         EntityRendererRegistry.register(CursedSpiritEntityTypes.CE_PROJECTILE, CeProjectileEntityRenderer::new);
+
+        // ── [임시] 3D 모델 미완성 엔티티 폴백 렌더러 ──────────────────────────────
+        EntityRendererRegistry.register(CursedSpiritEntityTypes.SEMI_SPECIAL,     CursedSpiritEntityRenderer::new);
+        EntityRendererRegistry.register(JJKEntities.MUKI,                         bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.KOTSIBAKU,                    bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.HOMURAKU,                     bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.JOGO_NPC,                     bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.HANNAMI_NPC,                  bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.JUUGO_NPC,                    bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SYOUTO,                       bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.MOLE_CURSED_SPIRIT,           bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.FINGER_BEARER,                bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.PLANT_CURSED_SPIRIT,          bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.WATER_CURSED_SPIRIT,          bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SMALLPOX_DEITY,               bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.CE_ABSORBER,                  bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SPLITTING_CURSED_SPIRIT,      bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SHADOW_CURSED_SPIRIT,         bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SORCERER_NPC_4,               bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SORCERER_NPC_3,               bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SORCERER_NPC_2,               bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.SORCERER_NPC_1,               bipedFallback());
+        EntityRendererRegistry.register(JJKEntities.KOTSIBAKU_PROJECTILE,         projectileFallback());
+        EntityRendererRegistry.register(JJKEntities.CE_PROJECTILE,                projectileFallback());
 
         // 캐릭터별 이펙트 핸들러 등록 (SkillEffectRegistry)
         CommonEffects.register();
@@ -211,6 +255,8 @@ public class JJKModClient implements ClientModInitializer {
                 new KeyBinding("key.jjk.skill_v",  GLFW.GLFW_KEY_V, KEY_CATEGORY));
         KEY_SKILL_C  = KeyBindingHelper.registerKeyBinding(
                 new KeyBinding("key.jjk.skill_c",  GLFW.GLFW_KEY_C, KEY_CATEGORY));
+        KEY_SKILL_T  = KeyBindingHelper.registerKeyBinding(
+                new KeyBinding("key.jjk.skill_t",  GLFW.GLFW_KEY_T, KEY_CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             SkillAnimController.tick(client);
@@ -223,7 +269,52 @@ public class JJKModClient implements ClientModInitializer {
             checkAndSend(KEY_SKILL_SR, 3);
             checkAndSend(KEY_SKILL_V,  4);
             checkAndSend(KEY_SKILL_C,  5);
+            checkAndSend(KEY_SKILL_T,  6);
+
+            // CE 무기 주입: Shift+우클릭 (검·도끼 장비 시) — rising-edge 감지
+            boolean useDown = client.options.useKey.isPressed();
+            if (!wasUseKeyDown && useDown
+                    && client.player.isSneaking()
+                    && hasInfusionWeapon(client.player)) {
+                ClientPlayNetworking.send(new WeaponInfuseC2SPacket());
+            }
+            wasUseKeyDown = useDown;
         });
+
+        // 가이드북 우클릭 감지 → GuideBookOpenC2SPacket 전송
+        UseItemCallback.EVENT.register((player, world, hand) -> {
+            if (!world.isClient()) return TypedActionResult.pass(player.getStackInHand(hand));
+            net.minecraft.item.ItemStack stack = player.getStackInHand(hand);
+            if (GuideBookItem.isGuideBook(stack)) {
+                ClientPlayNetworking.send(new GuideBookOpenC2SPacket());
+                return TypedActionResult.success(stack);
+            }
+            return TypedActionResult.pass(stack);
+        });
+    }
+
+    private static <T extends MobEntity> EntityRendererFactory<T> bipedFallback() {
+        return ctx -> new BipedEntityRenderer<T, BipedEntityModel<T>>(
+                ctx, new BipedEntityModel<>(ctx.getPart(EntityModelLayers.ZOMBIE)), 0.5f) {
+            @Override
+            public Identifier getTexture(T entity) {
+                return Identifier.of("minecraft", "textures/entity/zombie/zombie.png");
+            }
+        };
+    }
+
+    private static <T extends Entity> EntityRendererFactory<T> projectileFallback() {
+        return ctx -> new EntityRenderer<>(ctx) {
+            @Override
+            public Identifier getTexture(T entity) {
+                return Identifier.of("minecraft", "textures/item/snowball.png");
+            }
+        };
+    }
+
+    private static boolean hasInfusionWeapon(AbstractClientPlayerEntity player) {
+        var item = player.getMainHandStack().getItem();
+        return item instanceof SwordItem || item instanceof AxeItem;
     }
 
     private static void checkAndSend(KeyBinding key, int keyId) {
@@ -306,7 +397,7 @@ public class JJKModClient implements ClientModInitializer {
         // CharacterSelectS2CPacket — 캐릭터 선택 화면 열기 (TASK-31)
         ClientPlayNetworking.registerGlobalReceiver(CharacterSelectS2CPacket.ID, (pkt, ctx) ->
                 ctx.client().execute(() ->
-                        MinecraftClient.getInstance().setScreen(new CharacterSelectScreen())));
+                        ctx.client().setScreen(new CharacterSelectScreen(pkt.availableCharacters()))));
 
         // CharacterInfoS2CPacket — 클라이언트 상태 갱신 (TASK-26)
         ClientPlayNetworking.registerGlobalReceiver(CharacterInfoS2CPacket.ID, (pkt, ctx) ->
@@ -322,6 +413,18 @@ public class JJKModClient implements ClientModInitializer {
                         ctx.client().player.sendMessage(
                             Text.literal("§a[JJK] 캐릭터 선택: " + pkt.characterId()), false);
                     }
+                }));
+
+        // CharacterSelectFailS2CPacket — 캐릭터 선택 실패 알림
+        ClientPlayNetworking.registerGlobalReceiver(CharacterSelectFailS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    if (ctx.client().player == null) return;
+                    String msg = switch (pkt.reason()) {
+                        case "grade_insufficient" -> "§c[JJK] 등급이 부족합니다.";
+                        case "duplicate"          -> "§c[JJK] 이미 다른 플레이어가 선택한 캐릭터입니다.";
+                        default                   -> "§c[JJK] 캐릭터 선택 실패: " + pkt.reason();
+                    };
+                    ctx.client().player.sendMessage(Text.literal(msg), false);
                 }));
 
         // CurtainEnterS2CPacket / CurtainExitS2CPacket (TASK-30)
@@ -450,6 +553,25 @@ public class JJKModClient implements ClientModInitializer {
                                 0.0, 0.05, 0.0);
                     }
                     mc.player.sendMessage(Text.literal("§4⚡ [저주] 스쿠나의 기운이 느껴진다…"), true);
+                }));
+
+        // WeaponInfusionS2CPacket — CE 무기 주입 활성화 알림 + 파티클
+        ClientPlayNetworking.registerGlobalReceiver(WeaponInfusionS2CPacket.ID, (pkt, ctx) ->
+                ctx.client().execute(() -> {
+                    MinecraftClient mc = ctx.client();
+                    if (mc.player == null || mc.world == null) return;
+                    int seconds = (pkt.durationTicks() + 19) / 20;
+                    int pct = Math.round((pkt.multValue() - 1f) * 100f);
+                    mc.player.sendMessage(
+                        Text.literal("§b⚡ CE 주입! +" + pct + "% (" + seconds + "초)"), true);
+                    for (int i = 0; i < 20; i++) {
+                        mc.world.addParticle(
+                            net.minecraft.particle.ParticleTypes.ENCHANT,
+                            mc.player.getX() + (mc.world.random.nextDouble() - 0.5) * 0.8,
+                            mc.player.getY() + mc.world.random.nextDouble() * 2.0,
+                            mc.player.getZ() + (mc.world.random.nextDouble() - 0.5) * 0.8,
+                            0.0, 0.1, 0.0);
+                    }
                 }));
 
         // DomainDeployFailS2CPacket — 영역 전개 실패 사유 알림

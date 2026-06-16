@@ -11,4 +11,5 @@ public class DomainDefinition {
     public boolean autoTargetAll;
     public boolean isIncomplete;
     public float ownerDamageReduction;
+    public String blockTheme; // 구체 블록 테마 — SphereBuilder.resolveTheme() 참조
 }

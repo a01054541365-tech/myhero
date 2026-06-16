@@ -188,7 +188,7 @@ public class HigurumaSkillSet implements ISkillSet {
         if (target == null) return SkillResult.FAIL_NO_TARGET;
 
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.EXECUTIONER_SWORD, bd(4))
-                .skillName("executioner_sword").keyId(4).build();
+                .skillName("executioner_sword").keyId(4).bypassPvpCap().build();
         JJKMod.getCombatPipeline().process(ctx);
         data.hasExecutionSword = false;
         JJKMod.getPlayerRepository().saveImmediate(data);
@@ -243,7 +243,7 @@ public class HigurumaSkillSet implements ISkillSet {
         if (target == null) return SkillResult.FAIL;
 
         DamageContext ctx = DamageContext.builder(player, target, IDamageSource.EXECUTIONER_SWORD, bd(4))
-                .skillName("executioner_sword")
+                .skillName("executioner_sword").bypassPvpCap()
                 .build();
         JJKMod.getCombatPipeline().process(ctx);
 

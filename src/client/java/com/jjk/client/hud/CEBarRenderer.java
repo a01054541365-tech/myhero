@@ -24,10 +24,11 @@ public final class CEBarRenderer {
     private boolean ceWarningBlink = false;
     private int blinkTimer = 0;
 
-    // CE 바 위치: 바닐라 체력바(screenH - 49) 기준 12px 위 = screenH - 61
+    // CE 바 위치: 바닐라 체력바 최상단(screenH - 59, 3줄 체력 기준) 기준 8px 위 = screenH - 67
+    // 배경 하단: screenH - 61 → 3줄 체력바 상단(screenH - 59)까지 2px 여백
     private static final int BAR_WIDTH  = 182;
     private static final int BAR_HEIGHT = 5;
-    private static final int BAR_OFFSET_Y = 61; // screenH - 61
+    private static final int BAR_OFFSET_Y = 67; // screenH - 67
 
     public void tick() {
         blinkTimer++;

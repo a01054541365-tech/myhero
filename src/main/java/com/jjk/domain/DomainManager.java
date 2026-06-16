@@ -152,6 +152,11 @@ public class DomainManager {
             DomainInstance domain = it.next().getValue();
             if (!domain.isExpired(currentTick)) continue;
             it.remove();
+            // 만료 영역 블록 복구 예약
+            com.jjk.domain.DomainBlockQueue bq0 = JJKMod.getDomainBlockQueue();
+            if (bq0 != null) {
+                bq0.enqueueRestore(domain.instanceId.toString(), world);
+            }
             world.getPlayers().stream()
                     .filter(p -> domain.center.isWithinDistance(p.getBlockPos(), domain.currentRadius))
                     .forEach(p -> ServerPlayNetworking.send(p,
@@ -256,6 +261,11 @@ public class DomainManager {
         if (conflictingDomain != null) {
             activeDomains.remove(conflictingDomain.instanceId);
             final DomainInstance removed = conflictingDomain;
+            // 충돌 패배 영역 블록 복구
+            com.jjk.domain.DomainBlockQueue bq = JJKMod.getDomainBlockQueue();
+            if (bq != null) {
+                bq.enqueueRestore(removed.instanceId.toString(), owner.getServerWorld());
+            }
             owner.getServerWorld().getPlayers().stream()
                     .filter(p -> removed.center.isWithinDistance(p.getBlockPos(), removed.currentRadius))
                     .forEach(p -> ServerPlayNetworking.send(p,
@@ -275,7 +285,13 @@ public class DomainManager {
         instance.expireAtTick = currentTick + def.cooldownTicks;
         instance.ownerDamageReduction = def.ownerDamageReduction;
         instance.deployedAtTick = currentTick;
+        instance.worldKey = owner.getWorld().getRegistryKey().getValue().toString();
         activeDomains.put(instance.instanceId, instance);
+        // 구체 블록 생성 예약 (개방형은 SphereBuilder 내부에서 즉시 반환)
+        com.jjk.domain.DomainBlockQueue blockQueue = JJKMod.getDomainBlockQueue();
+        if (blockQueue != null) {
+            SphereBuilder.enqueueSphere(instance, owner.getServerWorld(), blockQueue, def.blockTheme);
+        }
         AdvancementTriggerManager.onDomainDeploy(owner);
         if (JJKMod.getAchievementManager() != null) {
             JJKMod.getAchievementManager().unlock(owner, "first_domain");
@@ -340,6 +356,20 @@ public class DomainManager {
             if (d.ownerUuid.equals(ownerUuid)) { removed = d; it.remove(); break; }
         }
         if (removed == null) return;
+        // 종료된 영역 블록 복구 예약
+        com.jjk.domain.DomainBlockQueue bq = JJKMod.getDomainBlockQueue();
+        if (bq != null && removed.worldKey != null && JJKMod.getServer() != null) {
+            ServerWorld restoreWorld = null;
+            for (ServerWorld w : JJKMod.getServer().getWorlds()) {
+                if (w.getRegistryKey().getValue().toString().equals(removed.worldKey)) {
+                    restoreWorld = w;
+                    break;
+                }
+            }
+            if (restoreWorld != null) {
+                bq.enqueueRestore(removed.instanceId.toString(), restoreWorld);
+            }
+        }
         com.jjk.team.TeamManager.Team team = removed.team;
         long remaining = activeDomains.values().stream().filter(d -> team == d.team).count();
         if (remaining == 1) {
@@ -397,7 +427,22 @@ public class DomainManager {
         instance.npcOwned = true;
         instance.expireAtTick = currentTick + def.cooldownTicks;
         instance.deployedAtTick = currentTick;
+        instance.worldKey = worldKey;
         activeDomains.put(instance.instanceId, instance);
+        // 구체 블록 생성 예약 (개방형은 SphereBuilder 내부에서 즉시 반환)
+        com.jjk.domain.DomainBlockQueue npcBq = JJKMod.getDomainBlockQueue();
+        if (npcBq != null && JJKMod.getServer() != null) {
+            ServerWorld npcWorld = null;
+            for (ServerWorld w : JJKMod.getServer().getWorlds()) {
+                if (w.getRegistryKey().getValue().toString().equals(worldKey)) {
+                    npcWorld = w;
+                    break;
+                }
+            }
+            if (npcWorld != null) {
+                SphereBuilder.enqueueSphere(instance, npcWorld, npcBq, def.blockTheme);
+            }
+        }
 
         if (JJKMod.getInstance() != null && JJKMod.getAuditLogger() != null) {
             JJKMod.getAuditLogger().logEvent("domain_start", npcUuid,

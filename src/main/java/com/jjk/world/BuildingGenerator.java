@@ -32,7 +32,7 @@ public final class BuildingGenerator {
 
     public static List<NpcSpawnPoint> buildTrainingDojo(ServerWorld world, BlockPos origin) {
         generateTrainingDojo(world, origin.getX(), origin.getZ());
-        return List.of();
+        return List.of(new NpcSpawnPoint("kusakabe", "쿠사카베 아츠야", 0, 1, 0, 180f));
     }
 
     public static List<NpcSpawnPoint> buildBlackMarket(ServerWorld world, BlockPos origin) {
@@ -42,7 +42,7 @@ public final class BuildingGenerator {
         JjkConfig cfg = JJKMod.getConfig();
         cfg.blackmarketPos = new double[]{o.getX(), o.getY(), o.getZ()};
         cfg.save();
-        return List.of();
+        return List.of(new NpcSpawnPoint("gojo_shiyu", "공시우", 0, 1, 0, 0f));
     }
 
     // ── 공통 헬퍼 ─────────────────────────────────────────────────────────────
